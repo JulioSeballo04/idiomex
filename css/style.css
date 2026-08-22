@@ -1,812 +1,367 @@
-/* ============================================================
-   MEU DICIONÁRIO — identidade visual
-   Conceito: fichário de dicionário físico.
-   Cartões de papel, abas de letras tipo "índice de dicionário",
-   tinta verde-escura, destaque âmbar (post-it / grifo de caderno).
-   ============================================================ */
+// ============================================================
+// DICIONÁRIO DO ALUNO
+// ============================================================
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap');
+let letraSelecionada = "INICIO";
+let cacheDePalavras = [];
+let cacheDeAnotacoes = [];
+let nomeDoAlunoAtual = "";
+let anotacaoEmEdicaoId = null;
+let notaPalavraEmEdicaoId = null;
+let traducoesReveladas = new Set();
 
-:root {
-  --paper: #FAF6EF;
-  --paper-card: #FFFFFF;
-  --ink: #1F2A24;
-  --ink-soft: #4B5A50;
-  --sage: #6B8F71;
-  --sage-light: #E4EBE3;
-  --amber: #C98A2C;
-  --amber-light: #F6E6C8;
-  --line: #DDD5C4;
+exigirLogin("aluno");
 
-  --font-display: 'Fraunces', serif;
-  --font-body: 'Inter', sans-serif;
-  --font-mono: 'IBM Plex Mono', monospace;
-}
+auth.onAuthStateChanged(async (user) => {
+  if (!user) return;
+  const perfil = await db.collection("usuarios").doc(user.uid).get();
+  nomeDoAlunoAtual = perfil.data().nome;
+  carregarMensagensDoProfessor(user.uid);
+  escutarAnotacoes(user.uid);
+  escutarPalavras(user.uid);
+});
 
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  font-family: var(--font-body);
-  background: var(--paper);
-  color: var(--ink);
-  -webkit-font-smoothing: antialiased;
+// Escuta em tempo real as anotações pessoais do aluno (um único listener; re-renderiza ao editar)
+function escutarAnotacoes(uid) {
+  db.collection("usuarios").doc(uid).collection("anotacoes")
+    .orderBy("criadoEm", "desc")
+    .onSnapshot((snapshot) => {
+      cacheDeAnotacoes = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderizarAnotacoes();
+    });
 }
 
-h1, h2, h3 {
-  font-family: var(--font-display);
-  font-weight: 600;
-  margin: 0 0 0.4em;
-  letter-spacing: -0.01em;
+function renderizarAnotacoes() {
+  const container = document.getElementById("lista-anotacoes");
+  container.innerHTML = "";
+  cacheDeAnotacoes.forEach((a) => {
+    const cartao = document.createElement("div");
+    cartao.className = "cartao-anotacao";
+
+    if (anotacaoEmEdicaoId === a.id) {
+      cartao.innerHTML = `
+        <div class="edicao-anotacao">
+          <textarea id="edicao-texto-${a.id}">${a.texto}</textarea>
+          <button class="btn btn-primario" style="padding:0.4em 1em; font-size:0.85rem;" onclick="salvarEdicaoAnotacao('${a.id}')">Salvar</button>
+          <button class="btn btn-secundario" style="padding:0.4em 1em; font-size:0.85rem;" onclick="cancelarEdicaoAnotacao()">Cancelar</button>
+        </div>
+      `;
+    } else {
+      cartao.innerHTML = `
+        <div class="acoes-anotacao">
+          <button onclick="editarAnotacao('${a.id}')">Editar</button>
+          <button class="excluir" onclick="excluirAnotacao('${a.id}')">Excluir</button>
+        </div>
+        ${a.texto}
+      `;
+    }
+    container.appendChild(cartao);
+  });
 }
 
-a { color: var(--sage); }
-
-button {
-  font-family: var(--font-body);
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-}
-button:disabled { cursor: default; }
-
-.btn {
-  border: none;
-  border-radius: 6px;
-  padding: 0.7em 1.4em;
-  font-weight: 600;
-  font-size: 0.95rem;
-  transition: transform 0.08s ease, box-shadow 0.15s ease;
-}
-.btn-primario {
-  background: var(--sage);
-  color: #fff;
-}
-.btn-primario:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(107,143,113,0.3); }
-.btn-secundario {
-  background: transparent;
-  color: var(--ink);
-  border: 1.5px solid var(--line);
-}
-.btn-secundario:hover { border-color: var(--sage); color: var(--sage); }
-
-input, select {
-  font-family: var(--font-body);
-  font-size: 0.95rem;
-  padding: 0.65em 0.8em;
-  border: 1.5px solid var(--line);
-  border-radius: 6px;
-  background: var(--paper-card);
-  color: var(--ink);
-  width: 100%;
-}
-input:focus, select:focus, button:focus-visible {
-  outline: 2px solid var(--amber);
-  outline-offset: 1px;
-  border-color: var(--amber);
+// Adiciona uma nova anotação
+async function adicionarAnotacao(texto) {
+  const user = auth.currentUser;
+  if (!user || !texto.trim()) return;
+  await db.collection("usuarios").doc(user.uid).collection("anotacoes").add({
+    texto: texto.trim(),
+    criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  document.getElementById("input-anotacoes").value = "";
 }
 
-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--ink-soft);
-  display: block;
-  margin-bottom: 0.3em;
+function editarAnotacao(id) {
+  anotacaoEmEdicaoId = id;
+  renderizarAnotacoes();
 }
 
-.campo { margin-bottom: 1.1em; }
-
-.status-msg {
-  font-size: 0.85rem;
-  color: var(--sage);
-  min-height: 1.2em;
+function cancelarEdicaoAnotacao() {
+  anotacaoEmEdicaoId = null;
+  renderizarAnotacoes();
 }
 
-/* ---------- Tela de autenticação ---------- */
-.tela-auth {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 1rem;
-}
-.cartao-auth {
-  background: var(--paper-card);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 2.4rem;
-  width: 100%;
-  max-width: 400px;
-  box-shadow: 0 10px 30px rgba(31,42,36,0.06);
-}
-.cartao-auth .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--sage);
-  margin-bottom: 0.6em;
-}
-.abas-tipo {
-  display: flex;
-  gap: 0.5em;
-  margin-bottom: 1.5em;
-  border-bottom: 1.5px solid var(--line);
-}
-.aba-tipo {
-  flex: 1;
-  background: none;
-  border: none;
-  padding: 0.7em 0;
-  font-weight: 600;
-  color: var(--ink-soft);
-  border-bottom: 2.5px solid transparent;
-  margin-bottom: -1.5px;
-}
-.aba-tipo.ativa { color: var(--ink); border-color: var(--amber); }
-.oculto { display: none !important; }
-.forcar-oculto { display: none !important; }
-.rodape-auth {
-  text-align: center;
-  margin-top: 1.4em;
-  font-size: 0.85rem;
-  color: var(--ink-soft);
+async function salvarEdicaoAnotacao(id) {
+  const user = auth.currentUser;
+  if (!user) return;
+  const novoTexto = document.getElementById(`edicao-texto-${id}`).value.trim();
+  if (!novoTexto) return;
+  await db.collection("usuarios").doc(user.uid).collection("anotacoes").doc(id)
+    .update({ texto: novoTexto });
+  anotacaoEmEdicaoId = null;
 }
 
-/* ---------- Layout do app (dicionário / professor) ---------- */
-.app-shell {
-  display: grid;
-  grid-template-columns: 88px 1fr;
-  min-height: 100vh;
+async function excluirAnotacao(id) {
+  const user = auth.currentUser;
+  if (!user) return;
+  await db.collection("usuarios").doc(user.uid).collection("anotacoes").doc(id).delete();
 }
 
-/* Índice de letras — a assinatura visual: abas tipo dicionário físico */
-.indice-letras {
-  background: var(--sage);
-  padding: 1.4rem 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  overflow-y: auto;
-}
-.indice-letras .marca {
-  color: #fff;
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  margin-bottom: 0.8rem;
-  opacity: 0.9;
-}
-.letra-tab {
-  width: 34px;
-  height: 30px;
-  border: none;
-  background: transparent;
-  color: rgba(255,255,255,0.65);
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  border-radius: 6px 0 0 6px;
-  transition: background 0.12s ease, color 0.12s ease;
-}
-.letra-tab:hover { background: rgba(255,255,255,0.12); color: #fff; }
-.letra-tab.ativa {
-  background: var(--paper);
-  color: var(--ink);
-  font-weight: 700;
-}
-.letra-tab.tem-palavras::after {
-  content: '';
-  display: block;
-  width: 4px; height: 4px;
-  border-radius: 50%;
-  background: var(--amber);
-  margin: 3px auto 0;
-}
-.letra-tab {
-  position: relative;
-}
-.letra-tab .contagem-letra {
-  position: absolute;
-  top: -2px;
-  right: 2px;
-  background: var(--amber);
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 0.55rem;
-  font-weight: 700;
-  line-height: 1;
-  padding: 1px 3px;
-  border-radius: 6px;
-  min-width: 12px;
-}
-.letra-tab.tem-palavras::after { display: none; }
-
-.contador-total {
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  color: var(--sage);
-  margin-top: 0.4em;
-  font-weight: 600;
+// Escuta em tempo real a coleção de palavras do aluno logado
+function escutarPalavras(uid) {
+  db.collection("usuarios").doc(uid).collection("palavras")
+    .orderBy("palavraEn")
+    .onSnapshot((snapshot) => {
+      cacheDePalavras = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      montarIndiceLetras();
+      renderizarTela();
+    });
 }
 
-.conteudo {
-  padding: 2.4rem 3rem;
-  max-width: 900px;
+// Monta as abas do menu lateral: "Início" + A-Z, marcando quantas palavras tem cada letra
+function montarIndiceLetras() {
+  const contagemPorLetra = {};
+  cacheDePalavras.forEach((p) => {
+    const letra = p.palavraEn[0].toUpperCase();
+    contagemPorLetra[letra] = (contagemPorLetra[letra] || 0) + 1;
+  });
+
+  const container = document.getElementById("indice-letras-lista");
+  container.innerHTML = "";
+
+  const inicio = document.createElement("button");
+  inicio.className = "letra-tab" + (letraSelecionada === "INICIO" ? " ativa" : "");
+  inicio.textContent = "🏠";
+  inicio.title = "Início";
+  inicio.onclick = () => { letraSelecionada = "INICIO"; montarIndiceLetras(); renderizarTela(); };
+  container.appendChild(inicio);
+
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach((letra) => {
+    const qtd = contagemPorLetra[letra] || 0;
+    const btn = document.createElement("button");
+    let classe = "letra-tab";
+    if (letra === letraSelecionada) classe += " ativa";
+    if (qtd > 0) classe += " tem-palavras";
+    btn.className = classe;
+    btn.title = qtd > 0 ? `${qtd} palavra(s)` : "Nenhuma palavra ainda";
+    btn.innerHTML = qtd > 0
+      ? `${letra}<span class="contagem-letra">${qtd}</span>`
+      : letra;
+    btn.onclick = () => { letraSelecionada = letra; montarIndiceLetras(); renderizarTela(); };
+    container.appendChild(btn);
+  });
 }
 
-.topo-app {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
-}
-.acoes-topo {
-  display: flex;
-  align-items: center;
-  gap: 0.7em;
-}
-.saudacao .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--sage);
+// Decide o que mostrar no topo e no corpo da página, dependendo da tela ativa
+function renderizarTela() {
+  const painelMensagens = document.getElementById("painel-mensagens");
+  const painelAnotacoes = document.getElementById("painel-anotacoes");
+  const tituloTopo = document.getElementById("titulo-topo");
+  const eyebrowTopo = document.getElementById("eyebrow-topo");
+  const contadorTotal = document.getElementById("contador-total");
+
+  if (letraSelecionada === "INICIO") {
+    eyebrowTopo.textContent = "SEU VOCABULÁRIO";
+    tituloTopo.textContent = nomeDoAlunoAtual || "Olá!";
+    painelMensagens.classList.remove("forcar-oculto");
+    painelAnotacoes.classList.remove("forcar-oculto");
+    contadorTotal.classList.remove("forcar-oculto");
+    contadorTotal.textContent = cacheDePalavras.length === 1
+      ? "1 palavra aprendida"
+      : `${cacheDePalavras.length} palavras aprendidas`;
+  } else {
+    eyebrowTopo.textContent = "VOCABULÁRIO";
+    tituloTopo.textContent = `Palavras aprendidas com a inicial "${letraSelecionada}"`;
+    painelMensagens.classList.add("forcar-oculto");
+    painelAnotacoes.classList.add("forcar-oculto");
+    contadorTotal.classList.add("forcar-oculto");
+  }
+  renderizarPalavras();
 }
 
-.formulario-palavra {
-  display: flex;
-  flex-direction: column;
-  gap: 0.7em;
-  margin-bottom: 2rem;
-}
-.linha-palavra {
-  display: flex;
-  gap: 0.7em;
-  flex-wrap: wrap;
-}
-.linha-palavra input { flex: 1; min-width: 140px; }
-.textarea-nota-palavra {
-  width: 100%;
-  min-height: 60px;
-  font-family: var(--font-body);
-  font-size: 0.9rem;
-  padding: 0.7em 0.8em;
-  border: 1.5px solid var(--line);
-  border-radius: 6px;
-  background: var(--paper-card);
-  color: var(--ink);
-  resize: vertical;
-}
-.textarea-nota-palavra:focus {
-  outline: 2px solid var(--amber);
-  outline-offset: 1px;
-  border-color: var(--amber);
-}
-.formulario-palavra .btn { align-self: flex-start; }
-
-.grade-cartoes {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1rem;
+// Transforma o texto em asteriscos, preservando espaços (ex: "I like it" -> "* **** **")
+function mascarar(texto) {
+  return texto.replace(/\S/g, "*");
 }
 
-/* Cartão de palavra — estilo ficha de índice */
-.cartao-palavra {
-  background: var(--paper-card);
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--amber);
-  border-radius: 8px;
-  padding: 1.1rem 1.2rem;
-  position: relative;
-}
-.cartao-palavra .palavra-en {
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 600;
-}
-.cartao-palavra .palavra-pt {
-  color: var(--sage);
-  font-weight: 600;
-  font-size: 0.9rem;
-  margin-bottom: 0.6em;
-}
-.cartao-palavra .frase-exemplo {
-  font-size: 0.85rem;
-  color: var(--ink-soft);
-  font-style: italic;
-  border-top: 1px dashed var(--line);
-  padding-top: 0.6em;
-  margin-top: 0.4em;
-}
-.cartao-palavra .frase-exemplo .frase-traducao {
-  font-style: normal;
-  font-size: 0.78rem;
-  color: var(--sage);
-  letter-spacing: 0.03em;
-}
-.btn-ver-traducao {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5em;
-  width: 100%;
-  margin-top: 0.7em;
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--line);
-  color: var(--sage);
-  padding: 0.6em 0 0;
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  transition: color 0.12s ease;
-}
-.btn-ver-traducao::before {
-  content: "";
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  border: 1.5px solid currentColor;
-  background: radial-gradient(circle, currentColor 2.5px, transparent 2.5px);
-}
-.btn-ver-traducao:hover { color: var(--ink); }
-.btn-ver-traducao.revelado::before { border-style: dashed; }
-.cartao-palavra .remover {
-  position: absolute;
-  top: 0.7rem; right: 0.7rem;
-  background: none; border: none;
-  color: var(--ink-soft);
-  font-size: 1rem;
-  line-height: 1;
-  opacity: 0.4;
-}
-.cartao-palavra .remover:hover { opacity: 1; color: #B54A3C; }
-
-/* Anotação pessoal da palavra (opcional, explicação/dica de uso) */
-.nota-palavra {
-  font-size: 0.83rem;
-  color: var(--ink);
-  background: var(--amber-light);
-  border-left: 3px solid var(--amber);
-  border-radius: 0 6px 6px 0;
-  padding: 0.55em 0.7em;
-  margin-top: 0.7em;
-  white-space: pre-wrap;
-}
-.nota-palavra .acoes-nota-palavra {
-  display: flex;
-  gap: 0.7em;
-  margin-top: 0.4em;
-}
-.nota-palavra .acoes-nota-palavra button {
-  background: none;
-  border: none;
-  color: var(--ink-soft);
-  font-size: 0.72rem;
-  font-weight: 600;
-  opacity: 0.6;
-  padding: 0;
-}
-.nota-palavra .acoes-nota-palavra button:hover { opacity: 1; color: var(--sage); }
-.nota-palavra .acoes-nota-palavra button.excluir:hover { color: #B54A3C; }
-
-.btn-add-nota-palavra {
-  display: inline-block;
-  background: none;
-  border: none;
-  color: var(--sage);
-  font-size: 0.78rem;
-  font-weight: 600;
-  padding: 0;
-  margin-top: 0.7em;
-  opacity: 0.8;
-}
-.btn-add-nota-palavra:hover { opacity: 1; text-decoration: underline; }
-
-.edicao-nota-palavra { margin-top: 0.7em; }
-.edicao-nota-palavra textarea {
-  width: 100%;
-  min-height: 60px;
-  font-family: var(--font-body);
-  font-size: 0.85rem;
-  padding: 0.5em;
-  border: 1.5px solid var(--sage);
-  border-radius: 6px;
-  resize: vertical;
-}
-.edicao-nota-palavra .acoes-edicao-nota {
-  display: flex;
-  gap: 0.5em;
-  margin-top: 0.5em;
-}
-.edicao-nota-palavra .acoes-edicao-nota button {
-  padding: 0.35em 0.9em;
-  font-size: 0.78rem;
+function alternarTraducao(id) {
+  if (traducoesReveladas.has(id)) {
+    traducoesReveladas.delete(id);
+  } else {
+    traducoesReveladas.add(id);
+  }
+  renderizarPalavras();
 }
 
-.vazio {
-  color: var(--ink-soft);
-  font-size: 0.95rem;
-  padding: 2rem 0;
+function renderizarPalavras() {
+  const grade = document.getElementById("grade-cartoes");
+  grade.innerHTML = "";
+
+  // Na tela Início não mostramos a lista de palavras — só nas telas de cada letra
+  if (letraSelecionada === "INICIO") return;
+
+  const lista = cacheDePalavras.filter((p) => p.palavraEn[0].toUpperCase() === letraSelecionada);
+
+  if (lista.length === 0) {
+    grade.innerHTML = `<p class="vazio">Nenhuma palavra aqui ainda. Adicione uma acima!</p>`;
+    return;
+  }
+
+  lista.forEach((p) => {
+    const cartao = document.createElement("div");
+    cartao.className = "cartao-palavra";
+
+    const revelada = traducoesReveladas.has(p.id);
+    let frases;
+    if (p.frasesExemplo && p.frasesExemplo.length > 0) {
+      const linhas = p.frasesExemplo.map((f) => {
+        // Compatibilidade: frases antigas eram só texto (string); as novas são {en, pt}
+        const en = typeof f === "string" ? f : f.en;
+        const pt = typeof f === "string" ? "" : f.pt;
+        const ptExibido = pt ? (revelada ? pt : mascarar(pt)) : "";
+        return `<div class="frase-exemplo">"${en}"${ptExibido ? `<br><span class="frase-traducao">${ptExibido}</span>` : ""}</div>`;
+      }).join("");
+      const temTraducao = p.frasesExemplo.some((f) => typeof f !== "string" && f.pt);
+      const botaoRevelar = temTraducao
+        ? `<button class="btn-ver-traducao${revelada ? " revelado" : ""}" onclick="alternarTraducao('${p.id}')">${revelada ? "Ocultar tradução" : "Ver tradução"}</button>`
+        : "";
+      frases = linhas + botaoRevelar;
+    } else {
+      frases = `<div class="frase-exemplo">Gerando frases de exemplo...</div>`;
+    }
+
+    // Anotação pessoal da palavra: mostra/edita/adiciona (sempre opcional)
+    let blocoNota;
+    if (notaPalavraEmEdicaoId === p.id) {
+      blocoNota = `
+        <div class="edicao-nota-palavra">
+          <textarea id="edicao-nota-${p.id}" placeholder="Explicação, dica de uso, diferença de outra palavra...">${p.notaPessoal || ""}</textarea>
+          <div class="acoes-edicao-nota">
+            <button class="btn btn-primario" onclick="salvarNotaPalavra('${p.id}')">Salvar</button>
+            <button class="btn btn-secundario" onclick="cancelarEdicaoNotaPalavra()">Cancelar</button>
+          </div>
+        </div>
+      `;
+    } else if (p.notaPessoal) {
+      blocoNota = `
+        <div class="nota-palavra">
+          ${p.notaPessoal}
+          <div class="acoes-nota-palavra">
+            <button onclick="editarNotaPalavra('${p.id}')">Editar</button>
+            <button class="excluir" onclick="removerNotaPalavra('${p.id}')">Excluir</button>
+          </div>
+        </div>
+      `;
+    } else {
+      blocoNota = `<button class="btn-add-nota-palavra" onclick="editarNotaPalavra('${p.id}')">+ Adicionar anotação</button>`;
+    }
+
+    cartao.innerHTML = `
+      <button class="remover" title="Remover" onclick="removerPalavra('${p.id}')">✕</button>
+      <div class="palavra-en">${p.palavraEn}</div>
+      <div class="palavra-pt">${p.traducaoPt}</div>
+      ${frases}
+      ${blocoNota}
+    `;
+    grade.appendChild(cartao);
+  });
 }
 
-/* ---------- Painel do professor ---------- */
-.codigo-professor {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6em;
-  background: var(--amber-light);
-  border: 1px solid var(--amber);
-  border-radius: 8px;
-  padding: 0.6em 1em;
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
-  margin-bottom: 1.6rem;
+function editarNotaPalavra(id) {
+  notaPalavraEmEdicaoId = id;
+  renderizarPalavras();
 }
 
-.lista-alunos {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+function cancelarEdicaoNotaPalavra() {
+  notaPalavraEmEdicaoId = null;
+  renderizarPalavras();
 }
 
-/* Cada aluno é um bloco de acordeão: cabeçalho clicável + detalhe que expande */
-.aluno-bloco {
-  background: var(--paper-card);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-  transition: border-color 0.12s ease;
-}
-.aluno-bloco:has(.item-aluno:hover) { border-color: var(--sage); }
-
-.item-aluno {
-  padding: 1rem 1.2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-}
-.item-aluno .nome-aluno { font-weight: 600; }
-.item-aluno .cabecalho-direita { display: flex; align-items: center; gap: 0.8em; }
-.item-aluno .contagem { font-family: var(--font-mono); font-size: 0.8rem; color: var(--sage); }
-.item-aluno .seta-expandir {
-  display: inline-block;
-  color: var(--ink-soft);
-  transition: transform 0.15s ease;
-}
-.item-aluno.aberto .seta-expandir { transform: rotate(180deg); }
-
-/* Bolinha de "tem palavra nova" — no nome do aluno e nas letras do abecedário */
-.badge-novidade {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--amber);
-  margin-left: 0.5em;
-  vertical-align: middle;
+async function salvarNotaPalavra(id) {
+  const user = auth.currentUser;
+  if (!user) return;
+  const texto = document.getElementById(`edicao-nota-${id}`).value.trim();
+  await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id)
+    .update({ notaPessoal: texto });
+  notaPalavraEmEdicaoId = null;
 }
 
-.detalhe-aluno-inline {
-  padding: 0 1.2rem 1.4rem;
-  border-top: 1px solid var(--line);
+async function removerNotaPalavra(id) {
+  const user = auth.currentUser;
+  if (!user) return;
+  await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id)
+    .update({ notaPessoal: firebase.firestore.FieldValue.delete() });
 }
 
-/* Abas internas do bloco do aluno: Vocabulário / Recados / Relatório de aulas */
-.abas-detalhe {
-  display: flex;
-  gap: 1em;
-  margin: 1rem 0 1.2rem;
-  border-bottom: 1.5px solid var(--line);
-}
-.aba-detalhe {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background: none;
-  border: none;
-  padding: 0.5em 0.1em;
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--ink-soft);
-  border-bottom: 2.5px solid transparent;
-  margin-bottom: -1.5px;
-}
-.aba-detalhe.ativa { color: var(--ink); border-color: var(--amber); }
+// Adiciona uma nova palavra: salva no Firestore e pede a frase de exemplo à IA
+async function adicionarPalavra(palavraEn, traducaoPt, notaPessoal) {
+  const user = auth.currentUser;
+  if (!user || !palavraEn.trim() || !traducaoPt.trim()) return;
 
-/* Abecedário mini, dentro da aba Vocabulário de cada aluno */
-.indice-letras-mini {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-bottom: 1.4rem;
-}
-.letra-tab-mini {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  position: relative;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 1.5px solid var(--line);
-  background: var(--paper-card);
-  border-radius: 8px;
-  font-family: var(--font-mono);
-  font-size: 0.92rem;
-  font-weight: 700;
-  color: var(--ink);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-.letra-tab-mini:hover:not(.vazia):not(.ativa) {
-  border-color: var(--sage);
-  color: var(--sage);
-}
-.letra-tab-mini.ativa {
-  background: var(--sage);
-  color: #fff;
-  border-color: var(--sage);
-}
-.letra-tab-mini.vazia {
-  background: var(--paper);
-  color: var(--line);
-  border-color: var(--line);
-  cursor: default;
-}
-.letra-tab-mini .contagem-letra-mini {
-  position: absolute;
-  bottom: -6px;
-  right: -6px;
-  background: var(--amber);
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  font-weight: 700;
-  line-height: 1;
-  padding: 2px 4px;
-  border-radius: 7px;
-  min-width: 14px;
-  box-shadow: 0 0 0 2px var(--paper-card);
-}
-.letra-tab-mini .badge-novidade-letra {
-  position: absolute;
-  top: -4px;
-  left: -4px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--amber);
-  box-shadow: 0 0 0 2px var(--paper-card);
+  const statusEl = document.getElementById("status-palavra");
+
+  // Verifica se essa palavra já foi adicionada antes (ignorando maiúsculas/minúsculas e espaços)
+  const jaExiste = cacheDePalavras.some(
+    (p) => p.palavraEn.trim().toLowerCase() === palavraEn.trim().toLowerCase()
+  );
+  if (jaExiste) {
+    statusEl.textContent = `"${palavraEn.trim()}" já está no seu vocabulário.`;
+    setTimeout(() => (statusEl.textContent = ""), 2500);
+    return;
+  }
+
+  statusEl.textContent = "Salvando...";
+
+  const dadosPalavra = {
+    palavraEn: palavraEn.trim(),
+    traducaoPt: traducaoPt.trim(),
+    frasesExemplo: [],
+    criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  // Anotação é opcional — só grava o campo se o usuário escreveu algo
+  if (notaPessoal && notaPessoal.trim()) {
+    dadosPalavra.notaPessoal = notaPessoal.trim();
+  }
+
+  const ref = await db.collection("usuarios").doc(user.uid).collection("palavras").add(dadosPalavra);
+
+  document.getElementById("input-palavra-en").value = "";
+  document.getElementById("input-palavra-pt").value = "";
+  document.getElementById("input-palavra-nota").value = "";
+  statusEl.textContent = "";
+
+  // Pede as 5 frases de exemplo à function do Vercel (a chave da IA fica só lá no servidor)
+  try {
+    const resposta = await fetch(AI_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ palavra: palavraEn.trim(), traducao: traducaoPt.trim() })
+    });
+    const dados = await resposta.json();
+    if (dados.frases && dados.frases.length > 0) {
+      await db.collection("usuarios").doc(user.uid).collection("palavras").doc(ref.id)
+        .update({ frasesExemplo: dados.frases });
+    }
+  } catch (e) {
+    console.warn("Não foi possível gerar as frases de exemplo agora:", e);
+  }
 }
 
-/* Ações (editar/excluir) nos recados e no relatório de aulas do professor */
-.acoes-msg {
-  display: flex;
-  gap: 0.7em;
-  margin-bottom: 0.4em;
-}
-.acoes-msg button {
-  background: none;
-  border: none;
-  color: var(--ink-soft);
-  font-size: 0.75rem;
-  font-weight: 600;
-  opacity: 0.6;
-  padding: 0;
-}
-.acoes-msg button:hover { opacity: 1; color: var(--sage); }
-.acoes-msg button.excluir:hover { color: #B54A3C; }
-.mensagem-item textarea {
-  width: 100%;
-  min-height: 70px;
-  font-family: var(--font-body);
-  padding: 0.6em;
-  border: 1.5px solid var(--sage);
-  border-radius: 6px;
-  resize: vertical;
-  margin-bottom: 0.5em;
-}
-.caixa-mensagem textarea {
-  width: 100%;
-  min-height: 90px;
-  font-family: var(--font-body);
-  padding: 0.8em;
-  border: 1.5px solid var(--line);
-  border-radius: 8px;
-  resize: vertical;
-}
-.mensagem-item {
-  background: var(--sage-light);
-  border-left: 3px solid var(--sage);
-  border-radius: 0 8px 8px 0;
-  padding: 0.7em 1em;
-  margin-bottom: 0.5em;
-  font-size: 0.9rem;
-}
-.mensagem-item .data-msg {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--ink-soft);
-  display: block;
-  margin-top: 0.5em;
+async function removerPalavra(id) {
+  const user = auth.currentUser;
+  if (!user) return;
+  await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id).delete();
 }
 
-/* Cartões de anotação pessoal, com editar/excluir */
-.cartao-anotacao {
-  background: var(--sage-light);
-  border-left: 3px solid var(--sage);
-  border-radius: 0 8px 8px 0;
-  padding: 0.8em 5.2em 0.8em 1em;
-  margin-bottom: 0.6em;
-  font-size: 0.9rem;
-  position: relative;
-  white-space: pre-wrap;
-}
-.cartao-anotacao .acoes-anotacao {
-  position: absolute;
-  top: 0.6em;
-  right: 0.6em;
-  display: flex;
-  gap: 0.4em;
-}
-.cartao-anotacao .acoes-anotacao button {
-  background: none;
-  border: none;
-  color: var(--ink-soft);
-  font-size: 0.75rem;
-  font-weight: 600;
-  opacity: 0.55;
-  padding: 0.1em 0.3em;
-}
-.cartao-anotacao .acoes-anotacao button:hover { opacity: 1; color: var(--sage); }
-.cartao-anotacao .acoes-anotacao button.excluir:hover { color: #B54A3C; }
-.cartao-anotacao .edicao-anotacao textarea {
-  width: 100%;
-  min-height: 70px;
-  font-family: var(--font-body);
-  padding: 0.6em;
-  border: 1.5px solid var(--sage);
-  border-radius: 6px;
-  resize: vertical;
-  margin-bottom: 0.5em;
-}
-
-@media (max-width: 640px) {
-  .app-shell { grid-template-columns: 60px 1fr; }
-  .conteudo { padding: 1.6rem 1.2rem; }
-  .letra-tab { width: 24px; font-size: 0.7rem; }
-}
-
-/* ============================================================
-   SELETOR DE TEMA — bolinha de cores no canto superior direito
-   ============================================================ */
-.seletor-tema { position: relative; }
-
-.btn-tema {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  border: 1.5px solid var(--line);
-  background: var(--paper-card);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  transition: border-color 0.12s ease, transform 0.08s ease;
-}
-.btn-tema:hover { border-color: var(--sage); transform: translateY(-1px); }
-
-.ponto-tema-atual {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: block;
-}
-
-.menu-tema {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  background: var(--paper-card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 0.5em;
-  box-shadow: 0 12px 30px rgba(0,0,0,0.14);
-  min-width: 200px;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.opcao-tema {
-  display: flex;
-  align-items: center;
-  gap: 0.7em;
-  background: none;
-  border: none;
-  padding: 0.55em 0.6em;
-  border-radius: 7px;
-  font-family: var(--font-body);
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--ink);
-  text-align: left;
-  width: 100%;
-}
-.opcao-tema:hover { background: var(--sage-light); }
-.opcao-tema.ativa { background: var(--amber-light); }
-
-.amostra-tema {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  border: 1px solid rgba(0,0,0,0.12);
-}
-
-.opcao-tema .marca-ativa {
-  margin-left: auto;
-  color: var(--amber);
-  font-size: 0.9rem;
-}
-
-/* ---------- Paleta 1: Fichário Clássico (padrão, já é a base em :root) ---------- */
-
-/* ---------- Paleta 2: Oceano — azul aço + laranja queimado ---------- */
-html[data-tema="oceano"] {
-  --paper: #F1F6F8;
-  --paper-card: #FFFFFF;
-  --ink: #1B2B36;
-  --ink-soft: #4C6270;
-  --sage: #2C6E8E;
-  --sage-light: #DCEAF0;
-  --amber: #E0733F;
-  --amber-light: #FBE4D6;
-  --line: #D3E0E6;
-}
-
-/* ---------- Paleta 3: Lavanda — roxo suave + rosa empoeirado ---------- */
-html[data-tema="lavanda"] {
-  --paper: #FBF8FC;
-  --paper-card: #FFFFFF;
-  --ink: #2E2438;
-  --ink-soft: #6B5D78;
-  --sage: #7C6A9C;
-  --sage-light: #EDE7F5;
-  --amber: #D68FA0;
-  --amber-light: #FBE9EE;
-  --line: #E4DAEF;
-}
-
-/* ---------- Paleta 4: Terracota — oliva + terracota ---------- */
-html[data-tema="terracota"] {
-  --paper: #FBF3EC;
-  --paper-card: #FFFFFF;
-  --ink: #3A2A1E;
-  --ink-soft: #6B5645;
-  --sage: #6E7F52;
-  --sage-light: #E8ECDD;
-  --amber: #A9542F;
-  --amber-light: #F1DCCB;
-  --line: #E3D3C2;
-}
-
-/* ---------- Paleta 5: Noturno — modo escuro, azul + dourado ---------- */
-html[data-tema="noturno"] {
-  --paper: #14181D;
-  --paper-card: #1D242B;
-  --ink: #EDEFF2;
-  --ink-soft: #9AA7B2;
-  --sage: #7FA6C9;
-  --sage-light: #24313D;
-  --amber: #E0B24C;
-  --amber-light: #3A331C;
-  --line: #2B333B;
+// Carrega as mensagens/dicas que o professor deixou para este aluno
+function carregarMensagensDoProfessor(uid) {
+  db.collection("usuarios").doc(uid).collection("mensagens")
+    .orderBy("criadoEm", "desc")
+    .onSnapshot((snapshot) => {
+      const container = document.getElementById("lista-mensagens");
+      const painel = document.getElementById("painel-mensagens");
+      if (snapshot.empty) {
+        painel.classList.add("oculto");
+        return;
+      }
+      painel.classList.remove("oculto");
+      container.innerHTML = "";
+      snapshot.docs.forEach((doc) => {
+        const m = doc.data();
+        const data = m.criadoEm ? m.criadoEm.toDate().toLocaleDateString("pt-BR") : "";
+        const div = document.createElement("div");
+        div.className = "mensagem-item";
+        div.innerHTML = `${m.texto}<br><span class="data-msg">${data}</span>`;
+        container.appendChild(div);
+      });
+    });
 }
