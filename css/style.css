@@ -326,18 +326,33 @@ label {
   letter-spacing: 0.03em;
 }
 .btn-ver-traducao {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
   width: 100%;
-  margin-top: 0.6em;
-  background: var(--sage-light);
-  border: 1px dashed var(--sage);
+  margin-top: 0.7em;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--line);
   color: var(--sage);
-  border-radius: 6px;
-  padding: 0.4em 0.6em;
+  padding: 0.6em 0 0;
   font-size: 0.78rem;
   font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: color 0.12s ease;
 }
-.btn-ver-traducao:hover { background: var(--sage); color: #fff; }
+.btn-ver-traducao::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  background: radial-gradient(circle, currentColor 2.5px, transparent 2.5px);
+}
+.btn-ver-traducao:hover { color: var(--ink); }
+.btn-ver-traducao.revelado::before { border-style: dashed; }
 .cartao-palavra .remover {
   position: absolute;
   top: 0.7rem; right: 0.7rem;
