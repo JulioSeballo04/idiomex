@@ -323,7 +323,21 @@ label {
   font-style: normal;
   font-size: 0.78rem;
   color: var(--sage);
+  letter-spacing: 0.03em;
 }
+.btn-ver-traducao {
+  display: block;
+  width: 100%;
+  margin-top: 0.6em;
+  background: var(--sage-light);
+  border: 1px dashed var(--sage);
+  color: var(--sage);
+  border-radius: 6px;
+  padding: 0.4em 0.6em;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.btn-ver-traducao:hover { background: var(--sage); color: #fff; }
 .cartao-palavra .remover {
   position: absolute;
   top: 0.7rem; right: 0.7rem;
