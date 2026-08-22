@@ -8,6 +8,7 @@ let cacheDeAnotacoes = [];
 let nomeDoAlunoAtual = "";
 let anotacaoEmEdicaoId = null;
 let notaPalavraEmEdicaoId = null;
+let traducoesReveladas = new Set();
 
 exigirLogin("aluno");
 
@@ -167,6 +168,20 @@ function renderizarTela() {
   renderizarPalavras();
 }
 
+// Transforma o texto em asteriscos, preservando espaços (ex: "I like it" -> "* **** **")
+function mascarar(texto) {
+  return texto.replace(/\S/g, "*");
+}
+
+function alternarTraducao(id) {
+  if (traducoesReveladas.has(id)) {
+    traducoesReveladas.delete(id);
+  } else {
+    traducoesReveladas.add(id);
+  }
+  renderizarPalavras();
+}
+
 function renderizarPalavras() {
   const grade = document.getElementById("grade-cartoes");
   grade.innerHTML = "";
@@ -185,14 +200,24 @@ function renderizarPalavras() {
     const cartao = document.createElement("div");
     cartao.className = "cartao-palavra";
 
-    const frases = p.frasesExemplo && p.frasesExemplo.length > 0
-      ? p.frasesExemplo.map((f) => {
-          // Compatibilidade: frases antigas eram só texto (string); as novas são {en, pt}
-          const en = typeof f === "string" ? f : f.en;
-          const pt = typeof f === "string" ? "" : f.pt;
-          return `<div class="frase-exemplo">"${en}"${pt ? `<br><span class="frase-traducao">${pt}</span>` : ""}</div>`;
-        }).join("")
-      : `<div class="frase-exemplo">Gerando frases de exemplo...</div>`;
+    const revelada = traducoesReveladas.has(p.id);
+    let frases;
+    if (p.frasesExemplo && p.frasesExemplo.length > 0) {
+      const linhas = p.frasesExemplo.map((f) => {
+        // Compatibilidade: frases antigas eram só texto (string); as novas são {en, pt}
+        const en = typeof f === "string" ? f : f.en;
+        const pt = typeof f === "string" ? "" : f.pt;
+        const ptExibido = pt ? (revelada ? pt : mascarar(pt)) : "";
+        return `<div class="frase-exemplo">"${en}"${ptExibido ? `<br><span class="frase-traducao">${ptExibido}</span>` : ""}</div>`;
+      }).join("");
+      const temTraducao = p.frasesExemplo.some((f) => typeof f !== "string" && f.pt);
+      const botaoRevelar = temTraducao
+        ? `<button class="btn-ver-traducao" onclick="alternarTraducao('${p.id}')">${revelada ? "🙈 Ocultar tradução" : "👁 Ver tradução"}</button>`
+        : "";
+      frases = linhas + botaoRevelar;
+    } else {
+      frases = `<div class="frase-exemplo">Gerando frases de exemplo...</div>`;
+    }
 
     // Anotação pessoal da palavra: mostra/edita/adiciona (sempre opcional)
     let blocoNota;
