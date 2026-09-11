@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meu Dicionário — Painel do Professor</title>
+<script>
+  // Aplica o tema salvo antes da página desenhar, pra não piscar a cor padrão
+  (function () {
+    var tema = localStorage.getItem("temaEscolhido");
+    if (tema && tema !== "classico") document.documentElement.setAttribute("data-tema", tema);
+  })();
+</script>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/novidades.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <nav class="indice-letras">
+    <div class="marca">Pr</div>
+  </nav>
+
+  <main class="conteudo">
+    <div class="topo-app">
+      <div class="saudacao">
+        <div class="eyebrow">PAINEL DO PROFESSOR</div>
+        <h1 id="nome-usuario">Olá!</h1>
+      </div>
+      <div class="acoes-topo">
+        <div class="seletor-tema" id="seletor-tema">
+          <button class="btn-tema" type="button" title="Mudar cores do app" onclick="alternarMenuTema()">
+            <span class="ponto-tema-atual" id="ponto-tema-atual"></span>
+          </button>
+          <div class="menu-tema oculto" id="menu-tema"></div>
+        </div>
+        <button class="btn btn-secundario" onclick="sair()">Sair</button>
+      </div>
+    </div>
+
+    <div class="codigo-professor">
+      Seu código: <strong id="codigo-professor">...</strong>
+      <button class="btn btn-secundario" style="padding:0.3em 0.8em; font-size:0.8rem;" onclick="copiarCodigo()">Copiar</button>
+      <span class="status-msg" id="status-copiar"></span>
+    </div>
+    <p style="color:var(--ink-soft); font-size:0.9rem; margin-top:-1rem; margin-bottom:1.6rem;">
+      Compartilhe esse código com seus alunos — eles usam ele para vincular a conta ao seu perfil.
+    </p>
+
+    <h2 style="font-size:1.1rem;">Visão geral da turma</h2>
+    <div id="visao-geral-turma"></div>
+
+    <h2 style="font-size:1.1rem;">Minha Agenda</h2>
+    <div class="agenda-topo">
+      <button class="btn btn-secundario" onclick="abrirConfigAgenda()">⚙️ Configurar disponibilidade</button>
+    </div>
+    <div id="lista-proximas-aulas" style="margin-bottom:2rem;"></div>
+
+    <div id="modal-config-agenda" class="modal-oculto">
+      <div class="modal-conteudo modal-largo">
+        <div class="modal-cabecalho">
+          <h3>Configurar disponibilidade</h3>
+          <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharConfigAgenda()">✕</button>
+        </div>
+        <div class="config-agenda-geral">
+          <label>Duração de cada aula
+            <select id="config-duracao-aula">
+              <option value="30">30 min</option>
+              <option value="50">50 min</option>
+              <option value="60">60 min</option>
+            </select>
+          </label>
+          <div class="config-modalidades">
+            <label><input type="checkbox" id="config-modalidade-online"> Atendo online</label>
+            <label><input type="checkbox" id="config-modalidade-presencial"> Atendo presencial</label>
+          </div>
+        </div>
+        <div id="config-dias-semana"></div>
+        <button class="btn btn-primario" style="margin-top:1rem;" onclick="salvarConfigAgenda()">Salvar disponibilidade</button>
+      </div>
+    </div>
+
+    <h2 style="font-size:1.1rem;">Seus alunos</h2>
+    <div class="lista-alunos" id="lista-alunos"></div>
+  </main>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/util.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/tema.js"></script>
+<script src="js/professor.js"></script>
+</body>
+</html>

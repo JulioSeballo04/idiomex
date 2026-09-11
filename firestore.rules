@@ -1,0 +1,144 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Função auxiliar: verifica se o usuário logado é o professor vinculado ao aluno {alunoId}
+    function ehProfessorDoAluno(alunoId) {
+      return exists(/databases/$(database)/documents/usuarios/$(alunoId)) &&
+        get(/databases/$(database)/documents/usuarios/$(alunoId)).data.professorId == request.auth.uid;
+    }
+
+    // Função auxiliar: verifica se o usuário logado é aluno vinculado ao professor {professorId}
+    function souAlunoDesteProfessor(professorId) {
+      return exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.professorId == professorId;
+    }
+
+    match /usuarios/{userId} {
+      // Leitura: o próprio dono, o professor vinculado a esse aluno, OU qualquer
+      // autenticado quando o documento é de um PROFESSOR — isso é necessário para o
+      // fluxo de cadastro do aluno, que consulta a coleção "usuarios" filtrando por
+      // codigoProfessor antes de existir vínculo. Isso ainda expõe nome/e-mail de
+      // professores a qualquer conta autenticada (limitação do modelo client-only);
+      // para eliminar isso por completo, mova a validação do código para uma Cloud
+      // Function que resolve o código sem expor o documento inteiro.
+      allow read: if request.auth != null && (
+        request.auth.uid == userId ||
+        ehProfessorDoAluno(userId) ||
+        resource.data.tipo == "professor"
+      );
+
+      // Criação: só o próprio usuário, e só com um "tipo" válido — evita que alguém
+      // grave um valor arbitrário nesse campo (ex: "admin").
+      allow create: if request.auth != null && request.auth.uid == userId &&
+        request.resource.data.tipo in ["aluno", "professor"];
+
+      // Atualização: só o dono, e impedindo que ele altere os campos sensíveis que
+      // definem seu papel e vínculo (tipo, professorId, codigoProfessor) depois de
+      // criados — sem isso, um aluno poderia se autopromover a "professor" ou trocar
+      // de professor direto pelo console do navegador, sem revalidar o código.
+      allow update: if request.auth != null && request.auth.uid == userId &&
+        request.resource.data.tipo == resource.data.tipo &&
+        request.resource.data.get('professorId', null) == resource.data.get('professorId', null) &&
+        request.resource.data.get('codigoProfessor', null) == resource.data.get('codigoProfessor', null);
+
+      allow delete: if request.auth != null && request.auth.uid == userId;
+
+      // Palavras: só o próprio aluno pode ler/escrever suas palavras.
+      // O professor vinculado pode LER (para acompanhar o progresso), mas não editar.
+      match /palavras/{palavraId} {
+        allow read: if request.auth != null &&
+          (request.auth.uid == userId || ehProfessorDoAluno(userId));
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Mensagens: o aluno só pode LER. Só o professor vinculado pode ESCREVER (inclui editar/excluir).
+      match /mensagens/{mensagemId} {
+        allow read: if request.auth != null &&
+          (request.auth.uid == userId || ehProfessorDoAluno(userId));
+        allow create, update, delete: if request.auth != null && ehProfessorDoAluno(userId);
+      }
+
+      // Anotações pessoais: o aluno lê/escreve. O professor vinculado só pode LER (acompanhamento).
+      match /anotacoes/{anotacaoId} {
+        allow read: if request.auth != null &&
+          (request.auth.uid == userId || ehProfessorDoAluno(userId));
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Relatório de aulas: o "diário de bordo" do professor sobre o que foi trabalhado
+      // em cada aula. É registro do professor, não do aluno — só ele lê e escreve.
+      match /relatorios/{relatorioId} {
+        allow read, write: if request.auth != null && ehProfessorDoAluno(userId);
+      }
+
+      // Controle de "última visualização": usado só pelo próprio professor, para saber
+      // quais alunos/letras têm palavras novas desde a última vez que ele abriu o bloco.
+      match /visualizacoes/{alunoId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Configuração de agenda do professor (dias/horários que atende, duração da aula,
+      // modalidades). Só o próprio professor escreve; alunos vinculados só leem, para
+      // montar a tela de "horários disponíveis" na hora de agendar.
+      match /configuracaoAgenda/{docId} {
+        allow read: if request.auth != null &&
+          (request.auth.uid == userId || souAlunoDesteProfessor(userId));
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Aulas agendadas. Coleção no nível raiz (não dentro de "usuarios") porque tanto o
+    // professor (todas as aulas da sua agenda) quanto o aluno (só as próprias) precisam
+    // consultar por igualdade de campo, sem depender de quem é "dono" do documento pai.
+    //
+    // O ID do documento é determinístico: "{professorId}_{data}_{horaInicio}". Isso é o
+    // que garante que dois alunos não consigam marcar o mesmo horário ao mesmo tempo — a
+    // segunda tentativa de escrita cai como "update" de um doc que já existe com
+    // status "agendada", e a regra de update abaixo barra isso.
+    match /aulas/{aulaId} {
+      // Leitura: só o professor da aula ou o aluno da aula.
+      allow read: if request.auth != null &&
+        (resource.data.professorId == request.auth.uid || resource.data.alunoId == request.auth.uid);
+
+      // Criação (primeira marcação daquele horário): só o próprio aluno, e só com o
+      // professor ao qual ele está vinculado — impede marcar aula com outro professor.
+      allow create: if request.auth != null &&
+        request.resource.data.alunoId == request.auth.uid &&
+        request.resource.data.status == "agendada" &&
+        request.resource.data.modalidade in ["online", "presencial"] &&
+        souAlunoDesteProfessor(request.resource.data.professorId);
+
+      // Atualização — três situações permitidas:
+      // 1) o professor muda o status (cancelar/concluir), sem alterar quem/quando é a aula;
+      // 2) o próprio aluno cancela a aula que é dele, sem mudar mais nada;
+      // 3) reaproveitar um horário cancelado: outro aluno vinculado ao MESMO professor pode
+      //    "reocupar" aquele exato horário, virando o novo dono da aula.
+      allow update: if request.auth != null && (
+        (request.auth.uid == resource.data.professorId &&
+          request.resource.data.professorId == resource.data.professorId &&
+          request.resource.data.alunoId == resource.data.alunoId &&
+          request.resource.data.data == resource.data.data &&
+          request.resource.data.horaInicio == resource.data.horaInicio) ||
+
+        (request.auth.uid == resource.data.alunoId &&
+          resource.data.status == "agendada" &&
+          request.resource.data.status == "cancelada" &&
+          request.resource.data.professorId == resource.data.professorId &&
+          request.resource.data.alunoId == resource.data.alunoId &&
+          request.resource.data.data == resource.data.data &&
+          request.resource.data.horaInicio == resource.data.horaInicio) ||
+
+        (resource.data.status == "cancelada" &&
+          request.resource.data.status == "agendada" &&
+          request.resource.data.alunoId == request.auth.uid &&
+          request.resource.data.professorId == resource.data.professorId &&
+          request.resource.data.data == resource.data.data &&
+          request.resource.data.horaInicio == resource.data.horaInicio &&
+          souAlunoDesteProfessor(resource.data.professorId))
+      );
+
+      // Sem "delete": cancelamento é só uma troca de status, mantendo o histórico da aula.
+    }
+  }
+}
