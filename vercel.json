@@ -1,7 +1,0 @@
-{
-  "functions": {
-    "api/gerar-frase.js": {
-      "maxDuration": 10
-    }
-  }
-}
