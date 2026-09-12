@@ -1,367 +1,1037 @@
-// ============================================================
-// DICIONÁRIO DO ALUNO
-// ============================================================
+/* ============================================================
+   MEU DICIONÁRIO — folha de estilos principal
+   Reescrita do zero: o arquivo original enviado estava corrompido
+   (continha JavaScript, não CSS).
 
-let letraSelecionada = "INICIO";
-let cacheDePalavras = [];
-let cacheDeAnotacoes = [];
-let nomeDoAlunoAtual = "";
-let anotacaoEmEdicaoId = null;
-let notaPalavraEmEdicaoId = null;
-let traducoesReveladas = new Set();
+   Conceito visual: um dicionário/fichário físico — a navegação por
+   letras (.indice-letras) é o "índice de dedo" na lateral de um
+   dicionário de papel, e cada palavra vira uma ficha (index card).
+   ============================================================ */
 
-exigirLogin("aluno");
-
-auth.onAuthStateChanged(async (user) => {
-  if (!user) return;
-  const perfil = await db.collection("usuarios").doc(user.uid).get();
-  nomeDoAlunoAtual = perfil.data().nome;
-  carregarMensagensDoProfessor(user.uid);
-  escutarAnotacoes(user.uid);
-  escutarPalavras(user.uid);
-});
-
-// Escuta em tempo real as anotações pessoais do aluno (um único listener; re-renderiza ao editar)
-function escutarAnotacoes(uid) {
-  db.collection("usuarios").doc(uid).collection("anotacoes")
-    .orderBy("criadoEm", "desc")
-    .onSnapshot((snapshot) => {
-      cacheDeAnotacoes = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-      renderizarAnotacoes();
-    });
+/* ---------- Variáveis de tema (usadas por js/tema.js) ---------- */
+:root {
+  --bg: #F7F2E7;
+  --bg-cartao: #FFFFFF;
+  --ink: #2B2620;
+  --ink-soft: #6E6455;
+  --borda: #E3D9C4;
+  --acento: #5F8567;
+  --acento-forte: #4C6E53;
+  --acento-secundario: #C98A2C;
+  --sombra: rgba(43, 38, 32, 0.10);
+  --fonte-titulo: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Times New Roman', serif;
+  --fonte-corpo: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-function renderizarAnotacoes() {
-  const container = document.getElementById("lista-anotacoes");
-  container.innerHTML = "";
-  cacheDeAnotacoes.forEach((a) => {
-    const cartao = document.createElement("div");
-    cartao.className = "cartao-anotacao";
-
-    if (anotacaoEmEdicaoId === a.id) {
-      cartao.innerHTML = `
-        <div class="edicao-anotacao">
-          <textarea id="edicao-texto-${a.id}">${a.texto}</textarea>
-          <button class="btn btn-primario" style="padding:0.4em 1em; font-size:0.85rem;" onclick="salvarEdicaoAnotacao('${a.id}')">Salvar</button>
-          <button class="btn btn-secundario" style="padding:0.4em 1em; font-size:0.85rem;" onclick="cancelarEdicaoAnotacao()">Cancelar</button>
-        </div>
-      `;
-    } else {
-      cartao.innerHTML = `
-        <div class="acoes-anotacao">
-          <button onclick="editarAnotacao('${a.id}')">Editar</button>
-          <button class="excluir" onclick="excluirAnotacao('${a.id}')">Excluir</button>
-        </div>
-        ${a.texto}
-      `;
-    }
-    container.appendChild(cartao);
-  });
+html[data-tema="oceano"] {
+  --bg: #F2F7F8;
+  --bg-cartao: #FFFFFF;
+  --ink: #1E2E33;
+  --ink-soft: #5C7A82;
+  --borda: #D7E6EA;
+  --acento: #2C6E8E;
+  --acento-forte: #235870;
+  --acento-secundario: #E0733F;
 }
 
-// Adiciona uma nova anotação
-async function adicionarAnotacao(texto) {
-  const user = auth.currentUser;
-  if (!user || !texto.trim()) return;
-  await db.collection("usuarios").doc(user.uid).collection("anotacoes").add({
-    texto: texto.trim(),
-    criadoEm: firebase.firestore.FieldValue.serverTimestamp()
-  });
-  document.getElementById("input-anotacoes").value = "";
+html[data-tema="lavanda"] {
+  --bg: #F8F5FA;
+  --bg-cartao: #FFFFFF;
+  --ink: #2C2733;
+  --ink-soft: #776C8A;
+  --borda: #E8DEEF;
+  --acento: #7C6A9C;
+  --acento-forte: #64547F;
+  --acento-secundario: #D68FA0;
 }
 
-function editarAnotacao(id) {
-  anotacaoEmEdicaoId = id;
-  renderizarAnotacoes();
+html[data-tema="terracota"] {
+  --bg: #F8F3EA;
+  --bg-cartao: #FFFFFF;
+  --ink: #2C2620;
+  --ink-soft: #756A57;
+  --borda: #E7DBC5;
+  --acento: #6E7F52;
+  --acento-forte: #586642;
+  --acento-secundario: #A9542F;
 }
 
-function cancelarEdicaoAnotacao() {
-  anotacaoEmEdicaoId = null;
-  renderizarAnotacoes();
+html[data-tema="noturno"] {
+  --bg: #1B2027;
+  --bg-cartao: #242B34;
+  --ink: #EDEFF2;
+  --ink-soft: #9BA5B3;
+  --borda: #333C48;
+  --acento: #7FA6C9;
+  --acento-forte: #97B8D6;
+  --acento-secundario: #E0B24C;
+  --sombra: rgba(0, 0, 0, 0.4);
 }
 
-async function salvarEdicaoAnotacao(id) {
-  const user = auth.currentUser;
-  if (!user) return;
-  const novoTexto = document.getElementById(`edicao-texto-${id}`).value.trim();
-  if (!novoTexto) return;
-  await db.collection("usuarios").doc(user.uid).collection("anotacoes").doc(id)
-    .update({ texto: novoTexto });
-  anotacaoEmEdicaoId = null;
+/* ---------- Reset & base ---------- */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--fonte-corpo);
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-async function excluirAnotacao(id) {
-  const user = auth.currentUser;
-  if (!user) return;
-  await db.collection("usuarios").doc(user.uid).collection("anotacoes").doc(id).delete();
+h1, h2, h3 {
+  font-family: var(--fonte-titulo);
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 0.3em;
 }
 
-// Escuta em tempo real a coleção de palavras do aluno logado
-function escutarPalavras(uid) {
-  db.collection("usuarios").doc(uid).collection("palavras")
-    .orderBy("palavraEn")
-    .onSnapshot((snapshot) => {
-      cacheDePalavras = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-      montarIndiceLetras();
-      renderizarTela();
-    });
+h1 { font-size: 1.9rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.15rem; }
+h3 { font-size: 1rem; }
+
+p { margin: 0 0 0.8em; }
+
+a { color: var(--acento-forte); }
+
+input, select, textarea, button {
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--ink);
 }
 
-// Monta as abas do menu lateral: "Início" + A-Z, marcando quantas palavras tem cada letra
-function montarIndiceLetras() {
-  const contagemPorLetra = {};
-  cacheDePalavras.forEach((p) => {
-    const letra = p.palavraEn[0].toUpperCase();
-    contagemPorLetra[letra] = (contagemPorLetra[letra] || 0) + 1;
-  });
+textarea { resize: vertical; }
 
-  const container = document.getElementById("indice-letras-lista");
-  container.innerHTML = "";
-
-  const inicio = document.createElement("button");
-  inicio.className = "letra-tab" + (letraSelecionada === "INICIO" ? " ativa" : "");
-  inicio.textContent = "🏠";
-  inicio.title = "Início";
-  inicio.onclick = () => { letraSelecionada = "INICIO"; montarIndiceLetras(); renderizarTela(); };
-  container.appendChild(inicio);
-
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach((letra) => {
-    const qtd = contagemPorLetra[letra] || 0;
-    const btn = document.createElement("button");
-    let classe = "letra-tab";
-    if (letra === letraSelecionada) classe += " ativa";
-    if (qtd > 0) classe += " tem-palavras";
-    btn.className = classe;
-    btn.title = qtd > 0 ? `${qtd} palavra(s)` : "Nenhuma palavra ainda";
-    btn.innerHTML = qtd > 0
-      ? `${letra}<span class="contagem-letra">${qtd}</span>`
-      : letra;
-    btn.onclick = () => { letraSelecionada = letra; montarIndiceLetras(); renderizarTela(); };
-    container.appendChild(btn);
-  });
+*:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
 }
 
-// Decide o que mostrar no topo e no corpo da página, dependendo da tela ativa
-function renderizarTela() {
-  const painelMensagens = document.getElementById("painel-mensagens");
-  const painelAnotacoes = document.getElementById("painel-anotacoes");
-  const tituloTopo = document.getElementById("titulo-topo");
-  const eyebrowTopo = document.getElementById("eyebrow-topo");
-  const contadorTotal = document.getElementById("contador-total");
-
-  if (letraSelecionada === "INICIO") {
-    eyebrowTopo.textContent = "SEU VOCABULÁRIO";
-    tituloTopo.textContent = nomeDoAlunoAtual || "Olá!";
-    painelMensagens.classList.remove("forcar-oculto");
-    painelAnotacoes.classList.remove("forcar-oculto");
-    contadorTotal.classList.remove("forcar-oculto");
-    contadorTotal.textContent = cacheDePalavras.length === 1
-      ? "1 palavra aprendida"
-      : `${cacheDePalavras.length} palavras aprendidas`;
-  } else {
-    eyebrowTopo.textContent = "VOCABULÁRIO";
-    tituloTopo.textContent = `Palavras aprendidas com a inicial "${letraSelecionada}"`;
-    painelMensagens.classList.add("forcar-oculto");
-    painelAnotacoes.classList.add("forcar-oculto");
-    contadorTotal.classList.add("forcar-oculto");
-  }
-  renderizarPalavras();
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
 }
 
-// Transforma o texto em asteriscos, preservando espaços (ex: "I like it" -> "* **** **")
-function mascarar(texto) {
-  return texto.replace(/\S/g, "*");
+/* ---------- Botões ---------- */
+.btn {
+  display: inline-block;
+  padding: 0.6em 1.1em;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
-function alternarTraducao(id) {
-  if (traducoesReveladas.has(id)) {
-    traducoesReveladas.delete(id);
-  } else {
-    traducoesReveladas.add(id);
-  }
-  renderizarPalavras();
+.btn-primario {
+  background: var(--acento);
+  color: #fff;
+}
+.btn-primario:hover { background: var(--acento-forte); }
+
+.btn-secundario {
+  background: transparent;
+  border-color: var(--borda);
+  color: var(--ink);
+}
+.btn-secundario:hover { border-color: var(--acento); color: var(--acento-forte); }
+
+.excluir {
+  background: none;
+  border: none;
+  color: #B14444;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.2em 0.4em;
+}
+.excluir:hover { text-decoration: underline; }
+
+/* ---------- Utilitários ---------- */
+.oculto,
+.forcar-oculto {
+  display: none !important;
 }
 
-function renderizarPalavras() {
-  const grade = document.getElementById("grade-cartoes");
-  grade.innerHTML = "";
-
-  // Na tela Início não mostramos a lista de palavras — só nas telas de cada letra
-  if (letraSelecionada === "INICIO") return;
-
-  const lista = cacheDePalavras.filter((p) => p.palavraEn[0].toUpperCase() === letraSelecionada);
-
-  if (lista.length === 0) {
-    grade.innerHTML = `<p class="vazio">Nenhuma palavra aqui ainda. Adicione uma acima!</p>`;
-    return;
-  }
-
-  lista.forEach((p) => {
-    const cartao = document.createElement("div");
-    cartao.className = "cartao-palavra";
-
-    const revelada = traducoesReveladas.has(p.id);
-    let frases;
-    if (p.frasesExemplo && p.frasesExemplo.length > 0) {
-      const linhas = p.frasesExemplo.map((f) => {
-        // Compatibilidade: frases antigas eram só texto (string); as novas são {en, pt}
-        const en = typeof f === "string" ? f : f.en;
-        const pt = typeof f === "string" ? "" : f.pt;
-        const ptExibido = pt ? (revelada ? pt : mascarar(pt)) : "";
-        return `<div class="frase-exemplo">"${en}"${ptExibido ? `<br><span class="frase-traducao">${ptExibido}</span>` : ""}</div>`;
-      }).join("");
-      const temTraducao = p.frasesExemplo.some((f) => typeof f !== "string" && f.pt);
-      const botaoRevelar = temTraducao
-        ? `<button class="btn-ver-traducao${revelada ? " revelado" : ""}" onclick="alternarTraducao('${p.id}')">${revelada ? "Ocultar tradução" : "Ver tradução"}</button>`
-        : "";
-      frases = linhas + botaoRevelar;
-    } else {
-      frases = `<div class="frase-exemplo">Gerando frases de exemplo...</div>`;
-    }
-
-    // Anotação pessoal da palavra: mostra/edita/adiciona (sempre opcional)
-    let blocoNota;
-    if (notaPalavraEmEdicaoId === p.id) {
-      blocoNota = `
-        <div class="edicao-nota-palavra">
-          <textarea id="edicao-nota-${p.id}" placeholder="Explicação, dica de uso, diferença de outra palavra...">${p.notaPessoal || ""}</textarea>
-          <div class="acoes-edicao-nota">
-            <button class="btn btn-primario" onclick="salvarNotaPalavra('${p.id}')">Salvar</button>
-            <button class="btn btn-secundario" onclick="cancelarEdicaoNotaPalavra()">Cancelar</button>
-          </div>
-        </div>
-      `;
-    } else if (p.notaPessoal) {
-      blocoNota = `
-        <div class="nota-palavra">
-          ${p.notaPessoal}
-          <div class="acoes-nota-palavra">
-            <button onclick="editarNotaPalavra('${p.id}')">Editar</button>
-            <button class="excluir" onclick="removerNotaPalavra('${p.id}')">Excluir</button>
-          </div>
-        </div>
-      `;
-    } else {
-      blocoNota = `<button class="btn-add-nota-palavra" onclick="editarNotaPalavra('${p.id}')">+ Adicionar anotação</button>`;
-    }
-
-    cartao.innerHTML = `
-      <button class="remover" title="Remover" onclick="removerPalavra('${p.id}')">✕</button>
-      <div class="palavra-en">${p.palavraEn}</div>
-      <div class="palavra-pt">${p.traducaoPt}</div>
-      ${frases}
-      ${blocoNota}
-    `;
-    grade.appendChild(cartao);
-  });
+.vazio {
+  border: 1px dashed var(--borda);
+  border-radius: 8px;
+  padding: 1.2rem;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  text-align: center;
 }
 
-function editarNotaPalavra(id) {
-  notaPalavraEmEdicaoId = id;
-  renderizarPalavras();
+.status-msg {
+  font-size: 0.85rem;
+  color: var(--acento-forte);
+  min-height: 1.1em;
 }
 
-function cancelarEdicaoNotaPalavra() {
-  notaPalavraEmEdicaoId = null;
-  renderizarPalavras();
+.eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
 }
 
-async function salvarNotaPalavra(id) {
-  const user = auth.currentUser;
-  if (!user) return;
-  const texto = document.getElementById(`edicao-nota-${id}`).value.trim();
-  await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id)
-    .update({ notaPessoal: texto });
-  notaPalavraEmEdicaoId = null;
+/* ============================================================
+   TELA DE LOGIN / CADASTRO (index.html)
+   ============================================================ */
+
+.tela-auth {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
 }
 
-async function removerNotaPalavra(id) {
-  const user = auth.currentUser;
-  if (!user) return;
-  await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id)
-    .update({ notaPessoal: firebase.firestore.FieldValue.delete() });
+.cartao-auth {
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px var(--sombra);
+  padding: 2.2rem 2rem;
+  max-width: 380px;
+  width: 100%;
 }
 
-// Adiciona uma nova palavra: salva no Firestore e pede a frase de exemplo à IA
-async function adicionarPalavra(palavraEn, traducaoPt, notaPessoal) {
-  const user = auth.currentUser;
-  if (!user || !palavraEn.trim() || !traducaoPt.trim()) return;
-
-  const statusEl = document.getElementById("status-palavra");
-
-  // Verifica se essa palavra já foi adicionada antes (ignorando maiúsculas/minúsculas e espaços)
-  const jaExiste = cacheDePalavras.some(
-    (p) => p.palavraEn.trim().toLowerCase() === palavraEn.trim().toLowerCase()
-  );
-  if (jaExiste) {
-    statusEl.textContent = `"${palavraEn.trim()}" já está no seu vocabulário.`;
-    setTimeout(() => (statusEl.textContent = ""), 2500);
-    return;
-  }
-
-  statusEl.textContent = "Salvando...";
-
-  const dadosPalavra = {
-    palavraEn: palavraEn.trim(),
-    traducaoPt: traducaoPt.trim(),
-    frasesExemplo: [],
-    criadoEm: firebase.firestore.FieldValue.serverTimestamp()
-  };
-  // Anotação é opcional — só grava o campo se o usuário escreveu algo
-  if (notaPessoal && notaPessoal.trim()) {
-    dadosPalavra.notaPessoal = notaPessoal.trim();
-  }
-
-  const ref = await db.collection("usuarios").doc(user.uid).collection("palavras").add(dadosPalavra);
-
-  document.getElementById("input-palavra-en").value = "";
-  document.getElementById("input-palavra-pt").value = "";
-  document.getElementById("input-palavra-nota").value = "";
-  statusEl.textContent = "";
-
-  // Pede as 5 frases de exemplo à function do Vercel (a chave da IA fica só lá no servidor)
-  try {
-    const resposta = await fetch(AI_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ palavra: palavraEn.trim(), traducao: traducaoPt.trim() })
-    });
-    const dados = await resposta.json();
-    if (dados.frases && dados.frases.length > 0) {
-      await db.collection("usuarios").doc(user.uid).collection("palavras").doc(ref.id)
-        .update({ frasesExemplo: dados.frases });
-    }
-  } catch (e) {
-    console.warn("Não foi possível gerar as frases de exemplo agora:", e);
-  }
+.abas-tipo {
+  display: flex;
+  gap: 0.4rem;
+  margin: 1.2rem 0 1.4rem;
+  border-bottom: 1px solid var(--borda);
 }
 
-async function removerPalavra(id) {
-  const user = auth.currentUser;
-  if (!user) return;
-  await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id).delete();
+.aba-tipo {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 0.6em 0.4em;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.aba-tipo.ativa { color: var(--acento-forte); border-bottom-color: var(--acento); }
+
+.campo {
+  margin-bottom: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.campo label { font-size: 0.8rem; font-weight: 600; color: var(--ink-soft); }
+.campo input,
+.campo select {
+  padding: 0.55em 0.7em;
+  border-radius: 6px;
+  border: 1px solid var(--borda);
+  background: var(--bg);
+  color: var(--ink);
 }
 
-// Carrega as mensagens/dicas que o professor deixou para este aluno
-function carregarMensagensDoProfessor(uid) {
-  db.collection("usuarios").doc(uid).collection("mensagens")
-    .orderBy("criadoEm", "desc")
-    .onSnapshot((snapshot) => {
-      const container = document.getElementById("lista-mensagens");
-      const painel = document.getElementById("painel-mensagens");
-      if (snapshot.empty) {
-        painel.classList.add("oculto");
-        return;
-      }
-      painel.classList.remove("oculto");
-      container.innerHTML = "";
-      snapshot.docs.forEach((doc) => {
-        const m = doc.data();
-        const data = m.criadoEm ? m.criadoEm.toDate().toLocaleDateString("pt-BR") : "";
-        const div = document.createElement("div");
-        div.className = "mensagem-item";
-        div.innerHTML = `${m.texto}<br><span class="data-msg">${data}</span>`;
-        container.appendChild(div);
-      });
-    });
+.rodape-auth {
+  margin-top: 1.2rem;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  text-align: center;
 }
+
+/* ============================================================
+   ESTRUTURA GERAL DO APP (dicionario.html / professor.html)
+   ============================================================ */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Índice lateral — o "índice de dedo" de um dicionário de papel */
+.indice-letras {
+  width: 68px;
+  flex-shrink: 0;
+  background: var(--acento);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem 0;
+  gap: 0.15rem;
+  overflow-y: auto;
+}
+
+.marca {
+  font-family: var(--fonte-titulo);
+  font-size: 1.5rem;
+  color: #fff;
+  margin-bottom: 0.8rem;
+}
+
+#indice-letras-lista {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  width: 100%;
+}
+
+.letra-tab {
+  position: relative;
+  width: 42px;
+  height: 34px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 600;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.letra-tab.tem-palavras { color: rgba(255, 255, 255, 0.95); }
+.letra-tab:hover { background: rgba(255, 255, 255, 0.12); }
+.letra-tab.ativa {
+  background: var(--bg-cartao);
+  color: var(--acento-forte);
+}
+
+.contagem-letra {
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  background: var(--acento-secundario);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0 0.3em;
+  line-height: 1.3;
+}
+
+/* Área de conteúdo */
+.conteudo {
+  flex: 1;
+  padding: 2rem 2.4rem 4rem;
+  max-width: 920px;
+}
+
+.topo-app {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.8rem;
+}
+
+.saudacao h1 { margin-top: 0.15em; }
+
+.contador-total {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin-top: 0.2em;
+}
+
+.acoes-topo {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+/* ---------- Seletor de tema ---------- */
+.seletor-tema { position: relative; }
+
+.btn-tema {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--borda);
+  background: var(--bg-cartao);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.ponto-tema-atual {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: block;
+  background: linear-gradient(135deg, var(--acento) 50%, var(--acento-secundario) 50%);
+}
+
+.menu-tema {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px var(--sombra);
+  padding: 0.4rem;
+  min-width: 180px;
+  z-index: 50;
+}
+
+.opcao-tema {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0.5em 0.6em;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--ink);
+  text-align: left;
+}
+.opcao-tema:hover { background: var(--bg); }
+.opcao-tema.ativa { font-weight: 700; }
+
+.amostra-tema {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.marca-ativa { margin-left: auto; color: var(--acento-forte); }
+
+/* ============================================================
+   FORMULÁRIO DE NOVA PALAVRA + FICHAS (aluno)
+   ============================================================ */
+
+.formulario-palavra {
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.linha-palavra {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+  flex-wrap: wrap;
+}
+.linha-palavra input {
+  flex: 1;
+  min-width: 160px;
+  padding: 0.6em 0.7em;
+  border-radius: 6px;
+  border: 1px solid var(--borda);
+  background: var(--bg);
+}
+
+.textarea-nota-palavra {
+  width: 100%;
+  min-height: 60px;
+  padding: 0.6em 0.7em;
+  border-radius: 6px;
+  border: 1px solid var(--borda);
+  background: var(--bg);
+  margin-bottom: 0.7rem;
+}
+
+/* Anotações e recados: caixa de texto + botão */
+.caixa-mensagem textarea {
+  width: 100%;
+  min-height: 70px;
+  padding: 0.6em 0.7em;
+  border-radius: 6px;
+  border: 1px solid var(--borda);
+  background: var(--bg-cartao);
+}
+
+.cartao-anotacao {
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--acento-secundario);
+  border-radius: 6px;
+  padding: 0.8rem 1rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.92rem;
+}
+
+.acoes-anotacao,
+.acoes-msg {
+  float: right;
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+}
+.acoes-anotacao button,
+.acoes-msg button {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0;
+}
+.acoes-anotacao button:hover,
+.acoes-msg button:hover { color: var(--acento-forte); }
+
+.edicao-anotacao textarea {
+  width: 100%;
+  min-height: 60px;
+  margin-bottom: 0.5rem;
+  padding: 0.5em 0.6em;
+  border-radius: 6px;
+  border: 1px solid var(--borda);
+}
+
+.mensagem-item {
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--acento);
+  border-radius: 6px;
+  padding: 0.8rem 1rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.92rem;
+}
+.data-msg { font-size: 0.75rem; color: var(--ink-soft); }
+
+/* ---------- Fichas de vocabulário (index cards) ---------- */
+.grade-cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.cartao-palavra {
+  position: relative;
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  padding: 1.1rem 1rem 1rem;
+}
+/* Linha pautada, como uma ficha de papel */
+.cartao-palavra::before {
+  content: "";
+  position: absolute;
+  top: 2.6rem;
+  left: 1rem;
+  right: 1rem;
+  height: 1px;
+  background: var(--borda);
+}
+
+.palavra-en {
+  font-family: var(--fonte-titulo);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 0.15rem;
+}
+.palavra-pt {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  margin-bottom: 0.9rem;
+}
+
+.frase-exemplo {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--ink);
+  margin-bottom: 0.5rem;
+  line-height: 1.45;
+}
+.frase-traducao {
+  font-style: normal;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.btn-ver-traducao {
+  background: none;
+  border: none;
+  color: var(--acento-forte);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 0.6rem;
+}
+
+.nota-palavra {
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 0.6em 0.7em;
+  font-size: 0.82rem;
+  margin-top: 0.5rem;
+}
+.acoes-nota-palavra {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+}
+.acoes-nota-palavra button {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0;
+}
+
+.btn-add-nota-palavra {
+  background: none;
+  border: 1px dashed var(--borda);
+  border-radius: 6px;
+  width: 100%;
+  padding: 0.5em;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+  margin-top: 0.4rem;
+}
+.btn-add-nota-palavra:hover { border-color: var(--acento); color: var(--acento-forte); }
+
+.edicao-nota-palavra textarea {
+  width: 100%;
+  min-height: 55px;
+  padding: 0.5em 0.6em;
+  border-radius: 6px;
+  border: 1px solid var(--borda);
+  margin-top: 0.4rem;
+}
+.acoes-edicao-nota {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.remover {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0.2em;
+}
+.remover:hover { color: #B14444; }
+
+/* ============================================================
+   PAINEL DO PROFESSOR
+   ============================================================ */
+
+.codigo-professor {
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 0.8em 1em;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.lista-alunos { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.aluno-bloco {
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.item-aluno {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.9rem 1.1rem;
+  cursor: pointer;
+}
+.item-aluno.aberto { border-bottom: 1px solid var(--borda); }
+
+.nome-aluno {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.badge-novidade {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--acento-secundario);
+  display: inline-block;
+}
+
+.cabecalho-direita {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.seta-expandir { transition: transform 0.15s; }
+.item-aluno.aberto .seta-expandir { transform: rotate(180deg); }
+
+.detalhe-aluno-inline { padding: 1rem 1.1rem 1.2rem; }
+
+.abas-detalhe {
+  display: flex;
+  gap: 0.3rem;
+  border-bottom: 1px solid var(--borda);
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.aba-detalhe {
+  background: none;
+  border: none;
+  padding: 0.5em 0.3em;
+  margin-right: 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.aba-detalhe.ativa { color: var(--acento-forte); border-bottom-color: var(--acento); }
+
+.indice-letras-mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+}
+
+.letra-tab-mini {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  border: 1px solid var(--borda);
+  background: var(--bg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--ink);
+}
+.letra-tab-mini.vazia { opacity: 0.35; cursor: default; }
+.letra-tab-mini.ativa { background: var(--acento); color: #fff; border-color: var(--acento); }
+
+.contagem-letra-mini {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  background: var(--acento-secundario);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0 0.3em;
+}
+
+.badge-novidade-letra {
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--acento-secundario);
+}
+/* ---------- Botões de áudio ---------- */
+.btn-falar,
+.btn-falar-frase {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.95em;
+  line-height: 1;
+  padding: 0.1em 0.3em;
+  vertical-align: middle;
+  opacity: 0.75;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.btn-falar:hover,
+.btn-falar-frase:hover {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+/* ---------- Modal do quiz ---------- */
+.modal-oculto { display: none; }
+
+#modal-quiz {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 1000;
+}
+
+.modal-conteudo {
+  background: var(--bg-cartao, #fff);
+  color: var(--ink, #1a1a1a);
+  border-radius: 14px;
+  padding: 1.5rem;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.modal-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.3rem;
+}
+.modal-cabecalho h3 { margin: 0; }
+
+.btn-fechar-modal {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: var(--ink-soft, #666);
+  padding: 0.2em 0.4em;
+}
+
+.quiz-frase {
+  font-size: 1.05rem;
+  margin: 1rem 0;
+  line-height: 1.5;
+}
+
+.quiz-opcoes {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.btn-opcao-quiz {
+  padding: 0.65em 1em;
+  border-radius: 10px;
+  border: 1px solid var(--borda, #ddd);
+  background: var(--bg, #f7f7f7);
+  cursor: pointer;
+  font-size: 0.95rem;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-opcao-quiz:hover:not(:disabled) {
+  border-color: var(--acento, #6c5ce7);
+}
+.btn-opcao-quiz:disabled { cursor: default; }
+
+.btn-opcao-quiz.opcao-certa {
+  background: #e3f7e8;
+  border-color: #2fa84f;
+  color: #1e6b34;
+  font-weight: 600;
+}
+.btn-opcao-quiz.opcao-errada {
+  background: #fbe7e7;
+  border-color: #d64545;
+  color: #9c2b2b;
+}
+
+.quiz-feedback {
+  margin-top: 0.9rem;
+  font-weight: 600;
+  min-height: 1.2em;
+}
+
+/* ---------- Visão geral da turma ---------- */
+.visao-geral-cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.cartao-metrica {
+  background: var(--bg-cartao, #fff);
+  border: 1px solid var(--borda, #eee);
+  border-radius: 12px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.metrica-numero {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--acento, #6c5ce7);
+}
+.metrica-numero-nome { font-size: 1.1rem; }
+
+.metrica-label {
+  font-size: 0.8rem;
+  color: var(--ink-soft, #666);
+  margin-top: 0.2rem;
+}
+
+.aviso-inativos {
+  background: #fff7e6;
+  border: 1px solid #f0c36d;
+  color: #7a5b00;
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  font-size: 0.88rem;
+  margin-bottom: 1.6rem;
+}
+
+/* ---------- Agendamento de aulas ---------- */
+.modal-largo { max-width: 480px; }
+
+.agenda-topo { margin-bottom: 1rem; }
+
+.campo-agendamento { margin-bottom: 1.1rem; }
+.campo-agendamento label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  color: var(--ink-soft, #666);
+}
+.campo-agendamento input[type="date"] {
+  width: 100%;
+  padding: 0.55em 0.7em;
+  border-radius: 8px;
+  border: 1px solid var(--borda, #ddd);
+  font-size: 0.95rem;
+}
+
+.modalidades-agendamento {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.9rem;
+}
+.modalidades-agendamento label { font-weight: 400; color: inherit; display: inline; }
+
+.slots-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 0.5rem;
+}
+
+.btn-slot-horario {
+  padding: 0.5em 0.4em;
+  border-radius: 8px;
+  border: 1px solid var(--acento, #6c5ce7);
+  background: var(--bg, #f7f7f7);
+  color: var(--acento, #6c5ce7);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-slot-horario:hover {
+  background: var(--acento, #6c5ce7);
+  color: #fff;
+}
+
+.config-agenda-geral {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.2rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--borda, #eee);
+}
+.config-agenda-geral label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft, #666);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.config-agenda-geral select {
+  padding: 0.4em 0.5em;
+  border-radius: 8px;
+  border: 1px solid var(--borda, #ddd);
+}
+.config-modalidades {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.85rem;
+}
+.config-modalidades label { font-weight: 400; display: flex; align-items: center; gap: 0.3em; }
+
+.linha-dia-config {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--borda, #f0f0f0);
+  font-size: 0.9rem;
+}
+.linha-dia-config .chk-dia-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  min-width: 110px;
+  font-weight: 500;
+  color: inherit;
+}
+.linha-dia-config input[type="time"] {
+  padding: 0.3em 0.4em;
+  border-radius: 6px;
+  border: 1px solid var(--borda, #ddd);
+}
+
+.cartao-aula {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  background: var(--bg-cartao, #fff);
+  border: 1px solid var(--borda, #eee);
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  margin-bottom: 0.6rem;
+}
+.aula-info {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+.aula-acoes {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.badge-modalidade,
+.badge-status {
+  font-size: 0.75rem;
+  padding: 0.2em 0.6em;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.badge-modalidade.badge-online { background: #e6f0ff; color: #2456c7; }
+.badge-modalidade.badge-presencial { background: #f0e6ff; color: #6c2bd9; }
+
+.badge-status-agendada { background: #fff7e6; color: #916a00; }
+.badge-status-concluida { background: #e3f7e8; color: #1e6b34; }
+.badge-status-cancelada { background: #f2f2f2; color: #777; }
