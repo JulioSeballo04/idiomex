@@ -774,10 +774,15 @@ textarea { resize: vertical; }
   transform: scale(1.15);
 }
 
-/* ---------- Modal do quiz ---------- */
-.modal-oculto { display: none; }
+/* ---------- Modais (quiz, agendamento, configurar disponibilidade) ---------- */
+/* !important aqui é proposital: sem ele, a regra de #modal-quiz abaixo (um ID,
+   que tem mais prioridade que uma classe) sempre venceria essa e o modal ficaria
+   preso visível na tela, mesmo com a classe "modal-oculto" aplicada. */
+.modal-oculto { display: none !important; }
 
-#modal-quiz {
+#modal-quiz,
+#modal-agendamento,
+#modal-config-agenda {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
