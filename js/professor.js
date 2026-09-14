@@ -17,6 +17,8 @@ let configAgendaAtual = null; // {duracaoAulaMinutos, modalidades, disponibilida
 let mesCalendarioProfessor = null; // Date do 1º dia do mês exibido no calendário da agenda
 let diaSelecionadoProfessor = null; // "AAAA-MM-DD" do dia clicado no calendário, ou null
 let overridesAgendaCache = {}; // {"AAAA-MM-DD": {fechado, blocos}} — exceções pontuais por dia
+let diaEditorRenderizadoPara = null; // último dia pra quem o editor de disponibilidade foi montado
+let ultimaAssinaturaEditor = null; // "snapshot" do override desse dia na última vez que o editor foi (re)montado
 
 // Períodos padrão exibidos na configuração de disponibilidade — cada um vira
 // um bloco de horário independente dentro do dia (a agenda já suportava
@@ -754,7 +756,19 @@ function montarCalendarioProfessor() {
   const hojeReal = new Date();
   const eMesAtual = ano === hojeReal.getFullYear() && mes === hojeReal.getMonth();
 
-  container.innerHTML = `
+  // Estrutura fixa criada só uma vez: a grade do mês e o painel de detalhe do
+  // dia vivem em containers IRMÃOS independentes. Se cada re-render (aula
+  // nova chegando, etc.) recriasse os dois juntos, o editor de disponibilidade
+  // dentro do painel de detalhe perderia qualquer edição ainda não salva toda
+  // vez que algo não relacionado a ele mudasse.
+  if (!document.getElementById("grade-calendario-professor")) {
+    container.innerHTML = `
+      <div id="grade-calendario-professor"></div>
+      <div id="detalhe-dia-professor"></div>
+    `;
+  }
+
+  document.getElementById("grade-calendario-professor").innerHTML = `
     <div class="cal-wrap cal-wrap-professor">
       <div class="cal-head">
         <div class="cal-nav"><button type="button" id="btn-cal-prof-anterior" ${eMesAtual ? "disabled" : ""} aria-label="Mês anterior">&larr;</button></div>
@@ -771,7 +785,6 @@ function montarCalendarioProfessor() {
         <span><span class="dot dot-ajustado"></span> Horário ajustado só nesse dia</span>
       </div>
     </div>
-    <div id="detalhe-dia-professor"></div>
   `;
 
   document.getElementById("btn-cal-prof-anterior").onclick = () => {
@@ -784,7 +797,7 @@ function montarCalendarioProfessor() {
     diaSelecionadoProfessor = null;
     montarCalendarioProfessor();
   };
-  container.querySelectorAll("[data-calday]").forEach((celula) => {
+  document.querySelectorAll("#grade-calendario-professor [data-calday]").forEach((celula) => {
     celula.onclick = () => {
       const dataIso = celula.dataset.calday;
       diaSelecionadoProfessor = diaSelecionadoProfessor === dataIso ? null : dataIso;
@@ -795,17 +808,63 @@ function montarCalendarioProfessor() {
   renderizarDetalheDiaProfessor();
 }
 
-// Lista as aulas do dia selecionado no calendário, logo abaixo da grade
+// "Fingerprint" do override salvo de um dia — usado só pra saber se o editor
+// precisa ser reconstruído, não pra decidir disponibilidade.
+function assinaturaOverride(dataIso) {
+  return JSON.stringify(overridesAgendaCache[dataIso] || null);
+}
+
+// Lista as aulas do dia selecionado no calendário, e o editor de disponibilidade
+// logo abaixo. Os dois são atualizados de forma independente: a lista de aulas
+// pode mudar em tempo real a qualquer momento (outro aluno marcando/cancelando
+// aula), mas isso não pode apagar um ajuste de horário que o professor ainda
+// esteja digitando e não salvou — por isso o editor só é reconstruído quando o
+// dia selecionado muda ou quando o override salvo dele muda de verdade.
 function renderizarDetalheDiaProfessor() {
   const container = document.getElementById("detalhe-dia-professor");
   if (!container) return;
-  if (!diaSelecionadoProfessor) { container.innerHTML = ""; return; }
+  if (!diaSelecionadoProfessor) {
+    container.innerHTML = "";
+    diaEditorRenderizadoPara = null;
+    return;
+  }
 
+  const mudouDeDia = diaEditorRenderizadoPara !== diaSelecionadoProfessor
+    || !document.getElementById("lista-aulas-dia-professor");
+  if (mudouDeDia) {
+    container.innerHTML = `
+      <div class="detalhe-dia-professor-conteudo">
+        <h3 id="titulo-dia-professor" style="font-size:0.95rem;"></h3>
+        <div id="lista-aulas-dia-professor"></div>
+        <div id="editor-dia-professor-wrap"></div>
+      </div>
+    `;
+  }
+
+  document.getElementById("titulo-dia-professor").textContent = formatarDataBR(diaSelecionadoProfessor);
+  document.getElementById("lista-aulas-dia-professor").innerHTML = montarListaAulasDia(diaSelecionadoProfessor);
+
+  const assinaturaAtual = assinaturaOverride(diaSelecionadoProfessor);
+  if (mudouDeDia || assinaturaAtual !== ultimaAssinaturaEditor) {
+    document.getElementById("editor-dia-professor-wrap").innerHTML = montarEditorDisponibilidadeDia();
+    const chkFechado = document.getElementById("chk-dia-fechado");
+    chkFechado.onchange = () => {
+      document.getElementById("periodos-dia-editor").style.display = chkFechado.checked ? "none" : "";
+    };
+    ultimaAssinaturaEditor = assinaturaAtual;
+  }
+
+  diaEditorRenderizadoPara = diaSelecionadoProfessor;
+}
+
+function montarListaAulasDia(dataIso) {
   const aulasDoDia = aulasCache
-    .filter((a) => a.data === diaSelecionadoProfessor && a.status !== "cancelada")
+    .filter((a) => a.data === dataIso && a.status !== "cancelada")
     .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
 
-  const corpo = aulasDoDia.length ? aulasDoDia.map((a) => `
+  if (aulasDoDia.length === 0) return `<p class="vazio">Nenhuma aula marcada nesse dia.</p>`;
+
+  return aulasDoDia.map((a) => `
     <div class="cartao-aula">
       <div class="aula-info">
         <strong>${escapeHtml(a.alunoNome)}</strong>
@@ -820,20 +879,7 @@ function renderizarDetalheDiaProfessor() {
         </div>
       ` : ""}
     </div>
-  `).join("") : `<p class="vazio">Nenhuma aula marcada nesse dia.</p>`;
-
-  container.innerHTML = `
-    <div class="detalhe-dia-professor-conteudo">
-      <h3 style="font-size:0.95rem;">${formatarDataBR(diaSelecionadoProfessor)}</h3>
-      ${corpo}
-      ${montarEditorDisponibilidadeDia()}
-    </div>
-  `;
-
-  const chkFechado = document.getElementById("chk-dia-fechado");
-  chkFechado.onchange = () => {
-    document.getElementById("periodos-dia-editor").style.display = chkFechado.checked ? "none" : "";
-  };
+  `).join("");
 }
 
 // Monta o formulário que deixa o professor ajustar (ou fechar) a
