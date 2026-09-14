@@ -22,9 +22,21 @@ service cloud.firestore {
       // professores a qualquer conta autenticada (limitação do modelo client-only);
       // para eliminar isso por completo, mova a validação do código para uma Cloud
       // Function que resolve o código sem expor o documento inteiro.
+      //
+      // O segundo termo usa "resource.data...professorId" direto (não a função
+      // ehProfessorDoAluno, que faz um get() no MESMO documento por um caminho
+      // variável) de propósito: o painel do professor lista os alunos vinculados
+      // com uma CONSULTA (where tipo==aluno, where professorId==X), não uma
+      // leitura de documento único. Pra consultas, o Firestore só consegue
+      // validar a regra sem rodar contra cada documento se ela depender só de
+      // "resource.data" (ou de um get() num caminho FIXO, que não é o caso do
+      // "get(usuarios/$(alunoId))" quando alunoId muda a cada documento
+      // candidato) — com o get() variável, a consulta inteira era recusada com
+      // "permission-denied" mesmo com os alunos corretamente vinculados, e a
+      // lista do professor ficava sempre vazia.
       allow read: if request.auth != null && (
         request.auth.uid == userId ||
-        ehProfessorDoAluno(userId) ||
+        resource.data.get('professorId', null) == request.auth.uid ||
         resource.data.tipo == "professor"
       );
 
@@ -106,9 +118,20 @@ service cloud.firestore {
     // segunda tentativa de escrita cai como "update" de um doc que já existe com
     // status "agendada", e a regra de update abaixo barra isso.
     match /aulas/{aulaId} {
-      // Leitura: só o professor da aula ou o aluno da aula.
+      // Leitura: o professor da aula, o aluno da aula, OU qualquer aluno vinculado
+      // a esse mesmo professor — esse terceiro caso é o que faltava: na hora de
+      // agendar, o aluno consulta TODAS as aulas do professor num dia (where
+      // professorId==X, where data==Y) pra descobrir quais horários já estão
+      // ocupados, incluindo os marcados por OUTROS alunos (o app só lê o campo
+      // "horaInicio" dessas, nunca exibe nome de outro aluno). Sem essa terceira
+      // condição, essa consulta batia num "permission-denied" (o Firestore não
+      // consegue provar que os dois primeiros termos cobrem TODO resultado
+      // possível da busca) e a tela ficava travada em "Carregando horários..."
+      // pra sempre.
       allow read: if request.auth != null &&
-        (resource.data.professorId == request.auth.uid || resource.data.alunoId == request.auth.uid);
+        (resource.data.professorId == request.auth.uid ||
+          resource.data.alunoId == request.auth.uid ||
+          souAlunoDesteProfessor(resource.data.professorId));
 
       // Criação (primeira marcação daquele horário): só o próprio aluno, e só com o
       // professor ao qual ele está vinculado — impede marcar aula com outro professor.
