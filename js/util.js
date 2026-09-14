@@ -97,3 +97,22 @@ function gerarSlotsDoDia(blocos, duracaoMinutos) {
   });
   return slots;
 }
+
+// ============================================================
+// WHATSAPP — link "wa.me" com mensagem pré-preenchida, sem precisar de
+// nenhuma API paga (o próprio aluno/professor manda a mensagem manualmente
+// depois que o link abre o WhatsApp Web/app já com o texto pronto).
+// ============================================================
+
+function apenasDigitos(texto) {
+  return String(texto || "").replace(/\D/g, "");
+}
+
+// O número é salvo só com DDD+número (mesma lógica da Barbearia B31), então
+// sempre prefixamos o código do Brasil (55) antes de montar o link.
+function linkWhatsapp(numeroBruto, mensagem) {
+  let digitos = apenasDigitos(numeroBruto);
+  if (!digitos) return null;
+  if (digitos.length <= 11) digitos = "55" + digitos;
+  return `https://wa.me/${digitos}?text=${encodeURIComponent(mensagem)}`;
+}

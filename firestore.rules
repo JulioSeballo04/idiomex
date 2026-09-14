@@ -86,6 +86,15 @@ service cloud.firestore {
           (request.auth.uid == userId || souAlunoDesteProfessor(userId));
         allow write: if request.auth != null && request.auth.uid == userId;
       }
+
+      // Exceções pontuais de disponibilidade por dia (fechar um dia específico, ou
+      // ajustar o horário só dele), além da grade semanal recorrente acima. Mesma
+      // regra de leitura/escrita da configuração de agenda.
+      match /agendaOverrides/{dataId} {
+        allow read: if request.auth != null &&
+          (request.auth.uid == userId || souAlunoDesteProfessor(userId));
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
     }
 
     // Aulas agendadas. Coleção no nível raiz (não dentro de "usuarios") porque tanto o

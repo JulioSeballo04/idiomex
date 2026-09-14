@@ -238,6 +238,11 @@
    disponibilidade acima, só que numa célula de mês em vez de uma linha. */
 .cal-day.is-workday { background: rgba(95, 133, 103, 0.10); border-color: var(--acento); font-weight: 600; color: var(--ink); }
 .cal-day.has-appts { border-color: var(--acento-secundario); border-width: 2px; }
+/* Dia com exceção pontual salva (fechado ou horário ajustado só pra ele),
+   diferente da grade semanal recorrente — a borda tracejada avisa que
+   aquele dia não segue mais o padrão configurado acima. Precisa de uma cor
+   própria porque ".is-off" deixa a borda transparente por padrão. */
+.cal-day.is-override { border-style: dashed; border-color: var(--ink-soft); }
 .cal-day .cal-dot {
   position: absolute;
   bottom: 2px;
@@ -271,6 +276,7 @@
 .dot-atende { background: rgba(95, 133, 103, 0.15); border: 1px solid var(--acento); }
 .dot-tem-aula { background: var(--acento-secundario); }
 .dot-nao-atende { background: rgba(193, 39, 45, 0.2); }
+.dot-ajustado { background: transparent; border: 1px dashed var(--ink-soft); }
 
 /* Calendário do professor: fica na largura da página, não centralizado
    como o do modal de agendamento do aluno, e todo dia é clicável (pra ver
@@ -286,12 +292,42 @@
 }
 .detalhe-dia-professor-conteudo h3 { margin: 0 0 0.6rem; }
 
+.editor-dia-professor {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--borda, #eee);
+}
+
 .modalidades-agendamento {
   display: flex;
   gap: 1rem;
   font-size: 0.9rem;
 }
 .modalidades-agendamento label { font-weight: 400; color: inherit; display: inline; }
+
+.campo-whatsapp-professor {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft, #666);
+  margin: 1rem 0 0.3rem;
+}
+.campo-whatsapp-professor input {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.55em 0.7em;
+  border-radius: 8px;
+  border: 1px solid var(--borda, #ddd);
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--ink);
+}
+.dica-whatsapp-professor {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  margin: 0 0 1rem;
+}
 
 .slots-grade {
   display: grid;

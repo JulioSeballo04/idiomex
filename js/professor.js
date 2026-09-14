@@ -16,6 +16,7 @@ let aulasCache = []; // todas as aulas (de todos os alunos) deste professor
 let configAgendaAtual = null; // {duracaoAulaMinutos, modalidades, disponibilidade}
 let mesCalendarioProfessor = null; // Date do 1º dia do mês exibido no calendário da agenda
 let diaSelecionadoProfessor = null; // "AAAA-MM-DD" do dia clicado no calendário, ou null
+let overridesAgendaCache = {}; // {"AAAA-MM-DD": {fechado, blocos}} — exceções pontuais por dia
 
 // Períodos padrão exibidos na configuração de disponibilidade — cada um vira
 // um bloco de horário independente dentro do dia (a agenda já suportava
@@ -51,8 +52,20 @@ auth.onAuthStateChanged(async (user) => {
 
   carregarAlunos(user.uid);
   escutarAulasDoProfessor(user.uid);
+  escutarOverridesAgenda(user.uid);
   montarCalendarioProfessor();
 });
+
+// Exceções pontuais de disponibilidade (fechar um dia, ou ajustar o horário
+// só dele) — além da grade semanal recorrente configurada acima.
+function escutarOverridesAgenda(uid) {
+  db.collection("usuarios").doc(uid).collection("agendaOverrides")
+    .onSnapshot((snap) => {
+      overridesAgendaCache = {};
+      snap.docs.forEach((d) => { overridesAgendaCache[d.id] = d.data(); });
+      montarCalendarioProfessor();
+    });
+}
 
 function garantirEstado(alunoId) {
   if (!estadoAlunos[alunoId]) {
@@ -584,6 +597,7 @@ function preencherFormularioConfigAgenda() {
   document.getElementById("config-duracao-aula").value = String(configAgendaAtual.duracaoAulaMinutos || DURACAO_PADRAO_MINUTOS);
   document.getElementById("config-modalidade-online").checked = (configAgendaAtual.modalidades || []).includes("online");
   document.getElementById("config-modalidade-presencial").checked = (configAgendaAtual.modalidades || []).includes("presencial");
+  document.getElementById("config-whatsapp").value = configAgendaAtual.whatsapp || "";
 
   const container = document.getElementById("config-dias-semana");
   container.innerHTML = DIAS_SEMANA.map((dia) => {
@@ -658,7 +672,8 @@ async function salvarConfigAgenda() {
     return;
   }
 
-  const dados = { duracaoAulaMinutos, modalidades, disponibilidade };
+  const whatsapp = document.getElementById("config-whatsapp").value.trim();
+  const dados = { duracaoAulaMinutos, modalidades, disponibilidade, whatsapp };
   await db.collection("usuarios").doc(professorIdAtual)
     .collection("configuracaoAgenda").doc("dados").set(dados);
 
@@ -707,7 +722,10 @@ function montarCalendarioProfessor() {
   for (let dia = 1; dia <= diasNoMes; dia++) {
     const dataIso = chaveDataISO(new Date(ano, mes, dia));
     const diaSemana = DIAS_SEMANA[new Date(ano, mes, dia).getDay()];
-    const atende = !!(disponibilidade[diaSemana] && disponibilidade[diaSemana].length > 0);
+    const override = overridesAgendaCache[dataIso];
+    const atende = override
+      ? !override.fechado && (override.blocos || []).length > 0
+      : !!(disponibilidade[diaSemana] && disponibilidade[diaSemana].length > 0);
     const passou = dataIso < hojeIso;
     const hoje = dataIso === hojeIso;
     const contagem = contagemPorDia[dataIso] || 0;
@@ -719,6 +737,7 @@ function montarCalendarioProfessor() {
     else classes.push("is-off");
     if (hoje) classes.push("is-today");
     if (contagem > 0) classes.push("has-appts");
+    if (override) classes.push("is-override");
     if (selecionado) classes.push("is-selected");
 
     celulas.push(`
@@ -746,6 +765,7 @@ function montarCalendarioProfessor() {
         <span><span class="dot dot-atende"></span> Atende nesse dia</span>
         <span><span class="dot dot-tem-aula"></span> Tem aula marcada</span>
         <span><span class="dot dot-nao-atende"></span> Não atende</span>
+        <span><span class="dot dot-ajustado"></span> Horário ajustado só nesse dia</span>
       </div>
     </div>
     <div id="detalhe-dia-professor"></div>
@@ -803,8 +823,89 @@ function renderizarDetalheDiaProfessor() {
     <div class="detalhe-dia-professor-conteudo">
       <h3 style="font-size:0.95rem;">${formatarDataBR(diaSelecionadoProfessor)}</h3>
       ${corpo}
+      ${montarEditorDisponibilidadeDia()}
     </div>
   `;
+
+  const chkFechado = document.getElementById("chk-dia-fechado");
+  chkFechado.onchange = () => {
+    document.getElementById("periodos-dia-editor").style.display = chkFechado.checked ? "none" : "";
+  };
+}
+
+// Monta o formulário que deixa o professor ajustar (ou fechar) a
+// disponibilidade só do dia selecionado, sem afetar a grade semanal
+// recorrente. Começa preenchido com a exceção já salva, se houver, ou
+// com o horário padrão daquele dia da semana como sugestão.
+function montarEditorDisponibilidadeDia() {
+  const dataIso = diaSelecionadoProfessor;
+  const override = overridesAgendaCache[dataIso];
+  const diaSemana = chaveDiaSemana(dataIso);
+  const blocosBase = override ? (override.blocos || []) : ((configAgendaAtual.disponibilidade || {})[diaSemana] || []);
+  const fechado = !!(override && override.fechado);
+
+  const periodosHtml = PERIODOS_DIA.map((periodo) => {
+    const bloco = blocosBase.find((b) => periodoDoHorario(b.inicio) === periodo.chave);
+    const ativo = !!bloco;
+    const inicio = bloco ? bloco.inicio : periodo.padraoInicio;
+    const fim = bloco ? bloco.fim : periodo.padraoFim;
+    return `
+      <div class="linha-periodo-config">
+        <label class="chk-periodo-label">
+          <input type="checkbox" class="chk-periodo-dia-ativo" data-periodo="${periodo.chave}" ${ativo ? "checked" : ""} onchange="alternarPeriodoConfig(this)">
+          ${periodo.nome}
+        </label>
+        <input type="time" class="input-inicio-periodo-dia" data-periodo="${periodo.chave}" value="${inicio}" ${ativo ? "" : "disabled"}>
+        <span>até</span>
+        <input type="time" class="input-fim-periodo-dia" data-periodo="${periodo.chave}" value="${fim}" ${ativo ? "" : "disabled"}>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="editor-dia-professor">
+      <h4 style="font-size:0.85rem; margin:0 0 0.6rem;">Ajustar disponibilidade só desse dia</h4>
+      <label class="chk-periodo-label" style="margin-bottom:0.7rem;">
+        <input type="checkbox" id="chk-dia-fechado" ${fechado ? "checked" : ""}>
+        Fechado nesse dia (sem atendimento)
+      </label>
+      <div id="periodos-dia-editor" class="periodos-dia" ${fechado ? 'style="display:none;"' : ""}>${periodosHtml}</div>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.8rem;">
+        <button type="button" class="btn btn-primario" style="padding:0.4em 0.9em; font-size:0.85rem;" onclick="salvarOverrideDia()">Salvar horário desse dia</button>
+        ${override ? `<button type="button" class="btn btn-secundario" style="padding:0.4em 0.9em; font-size:0.85rem;" onclick="restaurarOverrideDia()">Restaurar horário padrão</button>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+async function salvarOverrideDia() {
+  const dataIso = diaSelecionadoProfessor;
+  const fechado = document.getElementById("chk-dia-fechado").checked;
+  const blocos = [];
+
+  if (!fechado) {
+    PERIODOS_DIA.forEach((periodo) => {
+      const chk = document.querySelector(`.chk-periodo-dia-ativo[data-periodo="${periodo.chave}"]`);
+      if (chk && chk.checked) {
+        const inicio = document.querySelector(`.input-inicio-periodo-dia[data-periodo="${periodo.chave}"]`).value;
+        const fim = document.querySelector(`.input-fim-periodo-dia[data-periodo="${periodo.chave}"]`).value;
+        if (inicio && fim && inicio < fim) blocos.push({ inicio, fim });
+      }
+    });
+    if (blocos.length === 0) {
+      alert('Marque pelo menos um período com horário válido, ou marque "Fechado nesse dia".');
+      return;
+    }
+  }
+
+  await db.collection("usuarios").doc(professorIdAtual)
+    .collection("agendaOverrides").doc(dataIso).set({ fechado, blocos });
+}
+
+async function restaurarOverrideDia() {
+  if (!confirm("Restaurar o horário padrão desse dia? Isso remove o ajuste feito só pra ele.")) return;
+  await db.collection("usuarios").doc(professorIdAtual)
+    .collection("agendaOverrides").doc(diaSelecionadoProfessor).delete();
 }
 
 async function cancelarAulaComoProfessor(aulaId) {

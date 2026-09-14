@@ -498,6 +498,7 @@ let configAgendaProfessor = null;
 let minhasAulasCache = [];
 let dataEscolhidaAgendamento = null;
 let mesCalendarioAgendamento = null; // Date do 1º dia do mês exibido no calendário
+let overridesAgendaProfessor = {}; // {"AAAA-MM-DD": {fechado, blocos}} — exceções pontuais do professor
 
 function escutarMinhasAulas(uid) {
   db.collection("aulas").where("alunoId", "==", uid)
@@ -554,6 +555,11 @@ async function abrirAgendamento() {
   configAgendaProfessor = snap.data();
   dataEscolhidaAgendamento = null;
 
+  const overridesSnap = await db.collection("usuarios").doc(professorIdDoAluno)
+    .collection("agendaOverrides").get();
+  overridesAgendaProfessor = {};
+  overridesSnap.docs.forEach((d) => { overridesAgendaProfessor[d.id] = d.data(); });
+
   const hoje = new Date();
   mesCalendarioAgendamento = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   montarCalendarioAgendamento();
@@ -572,11 +578,18 @@ function fecharAgendamento() {
   document.getElementById("modal-agendamento").classList.add("modal-oculto");
 }
 
-// Um dia tem disponibilidade se o professor configurou algum bloco de
-// horário pro dia da semana correspondente (ex: toda terça de manhã)
+// Blocos de horário efetivos de um dia: a exceção pontual do professor pra
+// aquele dia, se houver, senão a grade semanal recorrente do dia da semana.
+function blocosDoDia(dataIso) {
+  const override = overridesAgendaProfessor[dataIso];
+  if (override) return override.fechado ? [] : (override.blocos || []);
+  return (configAgendaProfessor.disponibilidade || {})[chaveDiaSemana(dataIso)] || [];
+}
+
+// Um dia tem disponibilidade se sobrar algum bloco de horário depois de
+// aplicar a exceção pontual (se houver) sobre a grade semanal
 function diaTemDisponibilidade(dataIso) {
-  const blocos = (configAgendaProfessor.disponibilidade || {})[chaveDiaSemana(dataIso)];
-  return !!(blocos && blocos.length > 0);
+  return blocosDoDia(dataIso).length > 0;
 }
 
 // Desenha o calendário de mês (navegação + grade de dias), destacando quais
@@ -654,11 +667,10 @@ async function selecionarDataAgendamento(dataEscolhida) {
 
   dataEscolhidaAgendamento = dataEscolhida;
   montarCalendarioAgendamento(); // reflete o dia selecionado na grade
-  const diaSemana = chaveDiaSemana(dataEscolhida);
-  const blocos = (configAgendaProfessor.disponibilidade || {})[diaSemana];
+  const blocos = blocosDoDia(dataEscolhida);
 
-  if (!blocos || blocos.length === 0) {
-    container.innerHTML = `<p class="vazio">Seu professor não atende nesse dia da semana.</p>`;
+  if (blocos.length === 0) {
+    container.innerHTML = `<p class="vazio">Seu professor não atende nesse dia.</p>`;
     return;
   }
 
@@ -702,6 +714,14 @@ async function selecionarDataAgendamento(dataEscolhida) {
   });
 }
 
+function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade) {
+  return "Olá! Quero confirmar minha aula no Meu Dicionário:\n" +
+    `Aluno: ${nomeDoAlunoAtual}\n` +
+    `Data: ${formatarDataBR(dataIso)}\n` +
+    `Horário: ${horaInicio}\n` +
+    `Modalidade: ${modalidade === "online" ? "Online" : "Presencial"}`;
+}
+
 async function confirmarAgendamento(horaInicio, duracaoMinutos) {
   const modalidadeInput = document.querySelector('input[name="modalidade-agendamento"]:checked');
   if (!modalidadeInput) {
@@ -711,6 +731,13 @@ async function confirmarAgendamento(horaInicio, duracaoMinutos) {
 
   const user = auth.currentUser;
   if (!user) return;
+
+  // A aba do WhatsApp é aberta em branco JÁ AQUI, antes do "await" — celulares
+  // (principalmente Safari/iOS) bloqueiam window.open() se ele só acontecer depois de uma
+  // pausa assíncrona, porque nesse ponto deixa de contar como resposta direta a um toque
+  // do usuário. Preenchendo o destino da aba só depois que a gravação terminar, o popup nunca é bloqueado.
+  const numeroWhatsappProfessor = configAgendaProfessor.whatsapp;
+  const abaWhatsapp = numeroWhatsappProfessor ? window.open("", "_blank") : null;
 
   try {
     await agendarAula(
@@ -723,7 +750,13 @@ async function confirmarAgendamento(horaInicio, duracaoMinutos) {
       nomeDoAlunoAtual
     );
     fecharAgendamento();
+
+    if (abaWhatsapp) {
+      const link = linkWhatsapp(numeroWhatsappProfessor, mensagemConfirmacaoAula(dataEscolhidaAgendamento, horaInicio, modalidadeInput.value));
+      if (link) abaWhatsapp.location = link; else abaWhatsapp.close();
+    }
   } catch (e) {
+    if (abaWhatsapp) abaWhatsapp.close();
     alert(e.message || "Não foi possível agendar esse horário. Tente outro.");
     selecionarDataAgendamento(); // recarrega a lista de horários livres
   }
