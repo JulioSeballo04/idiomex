@@ -952,7 +952,7 @@ textarea { resize: vertical; }
 }
 
 /* ---------- Agendamento de aulas ---------- */
-.modal-largo { max-width: 480px; }
+.modal-largo { max-width: 480px; max-height: 85vh; overflow-y: auto; }
 
 .agenda-topo { margin-bottom: 1rem; }
 
@@ -1029,27 +1029,6 @@ textarea { resize: vertical; }
 }
 .config-modalidades label { font-weight: 400; display: flex; align-items: center; gap: 0.3em; }
 
-.linha-dia-config {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--borda, #f0f0f0);
-  font-size: 0.9rem;
-}
-.linha-dia-config .chk-dia-label {
-  display: flex;
-  align-items: center;
-  gap: 0.4em;
-  min-width: 110px;
-  font-weight: 500;
-  color: inherit;
-}
-.linha-dia-config input[type="time"] {
-  padding: 0.3em 0.4em;
-  border-radius: 6px;
-  border: 1px solid var(--borda, #ddd);
-}
 
 .cartao-aula {
   display: flex;

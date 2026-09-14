@@ -497,6 +497,13 @@ function carregarMensagensDoProfessor(uid) {
 let configAgendaProfessor = null;
 let minhasAulasCache = [];
 let dataEscolhidaAgendamento = null;
+let mesCalendarioAgendamento = null; // Date do 1º dia do mês exibido no calendário
+
+const NOMES_MESES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
+const NOMES_DIAS_SEMANA_CURTO = ["D", "S", "T", "Q", "Q", "S", "S"];
 
 function escutarMinhasAulas(uid) {
   db.collection("aulas").where("alunoId", "==", uid)
@@ -553,9 +560,9 @@ async function abrirAgendamento() {
   configAgendaProfessor = snap.data();
   dataEscolhidaAgendamento = null;
 
-  const inputData = document.getElementById("input-data-agendamento");
-  inputData.min = dataDeHojeISO();
-  inputData.value = "";
+  const hoje = new Date();
+  mesCalendarioAgendamento = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  montarCalendarioAgendamento();
 
   const modalidades = configAgendaProfessor.modalidades || [];
   document.getElementById("modalidades-agendamento").innerHTML = modalidades.map((m, indice) => `
@@ -571,13 +578,95 @@ function fecharAgendamento() {
   document.getElementById("modal-agendamento").classList.add("modal-oculto");
 }
 
+function chaveDataISO(data) {
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, "0");
+  const dia = String(data.getDate()).padStart(2, "0");
+  return `${ano}-${mes}-${dia}`;
+}
+
+// Um dia tem disponibilidade se o professor configurou algum bloco de
+// horário pro dia da semana correspondente (ex: toda terça de manhã)
+function diaTemDisponibilidade(dataIso) {
+  const blocos = (configAgendaProfessor.disponibilidade || {})[chaveDiaSemana(dataIso)];
+  return !!(blocos && blocos.length > 0);
+}
+
+// Desenha o calendário de mês (navegação + grade de dias), destacando quais
+// dias o professor atende, pra o aluno escolher visualmente em vez de digitar uma data
+function montarCalendarioAgendamento() {
+  const container = document.getElementById("calendario-agendamento");
+  const hojeIso = dataDeHojeISO();
+  const ano = mesCalendarioAgendamento.getFullYear();
+  const mes = mesCalendarioAgendamento.getMonth();
+  const primeiroDoMes = new Date(ano, mes, 1);
+  const diasNoMes = new Date(ano, mes + 1, 0).getDate();
+  const offsetInicio = primeiroDoMes.getDay();
+
+  const celulas = [];
+  for (let i = 0; i < offsetInicio; i++) celulas.push(`<div class="cal-day cal-empty"></div>`);
+  for (let dia = 1; dia <= diasNoMes; dia++) {
+    const dataIso = chaveDataISO(new Date(ano, mes, dia));
+    const passou = dataIso < hojeIso;
+    const hoje = dataIso === hojeIso;
+    const disponivel = !passou && diaTemDisponibilidade(dataIso);
+    const selecionado = dataIso === dataEscolhidaAgendamento;
+
+    const classes = ["cal-day"];
+    if (passou) classes.push("is-past");
+    else if (!disponivel) classes.push("is-off");
+    if (hoje) classes.push("is-today");
+    if (disponivel) classes.push("is-available");
+    if (selecionado) classes.push("is-selected");
+
+    celulas.push(`
+      <div class="${classes.join(" ")}" ${disponivel ? `data-calday="${dataIso}"` : ""}>
+        <span class="cal-num">${dia}</span>
+      </div>
+    `);
+  }
+
+  const hojeReal = new Date();
+  const eMesAtual = ano === hojeReal.getFullYear() && mes === hojeReal.getMonth();
+
+  container.innerHTML = `
+    <div class="cal-wrap">
+      <div class="cal-head">
+        <div class="cal-nav"><button type="button" id="btn-cal-mes-anterior" ${eMesAtual ? "disabled" : ""} aria-label="Mês anterior">&larr;</button></div>
+        <div class="cal-title">${NOMES_MESES[mes]} de ${ano}</div>
+        <div class="cal-nav"><button type="button" id="btn-cal-mes-proximo" aria-label="Próximo mês">&rarr;</button></div>
+      </div>
+      <div class="cal-dow">${NOMES_DIAS_SEMANA_CURTO.map((d) => `<span>${d}</span>`).join("")}</div>
+      <div class="cal-grid">${celulas.join("")}</div>
+      <div class="cal-legend">
+        <span><span class="dot dot-disponivel"></span> Disponível</span>
+        <span><span class="dot dot-indisponivel"></span> Indisponível</span>
+        <span><span class="dot dot-selecionado"></span> Selecionado</span>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("btn-cal-mes-anterior").onclick = () => {
+    mesCalendarioAgendamento = new Date(ano, mes - 1, 1);
+    montarCalendarioAgendamento();
+  };
+  document.getElementById("btn-cal-mes-proximo").onclick = () => {
+    mesCalendarioAgendamento = new Date(ano, mes + 1, 1);
+    montarCalendarioAgendamento();
+  };
+  container.querySelectorAll("[data-calday]").forEach((celula) => {
+    celula.onclick = () => selecionarDataAgendamento(celula.dataset.calday);
+  });
+}
+
 // Ao escolher uma data, busca as aulas já marcadas do professor naquele dia e calcula os horários livres
-async function selecionarDataAgendamento() {
-  const dataEscolhida = document.getElementById("input-data-agendamento").value;
+async function selecionarDataAgendamento(dataEscolhida) {
+  dataEscolhida = dataEscolhida || dataEscolhidaAgendamento;
   const container = document.getElementById("slots-agendamento");
   if (!dataEscolhida) { container.innerHTML = ""; return; }
 
   dataEscolhidaAgendamento = dataEscolhida;
+  montarCalendarioAgendamento(); // reflete o dia selecionado na grade
   const diaSemana = chaveDiaSemana(dataEscolhida);
   const blocos = (configAgendaProfessor.disponibilidade || {})[diaSemana];
 

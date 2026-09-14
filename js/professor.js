@@ -14,6 +14,24 @@ let alunosCache = []; // [{id, nome, ...}]
 const estadoAlunos = {}; // por alunoId: ver garantirEstado()
 let aulasCache = []; // todas as aulas (de todos os alunos) deste professor
 let configAgendaAtual = null; // {duracaoAulaMinutos, modalidades, disponibilidade}
+
+// Períodos padrão exibidos na configuração de disponibilidade — cada um vira
+// um bloco de horário independente dentro do dia (a agenda já suportava
+// múltiplos blocos por dia, só a tela só deixava configurar um).
+const PERIODOS_DIA = [
+  { chave: "manha", nome: "Manhã", padraoInicio: "08:00", padraoFim: "12:00" },
+  { chave: "tarde", nome: "Tarde", padraoInicio: "13:00", padraoFim: "18:00" },
+  { chave: "noite", nome: "Noite", padraoInicio: "19:00", padraoFim: "22:00" }
+];
+
+// Classifica um horário de início dentro de um dos períodos acima, pra
+// reconstruir a tela a partir dos blocos já salvos no Firestore.
+function periodoDoHorario(horaInicio) {
+  const hora = Number((horaInicio || "0").split(":")[0]);
+  if (hora < 12) return "manha";
+  if (hora < 18) return "tarde";
+  return "noite";
+}
 const DURACAO_PADRAO_MINUTOS = 50;
 
 exigirLogin("professor");
@@ -558,22 +576,41 @@ function preencherFormularioConfigAgenda() {
 
   const container = document.getElementById("config-dias-semana");
   container.innerHTML = DIAS_SEMANA.map((dia) => {
-    const bloco = (configAgendaAtual.disponibilidade || {})[dia];
-    const ativo = !!(bloco && bloco.length > 0);
-    const inicio = ativo ? bloco[0].inicio : "08:00";
-    const fim = ativo ? bloco[0].fim : "12:00";
+    const blocos = (configAgendaAtual.disponibilidade || {})[dia] || [];
+
+    const periodosHtml = PERIODOS_DIA.map((periodo) => {
+      const bloco = blocos.find((b) => periodoDoHorario(b.inicio) === periodo.chave);
+      const ativo = !!bloco;
+      const inicio = ativo ? bloco.inicio : periodo.padraoInicio;
+      const fim = ativo ? bloco.fim : periodo.padraoFim;
+      return `
+        <div class="linha-periodo-config">
+          <label class="chk-periodo-label">
+            <input type="checkbox" class="chk-periodo-ativo" data-dia="${dia}" data-periodo="${periodo.chave}" ${ativo ? "checked" : ""} onchange="alternarPeriodoConfig(this)">
+            ${periodo.nome}
+          </label>
+          <input type="time" class="input-inicio-periodo" data-dia="${dia}" data-periodo="${periodo.chave}" value="${inicio}" ${ativo ? "" : "disabled"}>
+          <span>até</span>
+          <input type="time" class="input-fim-periodo" data-dia="${dia}" data-periodo="${periodo.chave}" value="${fim}" ${ativo ? "" : "disabled"}>
+        </div>
+      `;
+    }).join("");
+
     return `
-      <div class="linha-dia-config">
-        <label class="chk-dia-label">
-          <input type="checkbox" class="chk-dia-ativo" data-dia="${dia}" ${ativo ? "checked" : ""}>
-          ${NOMES_DIAS_SEMANA[dia]}
-        </label>
-        <input type="time" class="input-inicio-dia" data-dia="${dia}" value="${inicio}">
-        <span>até</span>
-        <input type="time" class="input-fim-dia" data-dia="${dia}" value="${fim}">
+      <div class="dia-config-grupo">
+        <div class="dia-config-titulo">${NOMES_DIAS_SEMANA[dia]}</div>
+        <div class="periodos-dia">${periodosHtml}</div>
       </div>
     `;
   }).join("");
+}
+
+// Habilita/desabilita os campos de horário do período conforme o checkbox dele
+function alternarPeriodoConfig(checkbox) {
+  const linha = checkbox.closest(".linha-periodo-config");
+  linha.querySelectorAll('input[type="time"]').forEach((input) => {
+    input.disabled = !checkbox.checked;
+  });
 }
 
 async function salvarConfigAgenda() {
@@ -590,19 +627,23 @@ async function salvarConfigAgenda() {
   const disponibilidade = {};
   let algumDiaValido = false;
   DIAS_SEMANA.forEach((dia) => {
-    const chk = document.querySelector(`.chk-dia-ativo[data-dia="${dia}"]`);
-    if (chk && chk.checked) {
-      const inicio = document.querySelector(`.input-inicio-dia[data-dia="${dia}"]`).value;
-      const fim = document.querySelector(`.input-fim-dia[data-dia="${dia}"]`).value;
-      if (inicio && fim && inicio < fim) {
-        disponibilidade[dia] = [{ inicio, fim }];
-        algumDiaValido = true;
+    const blocos = [];
+    PERIODOS_DIA.forEach((periodo) => {
+      const chk = document.querySelector(`.chk-periodo-ativo[data-dia="${dia}"][data-periodo="${periodo.chave}"]`);
+      if (chk && chk.checked) {
+        const inicio = document.querySelector(`.input-inicio-periodo[data-dia="${dia}"][data-periodo="${periodo.chave}"]`).value;
+        const fim = document.querySelector(`.input-fim-periodo[data-dia="${dia}"][data-periodo="${periodo.chave}"]`).value;
+        if (inicio && fim && inicio < fim) blocos.push({ inicio, fim });
       }
+    });
+    if (blocos.length > 0) {
+      disponibilidade[dia] = blocos;
+      algumDiaValido = true;
     }
   });
 
   if (!algumDiaValido) {
-    alert("Marque pelo menos um dia da semana com um horário válido (início antes do fim).");
+    alert("Marque pelo menos um período (manhã, tarde ou noite) com um horário válido (início antes do fim).");
     return;
   }
 
