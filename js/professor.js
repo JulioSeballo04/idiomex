@@ -60,11 +60,14 @@ auth.onAuthStateChanged(async (user) => {
 // só dele) — além da grade semanal recorrente configurada acima.
 function escutarOverridesAgenda(uid) {
   db.collection("usuarios").doc(uid).collection("agendaOverrides")
-    .onSnapshot((snap) => {
-      overridesAgendaCache = {};
-      snap.docs.forEach((d) => { overridesAgendaCache[d.id] = d.data(); });
-      montarCalendarioProfessor();
-    });
+    .onSnapshot(
+      (snap) => {
+        overridesAgendaCache = {};
+        snap.docs.forEach((d) => { overridesAgendaCache[d.id] = d.data(); });
+        montarCalendarioProfessor();
+      },
+      (erro) => console.warn("Não foi possível carregar as exceções de disponibilidade:", erro)
+    );
 }
 
 function garantirEstado(alunoId) {
@@ -898,14 +901,24 @@ async function salvarOverrideDia() {
     }
   }
 
-  await db.collection("usuarios").doc(professorIdAtual)
-    .collection("agendaOverrides").doc(dataIso).set({ fechado, blocos });
+  try {
+    await db.collection("usuarios").doc(professorIdAtual)
+      .collection("agendaOverrides").doc(dataIso).set({ fechado, blocos });
+  } catch (e) {
+    alert("Não foi possível salvar o ajuste desse dia. Tente novamente em instantes.");
+    console.error(e);
+  }
 }
 
 async function restaurarOverrideDia() {
   if (!confirm("Restaurar o horário padrão desse dia? Isso remove o ajuste feito só pra ele.")) return;
-  await db.collection("usuarios").doc(professorIdAtual)
-    .collection("agendaOverrides").doc(diaSelecionadoProfessor).delete();
+  try {
+    await db.collection("usuarios").doc(professorIdAtual)
+      .collection("agendaOverrides").doc(diaSelecionadoProfessor).delete();
+  } catch (e) {
+    alert("Não foi possível restaurar o horário padrão. Tente novamente em instantes.");
+    console.error(e);
+  }
 }
 
 async function cancelarAulaComoProfessor(aulaId) {
