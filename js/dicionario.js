@@ -555,10 +555,17 @@ async function abrirAgendamento() {
   configAgendaProfessor = snap.data();
   dataEscolhidaAgendamento = null;
 
-  const overridesSnap = await db.collection("usuarios").doc(professorIdDoAluno)
-    .collection("agendaOverrides").get();
+  // Não deixa a falta de permissão nessa coleção (ex: regras do Firestore
+  // ainda não republicadas) travar o agendamento inteiro — nesse caso só
+  // segue sem exceções pontuais, valendo a grade semanal recorrente.
   overridesAgendaProfessor = {};
-  overridesSnap.docs.forEach((d) => { overridesAgendaProfessor[d.id] = d.data(); });
+  try {
+    const overridesSnap = await db.collection("usuarios").doc(professorIdDoAluno)
+      .collection("agendaOverrides").get();
+    overridesSnap.docs.forEach((d) => { overridesAgendaProfessor[d.id] = d.data(); });
+  } catch (e) {
+    console.warn("Não foi possível carregar exceções de disponibilidade:", e);
+  }
 
   const hoje = new Date();
   mesCalendarioAgendamento = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
