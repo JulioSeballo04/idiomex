@@ -56,6 +56,20 @@ function chaveDiaSemana(dataIso) {
   return DIAS_SEMANA[data.getDay()];
 }
 
+// Um objeto Date -> "AAAA-MM-DD" no horário LOCAL (usado pelos calendários de mês)
+function chaveDataISO(data) {
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, "0");
+  const dia = String(data.getDate()).padStart(2, "0");
+  return `${ano}-${mes}-${dia}`;
+}
+
+const NOMES_MESES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
+const NOMES_DIAS_SEMANA_CURTO = ["D", "S", "T", "Q", "Q", "S", "S"];
+
 // Soma minutos a um horário "HH:MM" e devolve outro "HH:MM"
 function somarMinutos(horaStr, minutos) {
   const [h, m] = horaStr.split(":").map(Number);

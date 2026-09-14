@@ -207,6 +207,7 @@
   gap: 4px;
 }
 .cal-day {
+  position: relative;
   aspect-ratio: 1;
   display: flex;
   align-items: center;
@@ -233,6 +234,26 @@
 .cal-day.is-selected { background: var(--acento); border-color: var(--acento); color: #fff; }
 .cal-day.is-selected:hover { background: var(--acento-forte); }
 
+/* Dia de atendimento no calendário do professor: mesma ideia do índice de
+   disponibilidade acima, só que numa célula de mês em vez de uma linha. */
+.cal-day.is-workday { background: rgba(95, 133, 103, 0.10); border-color: var(--acento); font-weight: 600; color: var(--ink); }
+.cal-day.has-appts { border-color: var(--acento-secundario); border-width: 2px; }
+.cal-day .cal-dot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--acento-secundario);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
 .cal-legend {
   display: flex;
   flex-wrap: wrap;
@@ -246,6 +267,24 @@
 .dot-disponivel { background: var(--bg-cartao); border: 1px solid var(--borda); }
 .dot-indisponivel { background: rgba(193, 39, 45, 0.35); }
 .dot-selecionado { background: var(--acento); }
+.dot-hoje { background: #fff; border: 2px solid var(--acento-secundario); }
+.dot-atende { background: rgba(95, 133, 103, 0.15); border: 1px solid var(--acento); }
+.dot-tem-aula { background: var(--acento-secundario); }
+.dot-nao-atende { background: rgba(193, 39, 45, 0.2); }
+
+/* Calendário do professor: fica na largura da página, não centralizado
+   como o do modal de agendamento do aluno, e todo dia é clicável (pra ver
+   o histórico de aulas mesmo em dias sem atendimento ou já passados). */
+.cal-wrap-professor { max-width: 420px; margin: 0; }
+.cal-wrap-professor .cal-day:not(.cal-empty) { cursor: pointer; }
+.cal-wrap-professor .cal-day:not(.cal-empty):hover { border-color: var(--acento); }
+
+.detalhe-dia-professor-conteudo {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--borda, #eee);
+}
+.detalhe-dia-professor-conteudo h3 { margin: 0 0 0.6rem; }
 
 .modalidades-agendamento {
   display: flex;

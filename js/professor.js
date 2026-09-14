@@ -14,6 +14,8 @@ let alunosCache = []; // [{id, nome, ...}]
 const estadoAlunos = {}; // por alunoId: ver garantirEstado()
 let aulasCache = []; // todas as aulas (de todos os alunos) deste professor
 let configAgendaAtual = null; // {duracaoAulaMinutos, modalidades, disponibilidade}
+let mesCalendarioProfessor = null; // Date do 1º dia do mês exibido no calendário da agenda
+let diaSelecionadoProfessor = null; // "AAAA-MM-DD" do dia clicado no calendário, ou null
 
 // Períodos padrão exibidos na configuração de disponibilidade — cada um vira
 // um bloco de horário independente dentro do dia (a agenda já suportava
@@ -42,8 +44,14 @@ auth.onAuthStateChanged(async (user) => {
   const perfil = (await db.collection("usuarios").doc(user.uid).get()).data();
   document.getElementById("nome-usuario").textContent = perfil.nome;
   document.getElementById("codigo-professor").textContent = perfil.codigoProfessor;
+
+  const hoje = new Date();
+  mesCalendarioProfessor = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  await carregarConfigAgenda();
+
   carregarAlunos(user.uid);
   escutarAulasDoProfessor(user.uid);
+  montarCalendarioProfessor();
 });
 
 function garantirEstado(alunoId) {
@@ -225,7 +233,7 @@ function renderizarVisaoGeralTurma() {
 
 function renderizarListaAlunos() {
   renderizarVisaoGeralTurma();
-  renderizarProximasAulas();
+  montarCalendarioProfessor();
 
   const lista = document.getElementById("lista-alunos");
   lista.innerHTML = "";
@@ -551,7 +559,7 @@ function escutarAulasDoProfessor(uid) {
     });
 }
 
-async function abrirConfigAgenda() {
+async function carregarConfigAgenda() {
   const snap = await db.collection("usuarios").doc(professorIdAtual)
     .collection("configuracaoAgenda").doc("dados").get();
 
@@ -560,7 +568,10 @@ async function abrirConfigAgenda() {
     modalidades: [],
     disponibilidade: {}
   };
+}
 
+async function abrirConfigAgenda() {
+  await carregarConfigAgenda();
   preencherFormularioConfigAgenda();
   document.getElementById("modal-config-agenda").classList.remove("modal-oculto");
 }
@@ -653,6 +664,7 @@ async function salvarConfigAgenda() {
 
   configAgendaAtual = dados;
   fecharConfigAgenda();
+  montarCalendarioProfessor();
 }
 
 // -------------------- AGENDA: PRÓXIMAS AULAS (todas) --------------------
@@ -667,33 +679,132 @@ function legendaStatusAula(status) {
   return "Agendada";
 }
 
-function renderizarProximasAulas() {
-  const container = document.getElementById("lista-proximas-aulas");
-  if (!container) return;
+// Desenha o calendário de mês da agenda do professor: cada dia mostra se é
+// dia de atendimento (conforme a disponibilidade configurada) e quantas aulas
+// já estão marcadas nele. Clicar num dia abre a lista de aulas daquele dia.
+function montarCalendarioProfessor() {
+  const container = document.getElementById("calendario-professor");
+  if (!container || !mesCalendarioProfessor) return;
 
   const hojeIso = dataDeHojeISO();
-  const futuras = aulasCache
-    .filter((a) => a.status === "agendada" && a.data >= hojeIso)
-    .sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio));
+  const ano = mesCalendarioProfessor.getFullYear();
+  const mes = mesCalendarioProfessor.getMonth();
+  const primeiroDoMes = new Date(ano, mes, 1);
+  const diasNoMes = new Date(ano, mes + 1, 0).getDate();
+  const offsetInicio = primeiroDoMes.getDay();
+  const disponibilidade = (configAgendaAtual && configAgendaAtual.disponibilidade) || {};
+  const prefixoMes = `${ano}-${String(mes + 1).padStart(2, "0")}`;
 
-  if (futuras.length === 0) {
-    container.innerHTML = `<p class="vazio">Nenhuma aula marcada ainda. Configure sua disponibilidade acima para que os alunos possam agendar.</p>`;
-    return;
+  const contagemPorDia = {};
+  aulasCache.forEach((a) => {
+    if (a.status === "agendada" && a.data.startsWith(prefixoMes)) {
+      contagemPorDia[a.data] = (contagemPorDia[a.data] || 0) + 1;
+    }
+  });
+
+  const celulas = [];
+  for (let i = 0; i < offsetInicio; i++) celulas.push(`<div class="cal-day cal-empty"></div>`);
+  for (let dia = 1; dia <= diasNoMes; dia++) {
+    const dataIso = chaveDataISO(new Date(ano, mes, dia));
+    const diaSemana = DIAS_SEMANA[new Date(ano, mes, dia).getDay()];
+    const atende = !!(disponibilidade[diaSemana] && disponibilidade[diaSemana].length > 0);
+    const passou = dataIso < hojeIso;
+    const hoje = dataIso === hojeIso;
+    const contagem = contagemPorDia[dataIso] || 0;
+    const selecionado = dataIso === diaSelecionadoProfessor;
+
+    const classes = ["cal-day"];
+    if (passou) classes.push("is-past");
+    else if (atende) classes.push("is-workday");
+    else classes.push("is-off");
+    if (hoje) classes.push("is-today");
+    if (contagem > 0) classes.push("has-appts");
+    if (selecionado) classes.push("is-selected");
+
+    celulas.push(`
+      <div class="${classes.join(" ")}" data-calday="${dataIso}">
+        <span class="cal-num">${dia}</span>
+        ${contagem > 0 ? `<span class="cal-dot">${contagem}</span>` : ""}
+      </div>
+    `);
   }
 
-  container.innerHTML = futuras.map((a) => `
+  const hojeReal = new Date();
+  const eMesAtual = ano === hojeReal.getFullYear() && mes === hojeReal.getMonth();
+
+  container.innerHTML = `
+    <div class="cal-wrap cal-wrap-professor">
+      <div class="cal-head">
+        <div class="cal-nav"><button type="button" id="btn-cal-prof-anterior" ${eMesAtual ? "disabled" : ""} aria-label="Mês anterior">&larr;</button></div>
+        <div class="cal-title">${NOMES_MESES[mes]} de ${ano}</div>
+        <div class="cal-nav"><button type="button" id="btn-cal-prof-proximo" aria-label="Próximo mês">&rarr;</button></div>
+      </div>
+      <div class="cal-dow">${NOMES_DIAS_SEMANA_CURTO.map((d) => `<span>${d}</span>`).join("")}</div>
+      <div class="cal-grid">${celulas.join("")}</div>
+      <div class="cal-legend">
+        <span><span class="dot dot-hoje"></span> Hoje</span>
+        <span><span class="dot dot-atende"></span> Atende nesse dia</span>
+        <span><span class="dot dot-tem-aula"></span> Tem aula marcada</span>
+        <span><span class="dot dot-nao-atende"></span> Não atende</span>
+      </div>
+    </div>
+    <div id="detalhe-dia-professor"></div>
+  `;
+
+  document.getElementById("btn-cal-prof-anterior").onclick = () => {
+    mesCalendarioProfessor = new Date(ano, mes - 1, 1);
+    diaSelecionadoProfessor = null;
+    montarCalendarioProfessor();
+  };
+  document.getElementById("btn-cal-prof-proximo").onclick = () => {
+    mesCalendarioProfessor = new Date(ano, mes + 1, 1);
+    diaSelecionadoProfessor = null;
+    montarCalendarioProfessor();
+  };
+  container.querySelectorAll("[data-calday]").forEach((celula) => {
+    celula.onclick = () => {
+      const dataIso = celula.dataset.calday;
+      diaSelecionadoProfessor = diaSelecionadoProfessor === dataIso ? null : dataIso;
+      montarCalendarioProfessor();
+    };
+  });
+
+  renderizarDetalheDiaProfessor();
+}
+
+// Lista as aulas do dia selecionado no calendário, logo abaixo da grade
+function renderizarDetalheDiaProfessor() {
+  const container = document.getElementById("detalhe-dia-professor");
+  if (!container) return;
+  if (!diaSelecionadoProfessor) { container.innerHTML = ""; return; }
+
+  const aulasDoDia = aulasCache
+    .filter((a) => a.data === diaSelecionadoProfessor && a.status !== "cancelada")
+    .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+
+  const corpo = aulasDoDia.length ? aulasDoDia.map((a) => `
     <div class="cartao-aula">
       <div class="aula-info">
         <strong>${escapeHtml(a.alunoNome)}</strong>
-        <span>${formatarDataBR(a.data)} às ${escapeHtml(a.horaInicio)}</span>
+        <span>${escapeHtml(a.horaInicio)}</span>
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
+        <span class="badge-status badge-status-${a.status}">${legendaStatusAula(a.status)}</span>
       </div>
-      <div class="aula-acoes">
-        <button class="btn btn-secundario" style="padding:0.35em 0.8em; font-size:0.8rem;" onclick="concluirAula('${a.id}')">Concluir</button>
-        <button class="excluir" onclick="cancelarAulaComoProfessor('${a.id}')">Cancelar</button>
-      </div>
+      ${a.status === "agendada" ? `
+        <div class="aula-acoes">
+          <button class="btn btn-secundario" style="padding:0.35em 0.8em; font-size:0.8rem;" onclick="concluirAula('${a.id}')">Concluir</button>
+          <button class="excluir" onclick="cancelarAulaComoProfessor('${a.id}')">Cancelar</button>
+        </div>
+      ` : ""}
     </div>
-  `).join("");
+  `).join("") : `<p class="vazio">Nenhuma aula marcada nesse dia.</p>`;
+
+  container.innerHTML = `
+    <div class="detalhe-dia-professor-conteudo">
+      <h3 style="font-size:0.95rem;">${formatarDataBR(diaSelecionadoProfessor)}</h3>
+      ${corpo}
+    </div>
+  `;
 }
 
 async function cancelarAulaComoProfessor(aulaId) {

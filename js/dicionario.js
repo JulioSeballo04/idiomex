@@ -499,12 +499,6 @@ let minhasAulasCache = [];
 let dataEscolhidaAgendamento = null;
 let mesCalendarioAgendamento = null; // Date do 1º dia do mês exibido no calendário
 
-const NOMES_MESES = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-];
-const NOMES_DIAS_SEMANA_CURTO = ["D", "S", "T", "Q", "Q", "S", "S"];
-
 function escutarMinhasAulas(uid) {
   db.collection("aulas").where("alunoId", "==", uid)
     .onSnapshot((snap) => {
@@ -576,13 +570,6 @@ async function abrirAgendamento() {
 
 function fecharAgendamento() {
   document.getElementById("modal-agendamento").classList.add("modal-oculto");
-}
-
-function chaveDataISO(data) {
-  const ano = data.getFullYear();
-  const mes = String(data.getMonth() + 1).padStart(2, "0");
-  const dia = String(data.getDate()).padStart(2, "0");
-  return `${ano}-${mes}-${dia}`;
 }
 
 // Um dia tem disponibilidade se o professor configurou algum bloco de
