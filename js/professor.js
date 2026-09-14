@@ -131,6 +131,13 @@ function carregarAlunos(professorId) {
       }
 
       renderizarListaAlunos();
+    }, (erro) => {
+      // Sem isso, uma falha aqui (ex: regras do Firestore desatualizadas) deixava a
+      // lista de alunos simplesmente vazia, sem nenhuma pista do que aconteceu —
+      // de longe o jeito mais confuso de "sumir" com os alunos vinculados.
+      console.error("Não foi possível carregar os alunos vinculados:", erro);
+      document.getElementById("lista-alunos").innerHTML =
+        `<p class="vazio">Não foi possível carregar seus alunos agora (erro: ${escapeHtml(erro.code || erro.message)}). Recarregue a página; se persistir, confira se as regras do Firestore estão publicadas.</p>`;
     });
 }
 
