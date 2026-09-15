@@ -45,14 +45,27 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == userId &&
         request.resource.data.tipo in ["aluno", "professor"];
 
-      // Atualização: só o dono, e impedindo que ele altere os campos sensíveis que
-      // definem seu papel e vínculo (tipo, professorId, codigoProfessor) depois de
-      // criados — sem isso, um aluno poderia se autopromover a "professor" ou trocar
-      // de professor direto pelo console do navegador, sem revalidar o código.
-      allow update: if request.auth != null && request.auth.uid == userId &&
-        request.resource.data.tipo == resource.data.tipo &&
-        request.resource.data.get('professorId', null) == resource.data.get('professorId', null) &&
-        request.resource.data.get('codigoProfessor', null) == resource.data.get('codigoProfessor', null);
+      // Atualização — duas situações permitidas:
+      // 1) o próprio dono, impedido de alterar os campos sensíveis que definem seu
+      //    papel e vínculo (tipo, professorId, codigoProfessor) — sem isso, um aluno
+      //    poderia se autopromover a "professor" ou trocar de professor direto pelo
+      //    console do navegador, sem revalidar o código.
+      // 2) o professor atualmente vinculado ao aluno, mas só pra ZERAR o professorId
+      //    (função "Remover aluno" do painel) — todo o resto do perfil do aluno
+      //    (nome, e-mail, tipo, codigoProfessor) tem que continuar exatamente igual.
+      allow update: if request.auth != null && (
+        (request.auth.uid == userId &&
+          request.resource.data.tipo == resource.data.tipo &&
+          request.resource.data.get('professorId', null) == resource.data.get('professorId', null) &&
+          request.resource.data.get('codigoProfessor', null) == resource.data.get('codigoProfessor', null)) ||
+
+        (resource.data.get('professorId', null) == request.auth.uid &&
+          request.resource.data.get('professorId', null) == null &&
+          request.resource.data.tipo == resource.data.tipo &&
+          request.resource.data.nome == resource.data.nome &&
+          request.resource.data.email == resource.data.email &&
+          request.resource.data.get('codigoProfessor', null) == resource.data.get('codigoProfessor', null))
+      );
 
       allow delete: if request.auth != null && request.auth.uid == userId;
 

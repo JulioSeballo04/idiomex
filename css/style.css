@@ -735,6 +735,17 @@ textarea { resize: vertical; }
 .seta-expandir { transition: transform 0.15s; }
 .item-aluno.aberto .seta-expandir { transform: rotate(180deg); }
 
+.btn-remover-aluno {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0.2em 0.3em;
+}
+.btn-remover-aluno:hover { color: #B14444; }
+
 .detalhe-aluno-inline { padding: 1rem 1.1rem 1.2rem; }
 
 .abas-detalhe {

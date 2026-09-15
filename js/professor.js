@@ -95,6 +95,21 @@ function garantirEstado(alunoId) {
 
 // -------------------- LISTA DE ALUNOS --------------------
 
+// Desliga os listeners e apaga o estado em memória de alunos que não aparecem
+// mais na lista (ex: o professor removeu o vínculo) — sem isso, o listener de
+// palavras continuaria registrado apontando pra um aluno que o professor não
+// tem mais permissão de ler, sem nenhum efeito além de ficar ocupando memória.
+function limparEstadosDeAlunosRemovidos(idsAtuais) {
+  const idsAtuaisSet = new Set(idsAtuais);
+  Object.keys(estadoAlunos).forEach((alunoId) => {
+    if (idsAtuaisSet.has(alunoId)) return;
+    desativarListenersDetalheAluno(alunoId);
+    const estado = estadoAlunos[alunoId];
+    if (estado.unsubPalavras) estado.unsubPalavras();
+    delete estadoAlunos[alunoId];
+  });
+}
+
 function carregarAlunos(professorId) {
   db.collection("usuarios")
     .where("tipo", "==", "aluno")
@@ -102,12 +117,14 @@ function carregarAlunos(professorId) {
     .onSnapshot(async (snapshot) => {
       if (snapshot.empty) {
         alunosCache = [];
+        limparEstadosDeAlunosRemovidos([]);
         document.getElementById("lista-alunos").innerHTML =
           `<p class="vazio">Nenhum aluno vinculado ainda. Compartilhe seu código acima.</p>`;
         return;
       }
 
       alunosCache = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      limparEstadosDeAlunosRemovidos(alunosCache.map((a) => a.id));
 
       for (const aluno of alunosCache) {
         const estado = garantirEstado(aluno.id);
@@ -278,6 +295,7 @@ function renderizarListaAlunos() {
       </span>
       <span class="cabecalho-direita">
         <span class="contagem">${estado.palavras.length} palavra(s)</span>
+        <button class="btn-remover-aluno" type="button" title="Remover aluno" onclick="event.stopPropagation(); removerAlunoDoProfessor('${aluno.id}')">✕</button>
         <span class="seta-expandir">▾</span>
       </span>
     `;
@@ -293,6 +311,22 @@ function renderizarListaAlunos() {
 
     lista.appendChild(bloco);
   });
+}
+
+// Desvincula o aluno (zera o professorId dele) — o aluno continua com a conta e
+// o vocabulário dele intactos, só perde o vínculo com este professor e
+// precisaria do código de novo pra se reconectar. Não apaga histórico de aulas.
+async function removerAlunoDoProfessor(alunoId) {
+  const aluno = alunosCache.find((a) => a.id === alunoId);
+  const nome = aluno ? aluno.nome : "esse aluno";
+  if (!confirm(`Remover ${nome} da sua lista de alunos?\n\nVocê deixa de ver o vocabulário, recados e relatórios dele(a). O aluno mantém a conta e precisaria digitar seu código de novo pra se vincular novamente.`)) return;
+
+  try {
+    await db.collection("usuarios").doc(alunoId).update({ professorId: firebase.firestore.FieldValue.delete() });
+  } catch (e) {
+    alert("Não foi possível remover esse aluno agora. Tente novamente em instantes.");
+    console.error(e);
+  }
 }
 
 // -------------------- ABRIR / FECHAR (ACORDEÃO) --------------------
