@@ -141,8 +141,18 @@ service cloud.firestore {
       // consegue provar que os dois primeiros termos cobrem TODO resultado
       // possível da busca) e a tela ficava travada em "Carregando horários..."
       // pra sempre.
+      //
+      // "resource == null ||" no início cobre outro caso: agendarAula() roda
+      // tx.get(ref) num ID de documento determinístico ANTES de criar a aula,
+      // só pra checar se aquele horário exato já está ocupado. Na primeiríssima
+      // vez que qualquer horário é marcado, esse documento ainda não existe —
+      // e sem esse "resource == null", o Firestore tenta avaliar
+      // "resource.data.professorId" num resource inexistente, o que falha e
+      // nega a leitura. Não há nada a proteger num documento que não existe
+      // (a resposta é só "não existe"), então liberar esse caso é seguro.
       allow read: if request.auth != null &&
-        (resource.data.professorId == request.auth.uid ||
+        (resource == null ||
+          resource.data.professorId == request.auth.uid ||
           resource.data.alunoId == request.auth.uid ||
           souAlunoDesteProfessor(resource.data.professorId));
 
