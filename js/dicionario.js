@@ -722,7 +722,7 @@ async function selecionarDataAgendamento(dataEscolhida) {
 }
 
 function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade) {
-  return "Olá! Quero confirmar minha aula no Meu Dicionário:\n" +
+  return "Olá! Quero confirmar minha aula!\n" +
     `Aluno: ${nomeDoAlunoAtual}\n` +
     `Data: ${formatarDataBR(dataIso)}\n` +
     `Horário: ${horaInicio}\n` +
