@@ -327,6 +327,42 @@
 }
 .contato-aluno a { color: var(--acento-forte); font-weight: 600; }
 
+/* ---------- Anotações do professor na agenda ---------- */
+.cal-day .cal-nota {
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  font-size: 0.62rem;
+  line-height: 1;
+  color: var(--acento-forte);
+}
+.cal-day.is-selected .cal-nota { color: #fff; }
+.legenda-nota { font-size: 0.72rem; color: var(--acento-forte); line-height: 1; }
+
+.anotacoes-dia-professor {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--borda, #eee);
+}
+.campo-anotacao-agenda { margin-bottom: 0.8rem; }
+.campo-anotacao-agenda label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 0.25rem;
+}
+.campo-anotacao-agenda textarea {
+  width: 100%;
+  min-height: 4.2em;
+  padding: 0.55em 0.7em;
+  border-radius: 8px;
+  border: 1px solid var(--borda, #ddd);
+  background: var(--bg-cartao);
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
 .modalidades-dia-editor {
   display: flex;
   flex-wrap: wrap;

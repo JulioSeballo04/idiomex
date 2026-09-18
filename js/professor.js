@@ -17,6 +17,9 @@ let configAgendaAtual = null; // {duracaoAulaMinutos, modalidades, disponibilida
 let mesCalendarioProfessor = null; // Date do 1º dia do mês exibido no calendário da agenda
 let diaSelecionadoProfessor = null; // "AAAA-MM-DD" do dia clicado no calendário, ou null
 let overridesAgendaCache = {}; // {"AAAA-MM-DD": {fechado, blocos}} — exceções pontuais por dia
+let anotacoesAgendaCache = {}; // {docId: {tipo:"dia"|"aula", data, texto}} — registros privados do professor
+let rascunhosAnotacoes = {}; // {docId: texto digitado e ainda não salvo} — sobrevive aos re-renders em tempo real
+let ultimaAssinaturaAnotacoes = null; // "snapshot" das anotações do dia na última vez que os campos foram (re)montados
 let diaEditorRenderizadoPara = null; // último dia pra quem o editor de disponibilidade foi montado
 let ultimaAssinaturaEditor = null; // "snapshot" do override desse dia na última vez que o editor foi (re)montado
 
@@ -55,8 +58,23 @@ auth.onAuthStateChanged(async (user) => {
   carregarAlunos(user.uid);
   escutarAulasDoProfessor(user.uid);
   escutarOverridesAgenda(user.uid);
+  escutarAnotacoesAgenda(user.uid);
   montarCalendarioProfessor();
 });
+
+// Anotações privadas do professor sobre os dias e as aulas da agenda.
+// Doc id = "AAAA-MM-DD" (anotação do dia) ou o id da aula (anotação da aula).
+function escutarAnotacoesAgenda(uid) {
+  db.collection("usuarios").doc(uid).collection("anotacoesAgenda")
+    .onSnapshot(
+      (snap) => {
+        anotacoesAgendaCache = {};
+        snap.docs.forEach((d) => { anotacoesAgendaCache[d.id] = d.data(); });
+        montarCalendarioProfessor();
+      },
+      (erro) => console.warn("Não foi possível carregar as anotações da agenda:", erro)
+    );
+}
 
 // Exceções pontuais de disponibilidade (fechar um dia, ou ajustar o horário
 // só dele) — além da grade semanal recorrente configurada acima.
@@ -781,6 +799,10 @@ function montarCalendarioProfessor() {
 
   const celulas = [];
   for (let i = 0; i < offsetInicio; i++) celulas.push(`<div class="cal-day cal-empty"></div>`);
+  const diasComNota = new Set(
+    Object.values(anotacoesAgendaCache).filter((n) => n.texto && n.data).map((n) => n.data)
+  );
+
   for (let dia = 1; dia <= diasNoMes; dia++) {
     const dataIso = chaveDataISO(new Date(ano, mes, dia));
     const diaSemana = DIAS_SEMANA[new Date(ano, mes, dia).getDay()];
@@ -801,11 +823,13 @@ function montarCalendarioProfessor() {
     if (contagem > 0) classes.push("has-appts");
     if (override) classes.push("is-override");
     if (selecionado) classes.push("is-selected");
+    const temNota = diasComNota.has(dataIso);
 
     celulas.push(`
       <div class="${classes.join(" ")}" data-calday="${dataIso}">
         <span class="cal-num">${dia}</span>
         ${contagem > 0 ? `<span class="cal-dot">${contagem}</span>` : ""}
+        ${temNota ? `<span class="cal-nota" title="Tem anotação">✎</span>` : ""}
       </div>
     `);
   }
@@ -840,6 +864,7 @@ function montarCalendarioProfessor() {
         <span><span class="dot dot-tem-aula"></span> Tem aula marcada</span>
         <span><span class="dot dot-nao-atende"></span> Não atende</span>
         <span><span class="dot dot-ajustado"></span> Horário ajustado só nesse dia</span>
+        <span><span class="legenda-nota">✎</span> Tem anotação</span>
       </div>
     </div>
   `;
@@ -893,13 +918,23 @@ function renderizarDetalheDiaProfessor() {
       <div class="detalhe-dia-professor-conteudo">
         <h3 id="titulo-dia-professor" style="font-size:0.95rem;"></h3>
         <div id="lista-aulas-dia-professor"></div>
+        <div id="anotacoes-dia-wrap"></div>
         <div id="editor-dia-professor-wrap"></div>
       </div>
     `;
+    ultimaAssinaturaAnotacoes = null;
   }
 
   document.getElementById("titulo-dia-professor").textContent = formatarDataBR(diaSelecionadoProfessor);
   document.getElementById("lista-aulas-dia-professor").innerHTML = montarListaAulasDia(diaSelecionadoProfessor);
+
+  // Anotações: só reconstrói quando muda o conjunto de aulas do dia ou algo salvo;
+  // o que está digitado e não salvo é preservado em rascunhosAnotacoes.
+  const assinaturaNotas = assinaturaAnotacoesDia(diaSelecionadoProfessor);
+  if (assinaturaNotas !== ultimaAssinaturaAnotacoes) {
+    document.getElementById("anotacoes-dia-wrap").innerHTML = montarAnotacoesDia(diaSelecionadoProfessor);
+    ultimaAssinaturaAnotacoes = assinaturaNotas;
+  }
 
   const assinaturaAtual = assinaturaOverride(diaSelecionadoProfessor);
   if (mudouDeDia || assinaturaAtual !== ultimaAssinaturaEditor) {
@@ -912,6 +947,91 @@ function renderizarDetalheDiaProfessor() {
   }
 
   diaEditorRenderizadoPara = diaSelecionadoProfessor;
+}
+
+function aulasAtivasDoDia(dataIso) {
+  return aulasCache
+    .filter((a) => a.data === dataIso && a.status !== "cancelada")
+    .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+}
+
+// Muda quando as aulas do dia mudam ou quando uma anotação salva daquele dia muda
+function assinaturaAnotacoesDia(dataIso) {
+  const ids = [dataIso, ...aulasAtivasDoDia(dataIso).map((a) => a.id)];
+  return JSON.stringify(ids.map((id) => [id, (anotacoesAgendaCache[id] || {}).texto || ""]));
+}
+
+// Campos de anotação do dia: uma anotação geral do dia + uma por aula marcada
+function montarAnotacoesDia(dataIso) {
+  const campo = (id, rotulo) => {
+    const salvo = (anotacoesAgendaCache[id] || {}).texto || "";
+    const texto = rascunhosAnotacoes[id] !== undefined ? rascunhosAnotacoes[id] : salvo;
+    return `
+      <div class="campo-anotacao-agenda">
+        <label for="nota-${escapeHtml(id)}">${rotulo}</label>
+        <textarea id="nota-${escapeHtml(id)}" data-nota-id="${escapeHtml(id)}" placeholder="Registre o que foi trabalhado, combinados, lembretes...">${escapeHtml(texto)}</textarea>
+      </div>
+    `;
+  };
+
+  const porAula = aulasAtivasDoDia(dataIso).map((a) =>
+    campo(a.id, `Aula das ${escapeHtml(a.horaInicio)} — ${escapeHtml(a.alunoNome)}`)
+  ).join("");
+
+  return `
+    <div class="anotacoes-dia-professor" oninput="registrarRascunhoAnotacao(event)">
+      <h4 style="font-size:0.85rem; margin:0 0 0.6rem;">Anotações (só você vê)</h4>
+      ${campo(dataIso, "Anotações do dia")}
+      ${porAula}
+      <button type="button" class="btn btn-primario" style="padding:0.4em 0.9em; font-size:0.85rem;" onclick="salvarAnotacoesDia()">Salvar anotações</button>
+    </div>
+  `;
+}
+
+function registrarRascunhoAnotacao(evento) {
+  const alvo = evento.target;
+  if (alvo && alvo.dataset && alvo.dataset.notaId) {
+    rascunhosAnotacoes[alvo.dataset.notaId] = alvo.value;
+  }
+}
+
+async function salvarAnotacoesDia() {
+  const dataIso = diaSelecionadoProfessor;
+  if (!dataIso) return;
+  const colecao = db.collection("usuarios").doc(professorIdAtual).collection("anotacoesAgenda");
+  const lote = db.batch();
+  const idsAulas = new Set(aulasAtivasDoDia(dataIso).map((a) => a.id));
+  let alteradas = 0;
+
+  document.querySelectorAll("#anotacoes-dia-wrap textarea[data-nota-id]").forEach((campo) => {
+    const id = campo.dataset.notaId;
+    const texto = campo.value.trim();
+    const salvo = (anotacoesAgendaCache[id] || {}).texto || "";
+    if (texto === salvo) { delete rascunhosAnotacoes[id]; return; }
+    alteradas++;
+    if (!texto) {
+      lote.delete(colecao.doc(id));
+    } else {
+      lote.set(colecao.doc(id), {
+        tipo: idsAulas.has(id) ? "aula" : "dia",
+        data: dataIso,
+        texto,
+        atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+  });
+
+  if (alteradas === 0) return;
+  try {
+    await lote.commit();
+    // limpa os rascunhos só depois de salvar; o listener em tempo real reconstrói os campos
+    document.querySelectorAll("#anotacoes-dia-wrap textarea[data-nota-id]").forEach((campo) => {
+      delete rascunhosAnotacoes[campo.dataset.notaId];
+    });
+  } catch (e) {
+    alert("Não foi possível salvar as anotações. Tente novamente em instantes.");
+    console.error(e);
+  }
 }
 
 function montarListaAulasDia(dataIso) {
