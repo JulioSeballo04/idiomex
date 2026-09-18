@@ -533,6 +533,7 @@ function renderizarMinhasAulas() {
       <div class="aula-info">
         <span>${formatarDataBR(a.data)} às ${escapeHtml(a.horaInicio)}</span>
         <span class="badge-modalidade badge-${a.modalidade}">${a.modalidade === "online" ? "Online" : "Presencial"}</span>
+        ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
       </div>
       <button class="excluir" onclick="cancelarMinhaAula('${a.id}')">Cancelar</button>
     </div>
@@ -651,6 +652,7 @@ async function abrirAgendamento() {
   montarCalendarioAgendamento();
 
   renderizarModalidadesAgendamento(null);
+  atualizarDicaReposicao();
 
   document.getElementById("slots-agendamento").innerHTML = `<p class="vazio">Escolha uma data acima.</p>`;
   document.getElementById("modal-agendamento").classList.remove("modal-oculto");
@@ -819,12 +821,31 @@ async function selecionarDataAgendamento(dataEscolhida) {
   });
 }
 
-function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade) {
+function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade, reposicao) {
   return "Olá! Quero confirmar minha aula!\n" +
     `Aluno: ${nomeDoAlunoAtual}\n` +
     `Data: ${formatarDataBR(dataIso)}\n` +
     `Horário: ${horaInicio}\n` +
-    `Modalidade: ${modalidade === "online" ? "Online" : "Presencial"}`;
+    `Modalidade: ${modalidade === "online" ? "Online" : "Presencial"}` +
+    (reposicao ? "\nTipo: Reposição" : "");
+}
+
+// Aulas que o aluno ainda tem pra repor: as canceladas pelo professor menos as
+// reposições que ele já marcou (ou fez). Nunca fica negativo.
+function quantidadeAulasParaRepor() {
+  const canceladasPeloProfessor = minhasAulasCache
+    .filter((a) => a.status === "cancelada" && a.canceladoPor === "professor").length;
+  const reposicoes = minhasAulasCache
+    .filter((a) => a.reposicao === true && (a.status === "agendada" || a.status === "concluida")).length;
+  return Math.max(0, canceladasPeloProfessor - reposicoes);
+}
+
+function atualizarDicaReposicao() {
+  const qtd = quantidadeAulasParaRepor();
+  document.getElementById("chk-reposicao").checked = qtd > 0;
+  document.getElementById("dica-reposicao").textContent = qtd > 0
+    ? `Você tem ${qtd} aula${qtd > 1 ? "s" : ""} para repor (cancelada${qtd > 1 ? "s" : ""} pelo professor).`
+    : "";
 }
 
 async function confirmarAgendamento(horaInicio, duracaoMinutos) {
@@ -836,6 +857,7 @@ async function confirmarAgendamento(horaInicio, duracaoMinutos) {
 
   const user = auth.currentUser;
   if (!user) return;
+  const reposicao = document.getElementById("chk-reposicao").checked;
 
   // A aba do WhatsApp é aberta em branco JÁ AQUI, antes do "await" — celulares
   // (principalmente Safari/iOS) bloqueiam window.open() se ele só acontecer depois de uma
@@ -852,12 +874,13 @@ async function confirmarAgendamento(horaInicio, duracaoMinutos) {
       somarMinutos(horaInicio, duracaoMinutos),
       modalidadeInput.value,
       user.uid,
-      nomeDoAlunoAtual
+      nomeDoAlunoAtual,
+      reposicao
     );
     fecharAgendamento();
 
     if (abaWhatsapp) {
-      const link = linkWhatsapp(numeroWhatsappProfessor, mensagemConfirmacaoAula(dataEscolhidaAgendamento, horaInicio, modalidadeInput.value));
+      const link = linkWhatsapp(numeroWhatsappProfessor, mensagemConfirmacaoAula(dataEscolhidaAgendamento, horaInicio, modalidadeInput.value, reposicao));
       if (link) abaWhatsapp.location = link; else abaWhatsapp.close();
     }
   } catch (e) {
@@ -870,7 +893,7 @@ async function confirmarAgendamento(horaInicio, duracaoMinutos) {
 // Usa uma transação: o ID do documento é determinístico ("professor_data_hora"), então
 // duas tentativas simultâneas de marcar o MESMO horário disputam o mesmo documento — a
 // segunda falha com um erro claro, em vez de sobrescrever silenciosamente a primeira.
-async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, alunoId, alunoNome) {
+async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, alunoId, alunoNome, reposicao) {
   const aulaId = `${professorId}_${data}_${horaInicio.replace(":", "")}`;
   const ref = db.collection("aulas").doc(aulaId);
 
@@ -882,6 +905,7 @@ async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, a
     tx.set(ref, {
       professorId, alunoId, alunoNome,
       data, horaInicio, horaFim, modalidade,
+      reposicao: !!reposicao,
       status: "agendada",
       criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     });

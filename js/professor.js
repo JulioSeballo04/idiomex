@@ -1047,6 +1047,7 @@ function montarListaAulasDia(dataIso) {
         <strong>${escapeHtml(a.alunoNome)}</strong>
         <span>${escapeHtml(a.horaInicio)}</span>
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
+        ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
         <span class="badge-status badge-status-${a.status}">${legendaStatusAula(a.status)}</span>
       </div>
       ${a.status === "agendada" ? `
@@ -1211,6 +1212,7 @@ function montarAbaAulas(alunoId) {
       <div class="aula-info">
         <span>${formatarDataBR(a.data)} às ${escapeHtml(a.horaInicio)}</span>
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
+        ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
         <span class="badge-status badge-status-${a.status}">${legendaStatusAula(a.status)}</span>
       </div>
       ${a.status === "agendada" ? `

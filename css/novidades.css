@@ -363,6 +363,12 @@
   font-size: 0.9rem;
 }
 
+/* ---------- Aula de reposição ---------- */
+.rotulo-reposicao { display: flex; align-items: center; gap: 0.5em; font-weight: 500; cursor: pointer; }
+.dica-reposicao { font-size: 0.78rem; color: var(--ink-soft); margin: 0.25rem 0 0; }
+.dica-reposicao:empty { display: none; }
+.badge-reposicao { background: #fdeccc; color: #8a5a00; }
+
 .modalidades-dia-editor {
   display: flex;
   flex-wrap: wrap;
