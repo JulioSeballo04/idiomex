@@ -74,6 +74,11 @@ function aplicarIdiomaNaTela() {
   const exemplo = idioma.exemplo.split(" / ")[0];
   document.getElementById("input-palavra-en").placeholder = `Palavra em ${idioma.nome.toLowerCase()} (ex: ${exemplo})`;
 
+  document.getElementById("bandeira-idioma").innerHTML = bandeiraSvg(idiomaDoAluno, 30);
+  // Cada idioma tem a própria aparência (padrão: cores da bandeira; o aluno pode personalizar).
+  // Só refaz quando o idioma muda, pra não fechar o menu de cores no meio de uma escolha.
+  if (idiomaDoTema !== idiomaDoAluno) definirIdiomaDoTema(idiomaDoAluno);
+
   const seletor = document.getElementById("seletor-idioma");
   seletor.innerHTML = idiomasDisponiveis
     .map((id) => `<option value="${id}" ${id === idiomaDoAluno ? "selected" : ""}>${IDIOMAS[id].nome}</option>`).join("");

@@ -40,6 +40,33 @@ const IDIOMAS = {
 };
 const IDIOMA_PADRAO = "en";
 
+// Bandeira de cada idioma, desenhada em SVG (emojis de bandeira não aparecem no Windows).
+// Todas em 60x40 pra caberem no mesmo tamanho.
+const BANDEIRAS = {
+  en: '<rect width="60" height="40" fill="#012169"/><path d="M0 0L60 40M60 0L0 40" stroke="#fff" stroke-width="8"/><path d="M0 0L60 40M60 0L0 40" stroke="#C8102E" stroke-width="3"/><path d="M30 0V40M0 20H60" stroke="#fff" stroke-width="13"/><path d="M30 0V40M0 20H60" stroke="#C8102E" stroke-width="8"/>',
+  es: '<rect width="60" height="40" fill="#AA151B"/><rect y="10" width="60" height="20" fill="#F1BF00"/>',
+  it: '<rect width="20" height="40" fill="#009246"/><rect x="20" width="20" height="40" fill="#fff"/><rect x="40" width="20" height="40" fill="#CE2B37"/>',
+  fr: '<rect width="20" height="40" fill="#0055A4"/><rect x="20" width="20" height="40" fill="#fff"/><rect x="40" width="20" height="40" fill="#EF4135"/>',
+  ja: '<rect width="60" height="40" fill="#fff"/><circle cx="30" cy="20" r="12" fill="#BC002D"/>',
+  zh: '<rect width="60" height="40" fill="#DE2910"/><polygon points="12,6 14.6,13.6 22.6,13.7 16.2,18.5 18.6,26.2 12,21.5 5.4,26.2 7.8,18.5 1.4,13.7 9.4,13.6" fill="#FFDE00"/>'
+};
+
+function bandeiraSvg(idioma, largura) {
+  const w = largura || 28;
+  return `<svg class="bandeira-svg" viewBox="0 0 60 40" width="${w}" height="${Math.round(w * 2 / 3)}" role="img" aria-label="Bandeira: ${IDIOMAS[idioma].nome}">${BANDEIRAS[idioma]}</svg>`;
+}
+
+// Paleta do app quando o idioma está no modo "bandeira" (o padrão): acentos tirados das cores
+// da bandeira e um fundo levemente tingido. O usuário pode trocar depois (ver tema.js).
+const PALETAS_IDIOMA = {
+  en: { acento: "#1F4E9C", acentoForte: "#173B76", acentoSecundario: "#C8102E", bg: "#F3F6FB", borda: "#D4DEEE", inkSoft: "#56657D" },
+  es: { acento: "#B50E1C", acentoForte: "#8F0B16", acentoSecundario: "#C99700", bg: "#FBF6EA", borda: "#EBDDBF", inkSoft: "#7A6A4A" },
+  it: { acento: "#008C45", acentoForte: "#006B35", acentoSecundario: "#CD212A", bg: "#F5F8F3", borda: "#D8E4D2", inkSoft: "#5B6E55" },
+  fr: { acento: "#0055A4", acentoForte: "#003F7D", acentoSecundario: "#EF4135", bg: "#F3F6FA", borda: "#D3DEEB", inkSoft: "#566A80" },
+  ja: { acento: "#BC002D", acentoForte: "#93001F", acentoSecundario: "#3D4A5C", bg: "#FBF6F6", borda: "#EBD9DA", inkSoft: "#7A6466" },
+  zh: { acento: "#D02510", acentoForte: "#A21C0B", acentoSecundario: "#C98A00", bg: "#FCF5F1", borda: "#EEDCD2", inkSoft: "#7D6558" }
+};
+
 function idiomaValido(id) {
   return Object.prototype.hasOwnProperty.call(IDIOMAS, id) ? id : IDIOMA_PADRAO;
 }

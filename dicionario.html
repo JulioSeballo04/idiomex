@@ -9,6 +9,17 @@
   (function () {
     var tema = localStorage.getItem("temaEscolhido");
     if (tema && tema !== "classico") document.documentElement.setAttribute("data-tema", tema);
+
+    // Tema do idioma que o aluno estava usando (bandeira, tema pronto ou cores próprias),
+    // aplicado já aqui pra a página não piscar a cor padrão antes de carregar
+    try {
+      var ta = JSON.parse(localStorage.getItem("temaAluno"));
+      if (ta) {
+        var raiz = document.documentElement;
+        if (ta.tema) raiz.setAttribute("data-tema", ta.tema); else raiz.removeAttribute("data-tema");
+        for (var v in ta.vars) raiz.style.setProperty(v, ta.vars[v]);
+      }
+    } catch (e) {}
   })();
 </script>
 <link rel="stylesheet" href="css/style.css">
@@ -30,6 +41,7 @@
         <div class="contador-total" id="contador-total"></div>
       </div>
       <div class="acoes-topo">
+        <span id="bandeira-idioma" class="bandeira-idioma"></span>
         <select id="seletor-idioma" class="seletor-idioma-aluno" title="Idioma que você está estudando" onchange="trocarIdiomaAtivo(this.value)" hidden></select>
         <button class="btn btn-secundario" onclick="iniciarQuiz()">🎯 Quiz rápido</button>
         <button class="btn btn-secundario" onclick="abrirAgendamento()">📅 Agendar aula</button>
