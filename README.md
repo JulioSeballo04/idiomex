@@ -1,4 +1,4 @@
-# Sala de Idiomas
+# Idiomex
 
 Plataforma de **professores e alunos de idiomas** (inglês, espanhol,
 italiano, francês, japonês e mandarim), com contas de **professor** e
