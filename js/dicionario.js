@@ -571,11 +571,7 @@ async function abrirAgendamento() {
   mesCalendarioAgendamento = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   montarCalendarioAgendamento();
 
-  const modalidades = configAgendaProfessor.modalidades || [];
-  document.getElementById("modalidades-agendamento").innerHTML = modalidades.map((m, indice) => `
-    <label><input type="radio" name="modalidade-agendamento" value="${m}" ${indice === 0 ? "checked" : ""}> ${m === "online" ? "Online" : "Presencial"}</label>
-  `).join("");
-  document.getElementById("campo-modalidades-agendamento").style.display = modalidades.length > 1 ? "block" : "none";
+  renderizarModalidadesAgendamento(null);
 
   document.getElementById("slots-agendamento").innerHTML = `<p class="vazio">Escolha uma data acima.</p>`;
   document.getElementById("modal-agendamento").classList.remove("modal-oculto");
@@ -591,6 +587,28 @@ function blocosDoDia(dataIso) {
   const override = overridesAgendaProfessor[dataIso];
   if (override) return override.fechado ? [] : (override.blocos || []);
   return (configAgendaProfessor.disponibilidade || {})[chaveDiaSemana(dataIso)] || [];
+}
+
+// Modalidades oferecidas num dia: a exceção pontual do professor (se ele
+// especificou online/presencial só pra esse dia), senão a configuração geral.
+function modalidadesDoDia(dataIso) {
+  const override = dataIso ? overridesAgendaProfessor[dataIso] : null;
+  if (override && !override.fechado && override.modalidades && override.modalidades.length) {
+    return override.modalidades;
+  }
+  return configAgendaProfessor.modalidades || [];
+}
+
+// Desenha as opções de modalidade do dia (mantém a escolha atual se ela ainda
+// estiver disponível nesse dia)
+function renderizarModalidadesAgendamento(dataIso) {
+  const modalidades = modalidadesDoDia(dataIso);
+  const atual = document.querySelector('input[name="modalidade-agendamento"]:checked');
+  const escolhida = atual && modalidades.includes(atual.value) ? atual.value : modalidades[0];
+  document.getElementById("modalidades-agendamento").innerHTML = modalidades.map((m) => `
+    <label><input type="radio" name="modalidade-agendamento" value="${m}" ${m === escolhida ? "checked" : ""}> ${m === "online" ? "Online" : "Presencial"}</label>
+  `).join("");
+  document.getElementById("campo-modalidades-agendamento").style.display = modalidades.length > 1 ? "block" : "none";
 }
 
 // Um dia tem disponibilidade se sobrar algum bloco de horário depois de
@@ -674,6 +692,7 @@ async function selecionarDataAgendamento(dataEscolhida) {
 
   dataEscolhidaAgendamento = dataEscolhida;
   montarCalendarioAgendamento(); // reflete o dia selecionado na grade
+  renderizarModalidadesAgendamento(dataEscolhida);
   const blocos = blocosDoDia(dataEscolhida);
 
   if (blocos.length === 0) {

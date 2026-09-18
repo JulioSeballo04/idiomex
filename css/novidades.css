@@ -296,6 +296,17 @@
 }
 .detalhe-dia-professor-conteudo h3 { margin: 0 0 0.6rem; }
 
+.modalidades-dia-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+.modalidades-dia-editor label { display: flex; align-items: center; gap: 0.35em; }
+.rotulo-modalidades-dia { font-weight: 600; color: var(--ink-soft); }
+
 .editor-dia-professor {
   margin-top: 1rem;
   padding-top: 1rem;

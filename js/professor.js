@@ -952,6 +952,18 @@ function montarEditorDisponibilidadeDia() {
     `;
   }).join("");
 
+  // Sem exceção salva, sugere as modalidades da configuração geral
+  const modalidadesBase = (override && override.modalidades && override.modalidades.length)
+    ? override.modalidades
+    : (configAgendaAtual.modalidades || []);
+  const modalidadesHtml = `
+    <div class="modalidades-dia-editor">
+      <span class="rotulo-modalidades-dia">Atendimento nesse dia:</span>
+      <label><input type="checkbox" class="chk-modalidade-dia" value="online" ${modalidadesBase.includes("online") ? "checked" : ""}> Online</label>
+      <label><input type="checkbox" class="chk-modalidade-dia" value="presencial" ${modalidadesBase.includes("presencial") ? "checked" : ""}> Presencial</label>
+    </div>
+  `;
+
   return `
     <div class="editor-dia-professor">
       <h4 style="font-size:0.85rem; margin:0 0 0.6rem;">Ajustar disponibilidade só desse dia</h4>
@@ -959,7 +971,7 @@ function montarEditorDisponibilidadeDia() {
         <input type="checkbox" id="chk-dia-fechado" ${fechado ? "checked" : ""}>
         Fechado nesse dia (sem atendimento)
       </label>
-      <div id="periodos-dia-editor" class="periodos-dia" ${fechado ? 'style="display:none;"' : ""}>${periodosHtml}</div>
+      <div id="periodos-dia-editor" class="periodos-dia" ${fechado ? 'style="display:none;"' : ""}>${periodosHtml}${modalidadesHtml}</div>
       <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.8rem;">
         <button type="button" class="btn btn-primario" style="padding:0.4em 0.9em; font-size:0.85rem;" onclick="salvarOverrideDia()">Salvar horário desse dia</button>
         ${override ? `<button type="button" class="btn btn-secundario" style="padding:0.4em 0.9em; font-size:0.85rem;" onclick="restaurarOverrideDia()">Restaurar horário padrão</button>` : ""}
@@ -972,8 +984,14 @@ async function salvarOverrideDia() {
   const dataIso = diaSelecionadoProfessor;
   const fechado = document.getElementById("chk-dia-fechado").checked;
   const blocos = [];
+  let modalidades = [];
 
   if (!fechado) {
+    modalidades = Array.from(document.querySelectorAll(".chk-modalidade-dia:checked")).map((c) => c.value);
+    if (modalidades.length === 0) {
+      alert("Marque pelo menos uma modalidade (online ou presencial) pra esse dia.");
+      return;
+    }
     PERIODOS_DIA.forEach((periodo) => {
       const chk = document.querySelector(`.chk-periodo-dia-ativo[data-periodo="${periodo.chave}"]`);
       if (chk && chk.checked) {
@@ -990,7 +1008,7 @@ async function salvarOverrideDia() {
 
   try {
     await db.collection("usuarios").doc(professorIdAtual)
-      .collection("agendaOverrides").doc(dataIso).set({ fechado, blocos });
+      .collection("agendaOverrides").doc(dataIso).set({ fechado, blocos, modalidades });
   } catch (e) {
     alert("Não foi possível salvar o ajuste desse dia. Tente novamente em instantes.");
     console.error(e);
