@@ -1,9 +1,12 @@
-# Meu Dicionário
+# Sala de Idiomas
 
-App de vocabulário de inglês com contas de **professor** e **aluno**.
-O aluno adiciona palavras aprendidas, recebe tradução e uma frase de
-exemplo gerada por IA. O professor acompanha o vocabulário de cada
-aluno vinculado e pode deixar recados/dicas de estudo.
+Plataforma de **professores e alunos de idiomas** (inglês, espanhol,
+italiano, francês, japonês e mandarim), com contas de **professor** e
+**aluno**. O professor escolhe o idioma que ensina; os alunos vinculados
+pelo código adicionam palavras nesse idioma, recebem a tradução e frases
+de exemplo geradas por IA. O professor acompanha o vocabulário de cada
+aluno, deixa recados, registra anotações no calendário e gerencia a
+agenda de aulas (com confirmação e cancelamento por WhatsApp).
 
 **Custo: R$ 0,00.** Firebase no plano Spark (grátis, sem cartão) +
 Vercel no plano Hobby (grátis, sem cartão) + Gemini API (camada
