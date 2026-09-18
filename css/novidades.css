@@ -296,6 +296,37 @@
 }
 .detalhe-dia-professor-conteudo h3 { margin: 0 0 0.6rem; }
 
+/* ---------- Perfil do aluno ---------- */
+.dica-perfil { font-size: 0.82rem; color: var(--ink-soft); margin: 0.2rem 0 1rem; }
+.campo-perfil { margin-bottom: 0.9rem; }
+.campo-perfil label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 0.3rem;
+}
+.campo-perfil input {
+  width: 100%;
+  padding: 0.55em 0.7em;
+  border-radius: 8px;
+  border: 1px solid var(--borda, #ddd);
+  font-size: 0.95rem;
+  background: var(--bg-cartao);
+}
+.campo-perfil input[readonly] { background: var(--bg); color: var(--ink-soft); }
+
+.contato-aluno {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin-bottom: 1rem;
+}
+.contato-aluno a { color: var(--acento-forte); font-weight: 600; }
+
 .modalidades-dia-editor {
   display: flex;
   flex-wrap: wrap;

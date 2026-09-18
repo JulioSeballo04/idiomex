@@ -396,7 +396,23 @@ function montarHtmlDetalheAluno(alunoId) {
   else if (estado.abaAtiva === "aulas") conteudo = montarAbaAulas(alunoId);
   else conteudo = montarAbaVocabulario(alunoId);
 
-  return abas + conteudo;
+  return montarContatoAluno(alunoId) + abas + conteudo;
+}
+
+// Linha de contato do aluno (telefone/e-mail que ele preencheu no perfil)
+function montarContatoAluno(alunoId) {
+  const aluno = alunosCache.find((a) => a.id === alunoId);
+  if (!aluno) return "";
+  const email = aluno.emailContato || aluno.email || "";
+  const partes = [];
+  if (aluno.telefone) {
+    const link = linkWhatsapp(aluno.telefone, `Olá ${aluno.nome}! Tudo bem?`);
+    partes.push(`<span>📱 ${escapeHtml(aluno.telefone)}${link ? ` — <a href="${link}" target="_blank" rel="noopener">Chamar no WhatsApp</a>` : ""}</span>`);
+  } else {
+    partes.push(`<span>📱 Telefone não informado pelo aluno</span>`);
+  }
+  if (email) partes.push(`<span>✉️ ${escapeHtml(email)}</span>`);
+  return `<div class="contato-aluno">${partes.join("")}</div>`;
 }
 
 function mudarAbaAluno(alunoId, aba) {
@@ -1026,9 +1042,33 @@ async function restaurarOverrideDia() {
   }
 }
 
+function mensagemCancelamentoPeloProfessor(aula, nomeAluno) {
+  return `Olá ${nomeAluno}! Infelizmente precisei cancelar sua aula:\n` +
+    `Data: ${formatarDataBR(aula.data)}\n` +
+    `Horário: ${aula.horaInicio}\n` +
+    "Vamos combinar um novo horário quando for melhor pra você. Desculpa o transtorno!";
+}
+
 async function cancelarAulaComoProfessor(aulaId) {
   if (!confirm("Cancelar essa aula? O aluno vai poder marcar outro horário nesse mesmo lugar.")) return;
-  await db.collection("aulas").doc(aulaId).update({ status: "cancelada", canceladoPor: "professor" });
+
+  // Se o aluno cadastrou telefone no perfil, abre o WhatsApp já com o aviso pronto.
+  // A aba é aberta antes do await (senão o celular bloqueia o popup).
+  const aula = aulasCache.find((a) => a.id === aulaId);
+  const aluno = aula && alunosCache.find((a) => a.id === aula.alunoId);
+  const link = aluno && aluno.telefone
+    ? linkWhatsapp(aluno.telefone, mensagemCancelamentoPeloProfessor(aula, aluno.nome))
+    : null;
+  const abaWhatsapp = link ? window.open("", "_blank") : null;
+
+  try {
+    await db.collection("aulas").doc(aulaId).update({ status: "cancelada", canceladoPor: "professor" });
+    if (abaWhatsapp) abaWhatsapp.location = link;
+  } catch (e) {
+    if (abaWhatsapp) abaWhatsapp.close();
+    alert("Não foi possível cancelar a aula agora. Tente novamente em instantes.");
+    console.error(e);
+  }
 }
 
 async function concluirAula(aulaId) {

@@ -10,14 +10,18 @@ let professorIdDoAluno = null;
 let anotacaoEmEdicaoId = null;
 let notaPalavraEmEdicaoId = null;
 let traducoesReveladas = new Set();
+let perfilAlunoAtual = {}; // dados do próprio documento usuarios/{uid}
+let whatsappDoProfessor = ""; // número que o professor cadastrou na agenda (pra avisos de cancelamento)
 
 exigirLogin("aluno");
 
 auth.onAuthStateChanged(async (user) => {
   if (!user) return;
   const perfil = await db.collection("usuarios").doc(user.uid).get();
-  nomeDoAlunoAtual = perfil.data().nome;
-  professorIdDoAluno = perfil.data().professorId;
+  perfilAlunoAtual = perfil.data();
+  nomeDoAlunoAtual = perfilAlunoAtual.nome;
+  professorIdDoAluno = perfilAlunoAtual.professorId;
+  carregarWhatsappDoProfessor();
   carregarMensagensDoProfessor(user.uid);
   escutarAnotacoes(user.uid);
   escutarPalavras(user.uid);
@@ -535,9 +539,84 @@ function renderizarMinhasAulas() {
   `).join("");
 }
 
+// Guarda o WhatsApp do professor logo no início, pra o cancelamento poder abrir
+// a aba do WhatsApp na hora do clique (antes de qualquer await), sem bloqueio no celular.
+async function carregarWhatsappDoProfessor() {
+  if (!professorIdDoAluno) return;
+  try {
+    const snap = await db.collection("usuarios").doc(professorIdDoAluno)
+      .collection("configuracaoAgenda").doc("dados").get();
+    whatsappDoProfessor = snap.exists ? (snap.data().whatsapp || "") : "";
+  } catch (e) {
+    console.warn("Não foi possível carregar o WhatsApp do professor:", e);
+  }
+}
+
+function mensagemCancelamentoPeloAluno(aula) {
+  return "Olá! Preciso cancelar minha aula:\n" +
+    `Aluno: ${nomeDoAlunoAtual}\n` +
+    `Data: ${formatarDataBR(aula.data)}\n` +
+    `Horário: ${aula.horaInicio}\n` +
+    `Modalidade: ${aula.modalidade === "online" ? "Online" : "Presencial"}`;
+}
+
 async function cancelarMinhaAula(aulaId) {
   if (!confirm("Cancelar essa aula?")) return;
-  await db.collection("aulas").doc(aulaId).update({ status: "cancelada", canceladoPor: "aluno" });
+
+  const aula = minhasAulasCache.find((a) => a.id === aulaId);
+  const link = aula && whatsappDoProfessor
+    ? linkWhatsapp(whatsappDoProfessor, mensagemCancelamentoPeloAluno(aula))
+    : null;
+  // Aba aberta antes do await (senão o celular bloqueia o popup)
+  const abaWhatsapp = link ? window.open("", "_blank") : null;
+
+  try {
+    await db.collection("aulas").doc(aulaId).update({ status: "cancelada", canceladoPor: "aluno" });
+    if (abaWhatsapp) abaWhatsapp.location = link;
+  } catch (e) {
+    if (abaWhatsapp) abaWhatsapp.close();
+    alert("Não foi possível cancelar a aula agora. Tente novamente em instantes.");
+    console.error(e);
+  }
+}
+
+// -------------------- PERFIL DO ALUNO --------------------
+
+function abrirPerfil() {
+  document.getElementById("perfil-nome").value = perfilAlunoAtual.nome || "";
+  document.getElementById("perfil-email").value = perfilAlunoAtual.emailContato || perfilAlunoAtual.email || "";
+  document.getElementById("perfil-telefone").value = perfilAlunoAtual.telefone || "";
+  document.getElementById("status-perfil").textContent = "";
+  document.getElementById("modal-perfil").classList.remove("modal-oculto");
+}
+
+function fecharPerfil() {
+  document.getElementById("modal-perfil").classList.add("modal-oculto");
+}
+
+async function salvarPerfil() {
+  const user = auth.currentUser;
+  if (!user) return;
+  const statusEl = document.getElementById("status-perfil");
+  const emailContato = document.getElementById("perfil-email").value.trim();
+  const telefone = document.getElementById("perfil-telefone").value.trim();
+
+  const digitos = apenasDigitos(telefone);
+  if (telefone && (digitos.length < 10 || digitos.length > 13)) {
+    statusEl.textContent = "Telefone inválido — use DDD + número (ex: 11 91234-5678).";
+    return;
+  }
+
+  statusEl.textContent = "Salvando...";
+  try {
+    await db.collection("usuarios").doc(user.uid).update({ emailContato, telefone });
+    perfilAlunoAtual = { ...perfilAlunoAtual, emailContato, telefone };
+    statusEl.textContent = "Perfil salvo!";
+    setTimeout(fecharPerfil, 700);
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = "Não foi possível salvar agora. Tente novamente.";
+  }
 }
 
 // Abre o modal de agendamento, carregando a configuração de agenda do professor vinculado

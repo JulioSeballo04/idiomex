@@ -32,6 +32,7 @@
       <div class="acoes-topo">
         <button class="btn btn-secundario" onclick="iniciarQuiz()">🎯 Quiz rápido</button>
         <button class="btn btn-secundario" onclick="abrirAgendamento()">📅 Agendar aula</button>
+        <button class="btn btn-secundario" onclick="abrirPerfil()">👤 Meu perfil</button>
         <div class="seletor-tema" id="seletor-tema">
           <button class="btn-tema" type="button" title="Mudar cores do app" onclick="alternarMenuTema()">
             <span class="ponto-tema-atual" id="ponto-tema-atual"></span>
@@ -50,6 +51,30 @@
         </div>
         <p style="color:var(--ink-soft, #666); font-size:0.85rem; margin-top:-0.4rem;">Complete a frase com a palavra certa.</p>
         <div id="corpo-quiz"></div>
+      </div>
+    </div>
+
+    <div id="modal-perfil" class="modal-oculto">
+      <div class="modal-conteudo">
+        <div class="modal-cabecalho">
+          <h3>Meu perfil</h3>
+          <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharPerfil()">✕</button>
+        </div>
+        <p class="dica-perfil">Seu professor usa esses dados pra entrar em contato, por exemplo se precisar cancelar ou remarcar uma aula.</p>
+        <div class="campo-perfil">
+          <label for="perfil-nome">Nome</label>
+          <input type="text" id="perfil-nome" readonly>
+        </div>
+        <div class="campo-perfil">
+          <label for="perfil-email">E-mail de contato</label>
+          <input type="email" id="perfil-email" placeholder="voce@exemplo.com">
+        </div>
+        <div class="campo-perfil">
+          <label for="perfil-telefone">Telefone / WhatsApp (com DDD)</label>
+          <input type="tel" id="perfil-telefone" placeholder="Ex: 11 91234-5678">
+        </div>
+        <button class="btn btn-primario" style="margin-top:0.4rem;" onclick="salvarPerfil()">Salvar perfil</button>
+        <p class="status-msg" id="status-perfil"></p>
       </div>
     </div>
 
