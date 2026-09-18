@@ -50,6 +50,7 @@ auth.onAuthStateChanged(async (user) => {
   const perfil = (await db.collection("usuarios").doc(user.uid).get()).data();
   document.getElementById("nome-usuario").textContent = perfil.nome;
   document.getElementById("codigo-professor").textContent = perfil.codigoProfessor;
+  prepararSeletorIdioma(perfil.idioma);
 
   const hoje = new Date();
   mesCalendarioProfessor = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
@@ -61,6 +62,41 @@ auth.onAuthStateChanged(async (user) => {
   escutarAnotacoesAgenda(user.uid);
   montarCalendarioProfessor();
 });
+
+// Seletor do idioma que o professor ensina (guardado em usuarios/{uid}.idioma;
+// professores antigos, sem o campo, aparecem como Inglês)
+let idiomaAtualProfessor = IDIOMA_PADRAO;
+
+function prepararSeletorIdioma(idiomaSalvo) {
+  idiomaAtualProfessor = idiomaValido(idiomaSalvo);
+  const select = document.getElementById("select-idioma");
+  select.innerHTML = Object.keys(IDIOMAS)
+    .map((id) => `<option value="${id}">${IDIOMAS[id].nome}</option>`).join("");
+  select.value = idiomaAtualProfessor;
+}
+
+async function alterarIdiomaProfessor() {
+  const select = document.getElementById("select-idioma");
+  const novo = idiomaValido(select.value);
+  if (novo === idiomaAtualProfessor) return;
+
+  if (!confirm(`Passar a ensinar ${IDIOMAS[novo].nome}? As palavras que os alunos já cadastraram continuam como estão; as novas serão em ${IDIOMAS[novo].nome}.`)) {
+    select.value = idiomaAtualProfessor;
+    return;
+  }
+
+  const status = document.getElementById("status-idioma");
+  try {
+    await db.collection("usuarios").doc(professorIdAtual).update({ idioma: novo });
+    idiomaAtualProfessor = novo;
+    status.textContent = "Salvo!";
+    setTimeout(() => (status.textContent = ""), 1500);
+  } catch (e) {
+    console.error(e);
+    select.value = idiomaAtualProfessor;
+    alert("Não foi possível salvar o idioma agora. Tente novamente em instantes.");
+  }
+}
 
 // Anotações privadas do professor sobre os dias e as aulas da agenda.
 // Doc id = "AAAA-MM-DD" (anotação do dia) ou o id da aula (anotação da aula).
@@ -188,7 +224,7 @@ async function carregarLetrasVistas(alunoId) {
     // todas as letras, como marco inicial, para não marcar palavras antigas como novas.
     const agora = firebase.firestore.Timestamp.now();
     const letras = {};
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach((l) => { letras[l] = agora; });
+    [...LETRAS_A_Z, "#"].forEach((l) => { letras[l] = agora; });
     await ref.set({ letras });
     estado.letrasVistas = letras;
   }
@@ -205,7 +241,8 @@ async function marcarLetraComoVista(alunoId, letra) {
   estado.temNovidade = estado.letrasNovas.size > 0;
 
   await db.collection("usuarios").doc(professorIdAtual).collection("visualizacoes")
-    .doc(alunoId).update({ [`letras.${letra}`]: agora });
+    // FieldPath explícito: a letra "#" não é aceita num caminho "letras.#" em texto
+    .doc(alunoId).update(new firebase.firestore.FieldPath("letras", letra), agora);
 }
 
 // Verifica, letra por letra, quais têm palavra criada depois da última vez que foi vista
@@ -216,7 +253,7 @@ function calcularNovidades(alunoId) {
   const letrasNovas = new Set();
 
   estado.palavras.forEach((p) => {
-    const letra = p.palavraEn[0].toUpperCase();
+    const letra = letraInicial(p.palavraEn);
     const vistoEm = estado.letrasVistas[letra];
     if (!vistoEm || (p.criadoEm && p.criadoEm.toMillis() > vistoEm.toMillis())) {
       letrasNovas.add(letra);
@@ -445,11 +482,13 @@ function montarAbaVocabulario(alunoId) {
 
   const contagemPorLetra = {};
   estado.palavras.forEach((p) => {
-    const letra = p.palavraEn[0].toUpperCase();
+    const letra = letraInicial(p.palavraEn);
     contagemPorLetra[letra] = (contagemPorLetra[letra] || 0) + 1;
   });
 
-  const letrasHtml = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map((letra) => {
+  // "#" (palavras que não começam com A–Z, ex: japonês/mandarim) só aparece se existir alguma
+  const letrasDoIndice = contagemPorLetra["#"] ? [...LETRAS_A_Z, "#"] : LETRAS_A_Z;
+  const letrasHtml = letrasDoIndice.map((letra) => {
     const qtd = contagemPorLetra[letra] || 0;
     let classe = "letra-tab-mini";
     if (estado.letraSelecionada === letra) classe += " ativa";
@@ -467,7 +506,7 @@ function montarAbaVocabulario(alunoId) {
   if (estado.letraSelecionada === "TODAS") {
     listaPalavras = `<p class="vazio">Selecione uma letra acima para ver as palavras.</p>`;
   } else {
-    const filtradas = estado.palavras.filter((p) => p.palavraEn[0].toUpperCase() === estado.letraSelecionada);
+    const filtradas = estado.palavras.filter((p) => letraInicial(p.palavraEn) === estado.letraSelecionada);
     if (filtradas.length === 0) {
       listaPalavras = `<p class="vazio">Nenhuma palavra com essa letra ainda.</p>`;
     } else {

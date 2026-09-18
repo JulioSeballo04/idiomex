@@ -369,6 +369,18 @@
 .dica-reposicao:empty { display: none; }
 .badge-reposicao { background: #fdeccc; color: #8a5a00; }
 
+/* ---------- Idioma do professor ---------- */
+.idioma-professor { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 0.3rem; font-size: 0.9rem; }
+.idioma-professor label { font-weight: 600; }
+.idioma-professor select {
+  padding: 0.4em 0.6em;
+  border-radius: 8px;
+  border: 1px solid var(--borda, #ddd);
+  background: var(--bg-cartao);
+  color: var(--ink);
+}
+.dica-idioma-professor { font-size: 0.8rem; color: var(--ink-soft); margin: 0 0 1.6rem; }
+
 .modalidades-dia-editor {
   display: flex;
   flex-wrap: wrap;

@@ -20,6 +20,17 @@ const ORIGENS_PERMITIDAS = [
   "https://novo-dicionario.firebaseapp.com"
 ];
 
+// Idiomas aceitos (chave = código guardado no perfil do professor; valor = nome em
+// português usado no prompt). Mantenha igual à lista IDIOMAS de js/util.js.
+const IDIOMAS = {
+  en: "inglês",
+  es: "espanhol",
+  it: "italiano",
+  fr: "francês",
+  ja: "japonês",
+  zh: "mandarim (chinês simplificado)"
+};
+
 const TAMANHO_MAXIMO_CAMPO = 60; // caracteres — suficiente para qualquer palavra/expressão real
 
 export default async function handler(req, res) {
@@ -35,7 +46,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ erro: "Método não permitido." });
   }
 
-  const { palavra, traducao } = req.body || {};
+  const { palavra, traducao, idioma } = req.body || {};
+  // Sem "idioma" (ou desconhecido) cai em inglês, o comportamento de antes
+  const nomeIdioma = IDIOMAS[idioma] || IDIOMAS.en;
   if (!palavra || typeof palavra !== "string" || !palavra.trim()) {
     return res.status(400).json({ erro: "Informe a palavra." });
   }
@@ -49,7 +62,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const prompt = `Crie exatamente 5 frases curtas e simples em inglês (nível iniciante/intermediário), cada uma usando a palavra "${palavra}"${traducao ? ` (que significa "${traducao}" em português)` : ""}. Para cada frase, forneça também a tradução dela em português. Responda APENAS com as 5 linhas, uma por frase, no formato exato: frase em inglês | tradução em português. Sem numeração, sem aspas, sem explicações extras.`;
+    const prompt = `Crie exatamente 5 frases curtas e simples em ${nomeIdioma} (nível iniciante/intermediário), cada uma usando a palavra "${palavra}"${traducao ? ` (que significa "${traducao}" em português)` : ""}. Use a palavra exatamente como foi escrita, sem trocar por sinônimos. Para cada frase, forneça também a tradução dela em português. Responda APENAS com as 5 linhas, uma por frase, no formato exato: frase em ${nomeIdioma} | tradução em português. Sem numeração, sem aspas, sem explicações extras.`;
 
     // Tenta o modelo principal; se estiver sobrecarregado (erro 503), tenta um modelo alternativo
     const modelos = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite"];

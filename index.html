@@ -18,7 +18,7 @@
 <div class="tela-auth">
   <div class="cartao-auth">
     <div class="eyebrow">MEU DICIONÁRIO</div>
-    <h1>Vocabulário de inglês</h1>
+    <h1>Vocabulário de idiomas</h1>
 
     <div class="abas-tipo">
       <button class="aba-tipo ativa" id="btn-aba-login" onclick="mostrarAba('login')">Entrar</button>
@@ -40,7 +40,7 @@
     </form>
 
     <!-- CADASTRO -->
-    <form id="form-cadastro" class="oculto" onsubmit="event.preventDefault(); cadastrar(cadNome.value, cadEmail.value, cadSenha.value, cadTipo.value, cadCodigo.value);">
+    <form id="form-cadastro" class="oculto" onsubmit="event.preventDefault(); cadastrar(cadNome.value, cadEmail.value, cadSenha.value, cadTipo.value, cadCodigo.value, cadIdioma.value);">
       <div class="campo">
         <label for="cadTipo">Sou</label>
         <select id="cadTipo" onchange="alternarCampoCodigo()">
@@ -60,6 +60,10 @@
         <label for="cadSenha">Senha</label>
         <input type="password" id="cadSenha" minlength="6" required>
       </div>
+      <div class="campo oculto" id="campo-idioma">
+        <label for="cadIdioma">Idioma que você ensina</label>
+        <select id="cadIdioma"></select>
+      </div>
       <div class="campo" id="campo-codigo">
         <label for="cadCodigo">Código do professor</label>
         <input type="text" id="cadCodigo" placeholder="Ex: PROF-8X2K">
@@ -76,6 +80,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="js/firebase-config.js"></script>
+<script src="js/util.js"></script>
 <script src="js/auth.js"></script>
 <script>
 function mostrarAba(aba) {
@@ -88,7 +93,12 @@ function mostrarAba(aba) {
 function alternarCampoCodigo() {
   const ehAluno = document.getElementById('cadTipo').value === 'aluno';
   document.getElementById('campo-codigo').classList.toggle('oculto', !ehAluno);
+  document.getElementById('campo-idioma').classList.toggle('oculto', ehAluno);
 }
+// Opções de idioma vêm de IDIOMAS (util.js), pra a lista nunca ficar diferente do resto do app
+document.getElementById('cadIdioma').innerHTML = Object.keys(IDIOMAS).map(function (id) {
+  return '<option value="' + id + '">' + IDIOMAS[id].nome + '</option>';
+}).join('');
 </script>
 </body>
 </html>

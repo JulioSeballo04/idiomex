@@ -12,6 +12,7 @@ let notaPalavraEmEdicaoId = null;
 let traducoesReveladas = new Set();
 let perfilAlunoAtual = {}; // dados do próprio documento usuarios/{uid}
 let whatsappDoProfessor = ""; // número que o professor cadastrou na agenda (pra avisos de cancelamento)
+let idiomaDoAluno = IDIOMA_PADRAO; // idioma que o professor vinculado ensina (en, es, it, fr, ja, zh)
 
 exigirLogin("aluno");
 
@@ -21,12 +22,33 @@ auth.onAuthStateChanged(async (user) => {
   perfilAlunoAtual = perfil.data();
   nomeDoAlunoAtual = perfilAlunoAtual.nome;
   professorIdDoAluno = perfilAlunoAtual.professorId;
+  await carregarIdiomaDoProfessor();
   carregarWhatsappDoProfessor();
   carregarMensagensDoProfessor(user.uid);
   escutarAnotacoes(user.uid);
   escutarPalavras(user.uid);
   escutarMinhasAulas(user.uid);
 });
+
+// O idioma do vocabulário é o que o professor vinculado ensina. Se der erro ou o
+// professor ainda não escolheu, segue com inglês (o comportamento de sempre).
+async function carregarIdiomaDoProfessor() {
+  if (professorIdDoAluno) {
+    try {
+      const snap = await db.collection("usuarios").doc(professorIdDoAluno).get();
+      if (snap.exists) idiomaDoAluno = idiomaValido(snap.data().idioma);
+    } catch (e) {
+      console.warn("Não foi possível carregar o idioma do professor:", e);
+    }
+  }
+  aplicarIdiomaNaTela();
+}
+
+function aplicarIdiomaNaTela() {
+  const idioma = IDIOMAS[idiomaDoAluno];
+  const exemplo = idioma.exemplo.split(" / ")[0];
+  document.getElementById("input-palavra-en").placeholder = `Palavra em ${idioma.nome.toLowerCase()} (ex: ${exemplo})`;
+}
 
 // Escuta em tempo real as anotações pessoais do aluno (um único listener; re-renderiza ao editar)
 function escutarAnotacoes(uid) {
@@ -118,7 +140,7 @@ function escutarPalavras(uid) {
 function montarIndiceLetras() {
   const contagemPorLetra = {};
   cacheDePalavras.forEach((p) => {
-    const letra = p.palavraEn[0].toUpperCase();
+    const letra = letraInicial(p.palavraEn);
     contagemPorLetra[letra] = (contagemPorLetra[letra] || 0) + 1;
   });
 
@@ -132,7 +154,9 @@ function montarIndiceLetras() {
   inicio.onclick = () => { letraSelecionada = "INICIO"; montarIndiceLetras(); renderizarTela(); };
   container.appendChild(inicio);
 
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach((letra) => {
+  // "#" só aparece quando existe palavra que não começa com letra A–Z (ex: japonês, mandarim)
+  const letrasDoIndice = contagemPorLetra["#"] ? [...LETRAS_A_Z, "#"] : LETRAS_A_Z;
+  letrasDoIndice.forEach((letra) => {
     const qtd = contagemPorLetra[letra] || 0;
     const btn = document.createElement("button");
     let classe = "letra-tab";
@@ -157,7 +181,7 @@ function renderizarTela() {
   const contadorTotal = document.getElementById("contador-total");
 
   if (letraSelecionada === "INICIO") {
-    eyebrowTopo.textContent = "SEU VOCABULÁRIO";
+    eyebrowTopo.textContent = `SEU VOCABULÁRIO DE ${IDIOMAS[idiomaDoAluno].nome.toUpperCase()}`;
     tituloTopo.textContent = nomeDoAlunoAtual || "Olá!";
     painelMensagens.classList.remove("forcar-oculto");
     painelAnotacoes.classList.remove("forcar-oculto");
@@ -166,7 +190,7 @@ function renderizarTela() {
       ? "1 palavra aprendida"
       : `${cacheDePalavras.length} palavras aprendidas`;
   } else {
-    eyebrowTopo.textContent = "VOCABULÁRIO";
+    eyebrowTopo.textContent = `VOCABULÁRIO DE ${IDIOMAS[idiomaDoAluno].nome.toUpperCase()}`;
     tituloTopo.textContent = `Palavras aprendidas com a inicial "${letraSelecionada}"`;
     painelMensagens.classList.add("forcar-oculto");
     painelAnotacoes.classList.add("forcar-oculto");
@@ -189,10 +213,10 @@ function alternarTraducao(id) {
   renderizarPalavras();
 }
 
-// Fala a palavra em inglês de um cartão específico
+// Fala a palavra (no idioma que o aluno estuda) de um cartão específico
 function falarPalavra(id) {
   const p = cacheDePalavras.find((x) => x.id === id);
-  if (p) falar(p.palavraEn);
+  if (p) falar(p.palavraEn, idiomaDoAluno);
 }
 
 // Fala uma frase de exemplo específica de uma palavra
@@ -200,7 +224,7 @@ function falarFrase(id, indice) {
   const p = cacheDePalavras.find((x) => x.id === id);
   if (!p || !p.frasesExemplo || !p.frasesExemplo[indice]) return;
   const f = p.frasesExemplo[indice];
-  falar(typeof f === "string" ? f : f.en);
+  falar(typeof f === "string" ? f : f.en, idiomaDoAluno);
 }
 
 function renderizarPalavras() {
@@ -210,7 +234,7 @@ function renderizarPalavras() {
   // Na tela Início não mostramos a lista de palavras — só nas telas de cada letra
   if (letraSelecionada === "INICIO") return;
 
-  const lista = cacheDePalavras.filter((p) => p.palavraEn[0].toUpperCase() === letraSelecionada);
+  const lista = cacheDePalavras.filter((p) => letraInicial(p.palavraEn) === letraSelecionada);
 
   if (lista.length === 0) {
     grade.innerHTML = `<p class="vazio">Nenhuma palavra aqui ainda. Adicione uma acima!</p>`;
@@ -347,7 +371,7 @@ async function adicionarPalavra(palavraEn, traducaoPt, notaPessoal) {
     const resposta = await fetch(AI_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ palavra: palavraEn.trim(), traducao: traducaoPt.trim() })
+      body: JSON.stringify({ palavra: palavraEn.trim(), traducao: traducaoPt.trim(), idioma: idiomaDoAluno })
     });
     const dados = await resposta.json();
     if (dados.frases && dados.frases.length > 0) {
@@ -416,8 +440,7 @@ function gerarPerguntaQuiz(elegiveis) {
   }
 
   const fraseTexto = frasesValidas[Math.floor(Math.random() * frasesValidas.length)];
-  const regexEscapada = alvo.palavraEn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const fraseComLacuna = fraseTexto.replace(new RegExp(`\\b${regexEscapada}\\b`, "i"), "_____");
+  const fraseComLacuna = fraseTexto.replace(regexDaPalavra(alvo.palavraEn), "_____");
 
   const outrasPalavras = elegiveis.filter((p) => p.id !== alvo.id).map((p) => p.palavraEn);
   const distratores = embaralhar(outrasPalavras).slice(0, Math.min(3, outrasPalavras.length));
@@ -425,6 +448,15 @@ function gerarPerguntaQuiz(elegiveis) {
 
   quizAtual = { respostaCerta: alvo.palavraEn, fraseComLacuna, opcoes };
   renderizarQuiz();
+}
+
+// Regex que acha a palavra inteira na frase. Usa fronteira de "letra Unicode" (o \b
+// do JS só entende A–Z e quebraria com "café", "où", "niño"); japonês e mandarim
+// não separam palavras com espaço, então lá vale qualquer ocorrência.
+function regexDaPalavra(palavra) {
+  const escapada = palavra.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!IDIOMAS[idiomaDoAluno].usaEspacos) return new RegExp(escapada, "i");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escapada}(?![\\p{L}\\p{N}])`, "iu");
 }
 
 function renderizarQuiz() {

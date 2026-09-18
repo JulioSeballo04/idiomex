@@ -47,6 +47,13 @@
       Compartilhe esse código com seus alunos — eles usam ele para vincular a conta ao seu perfil.
     </p>
 
+    <div class="idioma-professor">
+      <label for="select-idioma">Idioma que você ensina</label>
+      <select id="select-idioma" onchange="alterarIdiomaProfessor()"></select>
+      <span class="status-msg" id="status-idioma"></span>
+    </div>
+    <p class="dica-idioma-professor">Os alunos vinculados a você adicionam palavras nesse idioma. Trocar o idioma não muda as palavras que já foram cadastradas.</p>
+
     <h2 style="font-size:1.1rem;">Visão geral da turma</h2>
     <div id="visao-geral-turma"></div>
 

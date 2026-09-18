@@ -14,7 +14,7 @@ function gerarCodigoProfessor() {
 }
 
 // -------------------- CADASTRO --------------------
-async function cadastrar(nome, email, senha, tipo, codigoProfessor) {
+async function cadastrar(nome, email, senha, tipo, codigoProfessor, idioma) {
   const statusEl = document.getElementById("status-cadastro");
   statusEl.textContent = "Criando conta...";
 
@@ -32,6 +32,7 @@ async function cadastrar(nome, email, senha, tipo, codigoProfessor) {
 
     if (tipo === "professor") {
       dadosUsuario.codigoProfessor = gerarCodigoProfessor();
+      dadosUsuario.idioma = idiomaValido(idioma); // idioma que ele ensina; os alunos vinculados herdam
     }
 
     if (tipo === "aluno") {

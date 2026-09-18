@@ -14,13 +14,45 @@ function escapeHtml(texto) {
 
 // Lê um texto em voz alta usando a Web Speech API do navegador (sem custo,
 // sem depender de nenhuma API externa). Se o navegador não suportar, não faz nada.
-function falar(texto) {
+function falar(texto, idioma) {
   if (!("speechSynthesis" in window) || !texto) return;
   window.speechSynthesis.cancel(); // corta qualquer fala em andamento antes de começar outra
   const utterancia = new SpeechSynthesisUtterance(texto);
-  utterancia.lang = "en-US";
+  utterancia.lang = (IDIOMAS[idioma] || IDIOMAS.en).voz;
   window.speechSynthesis.speak(utterancia);
 }
+
+// ============================================================
+// IDIOMAS — o professor escolhe o idioma que ensina, e o vocabulário de todos
+// os alunos vinculados a ele passa a ser desse idioma. Os campos do Firestore
+// continuam com o nome antigo (palavraEn, frasesExemplo[].en) por compatibilidade,
+// mas guardam a palavra/frase no idioma estudado, seja ele qual for.
+// ============================================================
+
+const IDIOMAS = {
+  en: { nome: "Inglês",   voz: "en-US", exemplo: "apple / maçã",     usaEspacos: true },
+  es: { nome: "Espanhol", voz: "es-ES", exemplo: "manzana / maçã",   usaEspacos: true },
+  it: { nome: "Italiano", voz: "it-IT", exemplo: "mela / maçã",      usaEspacos: true },
+  fr: { nome: "Francês",  voz: "fr-FR", exemplo: "pomme / maçã",     usaEspacos: true },
+  ja: { nome: "Japonês",  voz: "ja-JP", exemplo: "りんご / maçã",     usaEspacos: false },
+  zh: { nome: "Mandarim", voz: "zh-CN", exemplo: "苹果 / maçã",       usaEspacos: false }
+};
+const IDIOMA_PADRAO = "en";
+
+function idiomaValido(id) {
+  return Object.prototype.hasOwnProperty.call(IDIOMAS, id) ? id : IDIOMA_PADRAO;
+}
+
+// Letra do índice A–Z de uma palavra. Tira os acentos (é → E, ñ → N) pra
+// espanhol/italiano/francês caírem no A–Z; palavras que não começam com letra
+// latina (japonês, mandarim) vão pra "#".
+function letraInicial(palavra) {
+  const primeira = String(palavra || "").trim().charAt(0)
+    .normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+  return /^[A-Z]$/.test(primeira) ? primeira : "#";
+}
+
+const LETRAS_A_Z = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 // ============================================================
 // DATA/HORA — usados pelo agendamento de aulas (professor.js e dicionario.js)
