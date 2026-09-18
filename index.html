@@ -12,6 +12,7 @@
   })();
 </script>
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/novidades.css">
 </head>
 <body>
 
@@ -40,7 +41,7 @@
     </form>
 
     <!-- CADASTRO -->
-    <form id="form-cadastro" class="oculto" onsubmit="event.preventDefault(); cadastrar(cadNome.value, cadEmail.value, cadSenha.value, cadTipo.value, cadCodigo.value, cadIdioma.value);">
+    <form id="form-cadastro" class="oculto" onsubmit="event.preventDefault(); cadastrar(cadNome.value, cadEmail.value, cadSenha.value, cadTipo.value, cadCodigo.value, idiomasMarcadosNoCadastro());">
       <div class="campo">
         <label for="cadTipo">Sou</label>
         <select id="cadTipo" onchange="alternarCampoCodigo()">
@@ -61,8 +62,8 @@
         <input type="password" id="cadSenha" minlength="6" required>
       </div>
       <div class="campo oculto" id="campo-idioma">
-        <label for="cadIdioma">Idioma que você ensina</label>
-        <select id="cadIdioma"></select>
+        <label>Idiomas que você ensina</label>
+        <div id="cadIdiomas" class="grupo-idiomas"></div>
       </div>
       <div class="campo" id="campo-codigo">
         <label for="cadCodigo">Código do professor</label>
@@ -96,9 +97,12 @@ function alternarCampoCodigo() {
   document.getElementById('campo-idioma').classList.toggle('oculto', ehAluno);
 }
 // Opções de idioma vêm de IDIOMAS (util.js), pra a lista nunca ficar diferente do resto do app
-document.getElementById('cadIdioma').innerHTML = Object.keys(IDIOMAS).map(function (id) {
-  return '<option value="' + id + '">' + IDIOMAS[id].nome + '</option>';
+document.getElementById('cadIdiomas').innerHTML = Object.keys(IDIOMAS).map(function (id) {
+  return '<label class="opcao-idioma"><input type="checkbox" value="' + id + '"' + (id === 'en' ? ' checked' : '') + '> ' + IDIOMAS[id].nome + '</label>';
 }).join('');
+function idiomasMarcadosNoCadastro() {
+  return Array.prototype.map.call(document.querySelectorAll('#cadIdiomas input:checked'), function (c) { return c.value; });
+}
 </script>
 </body>
 </html>

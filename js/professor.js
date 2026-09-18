@@ -50,7 +50,7 @@ auth.onAuthStateChanged(async (user) => {
   const perfil = (await db.collection("usuarios").doc(user.uid).get()).data();
   document.getElementById("nome-usuario").textContent = perfil.nome;
   document.getElementById("codigo-professor").textContent = perfil.codigoProfessor;
-  prepararSeletorIdioma(perfil.idioma);
+  prepararSeletorIdioma(perfil);
 
   const hoje = new Date();
   mesCalendarioProfessor = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
@@ -63,38 +63,39 @@ auth.onAuthStateChanged(async (user) => {
   montarCalendarioProfessor();
 });
 
-// Seletor do idioma que o professor ensina (guardado em usuarios/{uid}.idioma;
-// professores antigos, sem o campo, aparecem como Inglês)
-let idiomaAtualProfessor = IDIOMA_PADRAO;
+// Idiomas que o professor ensina (guardados em usuarios/{uid}.idiomas; contas antigas,
+// com o campo único "idioma" ou sem nada, aparecem só com esse idioma / Inglês)
+let idiomasAtuaisProfessor = [IDIOMA_PADRAO];
 
-function prepararSeletorIdioma(idiomaSalvo) {
-  idiomaAtualProfessor = idiomaValido(idiomaSalvo);
-  const select = document.getElementById("select-idioma");
-  select.innerHTML = Object.keys(IDIOMAS)
-    .map((id) => `<option value="${id}">${IDIOMAS[id].nome}</option>`).join("");
-  select.value = idiomaAtualProfessor;
+function prepararSeletorIdioma(perfil) {
+  idiomasAtuaisProfessor = idiomasDoPerfil(perfil);
+  document.getElementById("grupo-idiomas-professor").innerHTML = Object.keys(IDIOMAS).map((id) => `
+    <label class="opcao-idioma">
+      <input type="checkbox" value="${id}" ${idiomasAtuaisProfessor.includes(id) ? "checked" : ""} onchange="alterarIdiomasProfessor()">
+      ${IDIOMAS[id].nome}
+    </label>
+  `).join("");
 }
 
-async function alterarIdiomaProfessor() {
-  const select = document.getElementById("select-idioma");
-  const novo = idiomaValido(select.value);
-  if (novo === idiomaAtualProfessor) return;
-
-  if (!confirm(`Passar a ensinar ${IDIOMAS[novo].nome}? As palavras que os alunos já cadastraram continuam como estão; as novas serão em ${IDIOMAS[novo].nome}.`)) {
-    select.value = idiomaAtualProfessor;
+async function alterarIdiomasProfessor() {
+  const marcados = Array.from(document.querySelectorAll("#grupo-idiomas-professor input:checked")).map((c) => c.value);
+  if (marcados.length === 0) {
+    alert("Deixe pelo menos um idioma marcado.");
+    prepararSeletorIdioma({ idiomas: idiomasAtuaisProfessor }); // desfaz o desmarcar
     return;
   }
 
   const status = document.getElementById("status-idioma");
   try {
-    await db.collection("usuarios").doc(professorIdAtual).update({ idioma: novo });
-    idiomaAtualProfessor = novo;
+    // "idioma" (o primeiro) segue junto pra compatibilidade com o formato antigo
+    await db.collection("usuarios").doc(professorIdAtual).update({ idiomas: marcados, idioma: marcados[0] });
+    idiomasAtuaisProfessor = marcados;
     status.textContent = "Salvo!";
     setTimeout(() => (status.textContent = ""), 1500);
   } catch (e) {
     console.error(e);
-    select.value = idiomaAtualProfessor;
-    alert("Não foi possível salvar o idioma agora. Tente novamente em instantes.");
+    prepararSeletorIdioma({ idiomas: idiomasAtuaisProfessor });
+    alert("Não foi possível salvar os idiomas agora. Tente novamente em instantes.");
   }
 }
 
@@ -132,6 +133,7 @@ function garantirEstado(alunoId) {
       aberto: false,
       abaAtiva: "vocabulario",       // vocabulario | recados | relatorio | aulas
       letraSelecionada: "TODAS",
+      idiomaFiltro: null,            // idioma do vocabulário em exibição (só importa se o aluno estuda mais de um)
       palavras: [],
       mensagens: [],
       relatorios: [],
@@ -480,8 +482,23 @@ function mudarAbaAluno(alunoId, aba) {
 function montarAbaVocabulario(alunoId) {
   const estado = estadoAlunos[alunoId];
 
+  // Se o aluno estuda mais de um idioma, o professor vê um idioma de cada vez
+  const idiomasDoAluno = Object.keys(IDIOMAS).filter((id) => estado.palavras.some((p) => idiomaDaPalavra(p) === id));
+  const idiomaEmExibicao = idiomasDoAluno.includes(estado.idiomaFiltro) ? estado.idiomaFiltro : idiomasDoAluno[0];
+  const palavrasVisiveis = idiomasDoAluno.length > 1
+    ? estado.palavras.filter((p) => idiomaDaPalavra(p) === idiomaEmExibicao)
+    : estado.palavras;
+  const seletorIdioma = idiomasDoAluno.length > 1 ? `
+    <div class="filtro-idioma-aluno">
+      <label for="filtro-idioma-${alunoId}">Idioma:</label>
+      <select id="filtro-idioma-${alunoId}" onchange="trocarIdiomaFiltroAluno('${alunoId}', this.value)">
+        ${idiomasDoAluno.map((id) => `<option value="${id}" ${id === idiomaEmExibicao ? "selected" : ""}>${IDIOMAS[id].nome}</option>`).join("")}
+      </select>
+    </div>
+  ` : "";
+
   const contagemPorLetra = {};
-  estado.palavras.forEach((p) => {
+  palavrasVisiveis.forEach((p) => {
     const letra = letraInicial(p.palavraEn);
     contagemPorLetra[letra] = (contagemPorLetra[letra] || 0) + 1;
   });
@@ -506,7 +523,7 @@ function montarAbaVocabulario(alunoId) {
   if (estado.letraSelecionada === "TODAS") {
     listaPalavras = `<p class="vazio">Selecione uma letra acima para ver as palavras.</p>`;
   } else {
-    const filtradas = estado.palavras.filter((p) => letraInicial(p.palavraEn) === estado.letraSelecionada);
+    const filtradas = palavrasVisiveis.filter((p) => letraInicial(p.palavraEn) === estado.letraSelecionada);
     if (filtradas.length === 0) {
       listaPalavras = `<p class="vazio">Nenhuma palavra com essa letra ainda.</p>`;
     } else {
@@ -529,7 +546,14 @@ function montarAbaVocabulario(alunoId) {
     }
   }
 
-  return `<div class="indice-letras-mini">${letrasHtml}</div>${listaPalavras}`;
+  return `${seletorIdioma}<div class="indice-letras-mini">${letrasHtml}</div>${listaPalavras}`;
+}
+
+function trocarIdiomaFiltroAluno(alunoId, idioma) {
+  const estado = estadoAlunos[alunoId];
+  estado.idiomaFiltro = idiomaValido(idioma);
+  estado.letraSelecionada = "TODAS";
+  renderizarListaAlunos();
 }
 
 function selecionarLetraAluno(alunoId, letra) {
@@ -830,11 +854,14 @@ function montarCalendarioProfessor() {
   const prefixoMes = `${ano}-${String(mes + 1).padStart(2, "0")}`;
 
   const contagemPorDia = {};
+  const idiomasPorDia = {}; // {data: [códigos de idioma das aulas agendadas nesse dia]}
   aulasCache.forEach((a) => {
     if (a.status === "agendada" && a.data.startsWith(prefixoMes)) {
       contagemPorDia[a.data] = (contagemPorDia[a.data] || 0) + 1;
+      (idiomasPorDia[a.data] = idiomasPorDia[a.data] || new Set()).add(idiomaValido(a.idioma));
     }
   });
+  const variosIdiomas = idiomasAtuaisProfessor.length > 1;
 
   const celulas = [];
   for (let i = 0; i < offsetInicio; i++) celulas.push(`<div class="cal-day cal-empty"></div>`);
@@ -869,6 +896,7 @@ function montarCalendarioProfessor() {
         <span class="cal-num">${dia}</span>
         ${contagem > 0 ? `<span class="cal-dot">${contagem}</span>` : ""}
         ${temNota ? `<span class="cal-nota" title="Tem anotação">✎</span>` : ""}
+        ${variosIdiomas && idiomasPorDia[dataIso] ? `<span class="cal-idiomas">${[...idiomasPorDia[dataIso]].map((id) => `<i style="background:${IDIOMAS[id].cor}" title="${IDIOMAS[id].nome}"></i>`).join("")}</span>` : ""}
       </div>
     `);
   }
@@ -904,6 +932,7 @@ function montarCalendarioProfessor() {
         <span><span class="dot dot-nao-atende"></span> Não atende</span>
         <span><span class="dot dot-ajustado"></span> Horário ajustado só nesse dia</span>
         <span><span class="legenda-nota">✎</span> Tem anotação</span>
+        ${variosIdiomas ? idiomasAtuaisProfessor.map((id) => `<span><i class="dot" style="background:${IDIOMAS[id].cor}"></i> Aula de ${IDIOMAS[id].nome}</span>`).join("") : ""}
       </div>
     </div>
   `;
@@ -986,6 +1015,14 @@ function renderizarDetalheDiaProfessor() {
   }
 
   diaEditorRenderizadoPara = diaSelecionadoProfessor;
+}
+
+// Etiqueta colorida com o idioma da aula (só quando o professor ensina mais de um idioma;
+// aulas antigas, sem o campo, contam como inglês)
+function badgeIdiomaAula(aula) {
+  if (idiomasAtuaisProfessor.length < 2) return "";
+  const idioma = IDIOMAS[idiomaValido(aula.idioma)];
+  return `<span class="badge-idioma" style="background:${idioma.cor}">${idioma.nome}</span>`;
 }
 
 function aulasAtivasDoDia(dataIso) {
@@ -1087,6 +1124,7 @@ function montarListaAulasDia(dataIso) {
         <span>${escapeHtml(a.horaInicio)}</span>
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
+        ${badgeIdiomaAula(a)}
         <span class="badge-status badge-status-${a.status}">${legendaStatusAula(a.status)}</span>
       </div>
       ${a.status === "agendada" ? `
@@ -1252,6 +1290,7 @@ function montarAbaAulas(alunoId) {
         <span>${formatarDataBR(a.data)} às ${escapeHtml(a.horaInicio)}</span>
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
+        ${badgeIdiomaAula(a)}
         <span class="badge-status badge-status-${a.status}">${legendaStatusAula(a.status)}</span>
       </div>
       ${a.status === "agendada" ? `

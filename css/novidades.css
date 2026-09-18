@@ -371,13 +371,53 @@
 
 /* ---------- Idioma do professor ---------- */
 .idioma-professor { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 0.3rem; font-size: 0.9rem; }
-.idioma-professor label { font-weight: 600; }
-.idioma-professor select {
-  padding: 0.4em 0.6em;
+.rotulo-idiomas-professor { font-weight: 600; }
+.grupo-idiomas { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; }
+.opcao-idioma { display: flex; align-items: center; gap: 0.35em; font-size: 0.9rem; cursor: pointer; }
+
+/* Pontinhos coloridos (um por idioma) das aulas do dia, no calendário do professor */
+.cal-day .cal-idiomas {
+  position: absolute;
+  bottom: 3px;
+  left: 3px;
+  display: flex;
+  gap: 2px;
+}
+.cal-day .cal-idiomas i {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--bg-cartao);
+}
+
+/* Etiqueta com a cor do idioma da aula (o fundo vem inline, de IDIOMAS[...].cor) */
+.badge-idioma {
+  display: inline-block;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2em 0.6em;
+  border-radius: 999px;
+}
+
+.filtro-idioma-aluno { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.7rem; font-size: 0.85rem; }
+.filtro-idioma-aluno select {
+  padding: 0.3em 0.5em;
   border-radius: 8px;
   border: 1px solid var(--borda, #ddd);
   background: var(--bg-cartao);
   color: var(--ink);
+}
+
+/* Troca de idioma no topo da tela do aluno */
+.seletor-idioma-aluno {
+  padding: 0.45em 0.6em;
+  border-radius: 8px;
+  border: 1px solid var(--borda, #ddd);
+  background: var(--bg-cartao);
+  color: var(--ink);
+  font-size: 0.85rem;
 }
 .dica-idioma-professor { font-size: 0.8rem; color: var(--ink-soft); margin: 0 0 1.6rem; }
 

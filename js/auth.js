@@ -14,8 +14,14 @@ function gerarCodigoProfessor() {
 }
 
 // -------------------- CADASTRO --------------------
-async function cadastrar(nome, email, senha, tipo, codigoProfessor, idioma) {
+async function cadastrar(nome, email, senha, tipo, codigoProfessor, idiomas) {
   const statusEl = document.getElementById("status-cadastro");
+
+  // Valida antes de criar a conta no Auth, pra um erro aqui não deixar conta órfã
+  if (tipo === "professor" && (!Array.isArray(idiomas) || idiomas.length === 0)) {
+    statusEl.textContent = "Escolha pelo menos um idioma que você ensina.";
+    return;
+  }
   statusEl.textContent = "Criando conta...";
 
   try {
@@ -32,7 +38,10 @@ async function cadastrar(nome, email, senha, tipo, codigoProfessor, idioma) {
 
     if (tipo === "professor") {
       dadosUsuario.codigoProfessor = gerarCodigoProfessor();
-      dadosUsuario.idioma = idiomaValido(idioma); // idioma que ele ensina; os alunos vinculados herdam
+      // Idiomas que ele ensina; os alunos vinculados escolhem entre eles. "idioma"
+      // (o primeiro) fica junto por compatibilidade com o formato antigo.
+      dadosUsuario.idiomas = idiomasDoPerfil({ idiomas });
+      dadosUsuario.idioma = dadosUsuario.idiomas[0];
     }
 
     if (tipo === "aluno") {

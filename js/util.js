@@ -30,17 +30,32 @@ function falar(texto, idioma) {
 // ============================================================
 
 const IDIOMAS = {
-  en: { nome: "Inglês",   voz: "en-US", exemplo: "apple / maçã",     usaEspacos: true },
-  es: { nome: "Espanhol", voz: "es-ES", exemplo: "manzana / maçã",   usaEspacos: true },
-  it: { nome: "Italiano", voz: "it-IT", exemplo: "mela / maçã",      usaEspacos: true },
-  fr: { nome: "Francês",  voz: "fr-FR", exemplo: "pomme / maçã",     usaEspacos: true },
-  ja: { nome: "Japonês",  voz: "ja-JP", exemplo: "りんご / maçã",     usaEspacos: false },
-  zh: { nome: "Mandarim", voz: "zh-CN", exemplo: "苹果 / maçã",       usaEspacos: false }
+  // "cor" identifica o idioma nas aulas do calendário (pontos e etiquetas)
+  en: { nome: "Inglês",   voz: "en-US", exemplo: "apple / maçã",     usaEspacos: true,  cor: "#3B6FD4" },
+  es: { nome: "Espanhol", voz: "es-ES", exemplo: "manzana / maçã",   usaEspacos: true,  cor: "#D9822B" },
+  it: { nome: "Italiano", voz: "it-IT", exemplo: "mela / maçã",      usaEspacos: true,  cor: "#2F9E6B" },
+  fr: { nome: "Francês",  voz: "fr-FR", exemplo: "pomme / maçã",     usaEspacos: true,  cor: "#8A5FD0" },
+  ja: { nome: "Japonês",  voz: "ja-JP", exemplo: "りんご / maçã",     usaEspacos: false, cor: "#D64A6E" },
+  zh: { nome: "Mandarim", voz: "zh-CN", exemplo: "苹果 / maçã",       usaEspacos: false, cor: "#A67C00" }
 };
 const IDIOMA_PADRAO = "en";
 
 function idiomaValido(id) {
   return Object.prototype.hasOwnProperty.call(IDIOMAS, id) ? id : IDIOMA_PADRAO;
+}
+
+// Idiomas que um professor ensina: o campo novo "idiomas" (lista) ou, nas contas
+// criadas antes dele, o campo único "idioma". Sempre devolve pelo menos um.
+function idiomasDoPerfil(perfil) {
+  const lista = perfil && Array.isArray(perfil.idiomas)
+    ? perfil.idiomas.filter((id) => Object.prototype.hasOwnProperty.call(IDIOMAS, id))
+    : [];
+  return lista.length ? [...new Set(lista)] : [idiomaValido(perfil && perfil.idioma)];
+}
+
+// Idioma de uma palavra guardada. Palavras antigas (sem o campo) são de inglês.
+function idiomaDaPalavra(palavra) {
+  return idiomaValido(palavra && palavra.idioma);
 }
 
 // Letra do índice A–Z de uma palavra. Tira os acentos (é → E, ñ → N) pra

@@ -12,7 +12,10 @@ let notaPalavraEmEdicaoId = null;
 let traducoesReveladas = new Set();
 let perfilAlunoAtual = {}; // dados do próprio documento usuarios/{uid}
 let whatsappDoProfessor = ""; // número que o professor cadastrou na agenda (pra avisos de cancelamento)
-let idiomaDoAluno = IDIOMA_PADRAO; // idioma que o professor vinculado ensina (en, es, it, fr, ja, zh)
+let idiomaDoAluno = IDIOMA_PADRAO; // idioma que o aluno está estudando agora (en, es, it, fr, ja, zh)
+let idiomasDoProfessorDoAluno = []; // idiomas que o professor vinculado ensina
+let idiomasDisponiveis = [IDIOMA_PADRAO]; // idiomas entre os quais o aluno pode alternar
+let idiomaJaDefinido = false; // false até o primeiro cálculo (escolhe o último idioma usado)
 
 exigirLogin("aluno");
 
@@ -30,16 +33,38 @@ auth.onAuthStateChanged(async (user) => {
   escutarMinhasAulas(user.uid);
 });
 
-// O idioma do vocabulário é o que o professor vinculado ensina. Se der erro ou o
+// Os idiomas que o aluno pode estudar são os que o professor vinculado ensina (mais
+// qualquer idioma em que ele já tenha palavras, pra nada sumir). Se der erro ou o
 // professor ainda não escolheu, segue com inglês (o comportamento de sempre).
 async function carregarIdiomaDoProfessor() {
   if (professorIdDoAluno) {
     try {
       const snap = await db.collection("usuarios").doc(professorIdDoAluno).get();
-      if (snap.exists) idiomaDoAluno = idiomaValido(snap.data().idioma);
+      if (snap.exists) idiomasDoProfessorDoAluno = idiomasDoPerfil(snap.data());
     } catch (e) {
-      console.warn("Não foi possível carregar o idioma do professor:", e);
+      console.warn("Não foi possível carregar os idiomas do professor:", e);
     }
+  }
+  recalcularIdiomasDisponiveis();
+}
+
+// Junta os idiomas do professor com os das palavras que o aluno já tem, e garante que
+// o idioma ativo continue valendo (o último escolhido, se ainda existir, senão o primeiro)
+function recalcularIdiomasDisponiveis(palavrasCarregadas) {
+  const base = idiomasDoProfessorDoAluno.length ? idiomasDoProfessorDoAluno : [IDIOMA_PADRAO];
+  const dasPalavras = cacheDePalavras.map(idiomaDaPalavra);
+  idiomasDisponiveis = [...new Set([...base, ...dasPalavras])];
+
+  if (!idiomaJaDefinido) {
+    // Primeira vez nesta sessão: volta pro último idioma usado, se ele ainda estiver na lista.
+    // Só "fecha" essa escolha depois que as palavras chegaram, pra um idioma que só existe
+    // nas palavras antigas também poder ser o último usado.
+    const preferido = perfilAlunoAtual.idiomaAtivo;
+    if (idiomasDisponiveis.includes(preferido)) idiomaDoAluno = preferido;
+    else if (!idiomasDisponiveis.includes(idiomaDoAluno)) idiomaDoAluno = idiomasDisponiveis[0];
+    if (palavrasCarregadas) idiomaJaDefinido = true;
+  } else if (!idiomasDisponiveis.includes(idiomaDoAluno)) {
+    idiomaDoAluno = idiomasDisponiveis[0];
   }
   aplicarIdiomaNaTela();
 }
@@ -48,6 +73,30 @@ function aplicarIdiomaNaTela() {
   const idioma = IDIOMAS[idiomaDoAluno];
   const exemplo = idioma.exemplo.split(" / ")[0];
   document.getElementById("input-palavra-en").placeholder = `Palavra em ${idioma.nome.toLowerCase()} (ex: ${exemplo})`;
+
+  const seletor = document.getElementById("seletor-idioma");
+  seletor.innerHTML = idiomasDisponiveis
+    .map((id) => `<option value="${id}" ${id === idiomaDoAluno ? "selected" : ""}>${IDIOMAS[id].nome}</option>`).join("");
+  seletor.hidden = idiomasDisponiveis.length < 2; // só aparece quando existe mais de um idioma
+}
+
+// O aluno troca de idioma: cada idioma tem o próprio vocabulário, índice e quiz
+async function trocarIdiomaAtivo(novo) {
+  idiomaDoAluno = idiomaValido(novo);
+  letraSelecionada = "INICIO";
+  aplicarIdiomaNaTela();
+  montarIndiceLetras();
+  renderizarTela();
+  const user = auth.currentUser;
+  if (user) {
+    try { await db.collection("usuarios").doc(user.uid).update({ idiomaAtivo: idiomaDoAluno }); }
+    catch (e) { console.warn("Não foi possível lembrar o idioma escolhido:", e); }
+  }
+}
+
+// Só as palavras do idioma que o aluno está estudando agora
+function palavrasDoIdiomaAtual() {
+  return cacheDePalavras.filter((p) => idiomaDaPalavra(p) === idiomaDoAluno);
 }
 
 // Escuta em tempo real as anotações pessoais do aluno (um único listener; re-renderiza ao editar)
@@ -131,6 +180,7 @@ function escutarPalavras(uid) {
     .orderBy("palavraEn")
     .onSnapshot((snapshot) => {
       cacheDePalavras = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      recalcularIdiomasDisponiveis(true); // palavras de um idioma novo também entram na lista
       montarIndiceLetras();
       renderizarTela();
     });
@@ -139,7 +189,7 @@ function escutarPalavras(uid) {
 // Monta as abas do menu lateral: "Início" + A-Z, marcando quantas palavras tem cada letra
 function montarIndiceLetras() {
   const contagemPorLetra = {};
-  cacheDePalavras.forEach((p) => {
+  palavrasDoIdiomaAtual().forEach((p) => {
     const letra = letraInicial(p.palavraEn);
     contagemPorLetra[letra] = (contagemPorLetra[letra] || 0) + 1;
   });
@@ -186,9 +236,10 @@ function renderizarTela() {
     painelMensagens.classList.remove("forcar-oculto");
     painelAnotacoes.classList.remove("forcar-oculto");
     contadorTotal.classList.remove("forcar-oculto");
-    contadorTotal.textContent = cacheDePalavras.length === 1
+    const totalDoIdioma = palavrasDoIdiomaAtual().length;
+    contadorTotal.textContent = totalDoIdioma === 1
       ? "1 palavra aprendida"
-      : `${cacheDePalavras.length} palavras aprendidas`;
+      : `${totalDoIdioma} palavras aprendidas`;
   } else {
     eyebrowTopo.textContent = `VOCABULÁRIO DE ${IDIOMAS[idiomaDoAluno].nome.toUpperCase()}`;
     tituloTopo.textContent = `Palavras aprendidas com a inicial "${letraSelecionada}"`;
@@ -216,7 +267,7 @@ function alternarTraducao(id) {
 // Fala a palavra (no idioma que o aluno estuda) de um cartão específico
 function falarPalavra(id) {
   const p = cacheDePalavras.find((x) => x.id === id);
-  if (p) falar(p.palavraEn, idiomaDoAluno);
+  if (p) falar(p.palavraEn, idiomaDaPalavra(p));
 }
 
 // Fala uma frase de exemplo específica de uma palavra
@@ -224,7 +275,7 @@ function falarFrase(id, indice) {
   const p = cacheDePalavras.find((x) => x.id === id);
   if (!p || !p.frasesExemplo || !p.frasesExemplo[indice]) return;
   const f = p.frasesExemplo[indice];
-  falar(typeof f === "string" ? f : f.en, idiomaDoAluno);
+  falar(typeof f === "string" ? f : f.en, idiomaDaPalavra(p));
 }
 
 function renderizarPalavras() {
@@ -234,7 +285,7 @@ function renderizarPalavras() {
   // Na tela Início não mostramos a lista de palavras — só nas telas de cada letra
   if (letraSelecionada === "INICIO") return;
 
-  const lista = cacheDePalavras.filter((p) => letraInicial(p.palavraEn) === letraSelecionada);
+  const lista = palavrasDoIdiomaAtual().filter((p) => letraInicial(p.palavraEn) === letraSelecionada);
 
   if (lista.length === 0) {
     grade.innerHTML = `<p class="vazio">Nenhuma palavra aqui ainda. Adicione uma acima!</p>`;
@@ -337,7 +388,8 @@ async function adicionarPalavra(palavraEn, traducaoPt, notaPessoal) {
   const statusEl = document.getElementById("status-palavra");
 
   // Verifica se essa palavra já foi adicionada antes (ignorando maiúsculas/minúsculas e espaços)
-  const jaExiste = cacheDePalavras.some(
+  // (só compara dentro do idioma atual: a mesma grafia pode existir em dois idiomas)
+  const jaExiste = palavrasDoIdiomaAtual().some(
     (p) => p.palavraEn.trim().toLowerCase() === palavraEn.trim().toLowerCase()
   );
   if (jaExiste) {
@@ -351,6 +403,7 @@ async function adicionarPalavra(palavraEn, traducaoPt, notaPessoal) {
   const dadosPalavra = {
     palavraEn: palavraEn.trim(),
     traducaoPt: traducaoPt.trim(),
+    idioma: idiomaDoAluno, // idioma em que a palavra foi cadastrada
     frasesExemplo: [],
     criadoEm: firebase.firestore.FieldValue.serverTimestamp()
   };
@@ -412,7 +465,7 @@ function embaralhar(lista) {
 }
 
 function palavrasElegiveisParaQuiz() {
-  return cacheDePalavras.filter((p) => p.frasesExemplo && p.frasesExemplo.length > 0);
+  return palavrasDoIdiomaAtual().filter((p) => p.frasesExemplo && p.frasesExemplo.length > 0);
 }
 
 function iniciarQuiz() {
@@ -566,6 +619,7 @@ function renderizarMinhasAulas() {
         <span>${formatarDataBR(a.data)} às ${escapeHtml(a.horaInicio)}</span>
         <span class="badge-modalidade badge-${a.modalidade}">${a.modalidade === "online" ? "Online" : "Presencial"}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
+        ${idiomasParaAula().length > 1 ? `<span class="badge-idioma" style="background:${IDIOMAS[idiomaValido(a.idioma)].cor}">${IDIOMAS[idiomaValido(a.idioma)].nome}</span>` : ""}
       </div>
       <button class="excluir" onclick="cancelarMinhaAula('${a.id}')">Cancelar</button>
     </div>
@@ -685,6 +739,7 @@ async function abrirAgendamento() {
 
   renderizarModalidadesAgendamento(null);
   atualizarDicaReposicao();
+  prepararIdiomaDaAula();
 
   document.getElementById("slots-agendamento").innerHTML = `<p class="vazio">Escolha uma data acima.</p>`;
   document.getElementById("modal-agendamento").classList.remove("modal-oculto");
@@ -853,12 +908,32 @@ async function selecionarDataAgendamento(dataEscolhida) {
   });
 }
 
-function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade, reposicao) {
+// Idiomas em que o professor dá aula. A aula é de UM deles; com mais de um, o aluno escolhe.
+function idiomasParaAula() {
+  return idiomasDoProfessorDoAluno.length ? idiomasDoProfessorDoAluno : [IDIOMA_PADRAO];
+}
+
+function prepararIdiomaDaAula() {
+  const opcoes = idiomasParaAula();
+  const select = document.getElementById("select-idioma-aula");
+  const escolhido = opcoes.includes(idiomaDoAluno) ? idiomaDoAluno : opcoes[0];
+  select.innerHTML = opcoes
+    .map((id) => `<option value="${id}" ${id === escolhido ? "selected" : ""}>${IDIOMAS[id].nome}</option>`).join("");
+  document.getElementById("campo-idioma-aula").hidden = opcoes.length < 2;
+}
+
+function idiomaEscolhidoParaAula() {
+  const opcoes = idiomasParaAula();
+  return opcoes.length > 1 ? idiomaValido(document.getElementById("select-idioma-aula").value) : opcoes[0];
+}
+
+function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade, reposicao, idiomaAula) {
   return "Olá! Quero confirmar minha aula!\n" +
     `Aluno: ${nomeDoAlunoAtual}\n` +
     `Data: ${formatarDataBR(dataIso)}\n` +
     `Horário: ${horaInicio}\n` +
     `Modalidade: ${modalidade === "online" ? "Online" : "Presencial"}` +
+    (idiomasParaAula().length > 1 ? `\nIdioma: ${IDIOMAS[idiomaAula].nome}` : "") +
     (reposicao ? "\nTipo: Reposição" : "");
 }
 
@@ -890,6 +965,7 @@ async function confirmarAgendamento(horaInicio, duracaoMinutos) {
   const user = auth.currentUser;
   if (!user) return;
   const reposicao = document.getElementById("chk-reposicao").checked;
+  const idiomaAula = idiomaEscolhidoParaAula();
 
   // A aba do WhatsApp é aberta em branco JÁ AQUI, antes do "await" — celulares
   // (principalmente Safari/iOS) bloqueiam window.open() se ele só acontecer depois de uma
@@ -907,12 +983,13 @@ async function confirmarAgendamento(horaInicio, duracaoMinutos) {
       modalidadeInput.value,
       user.uid,
       nomeDoAlunoAtual,
-      reposicao
+      reposicao,
+      idiomaAula
     );
     fecharAgendamento();
 
     if (abaWhatsapp) {
-      const link = linkWhatsapp(numeroWhatsappProfessor, mensagemConfirmacaoAula(dataEscolhidaAgendamento, horaInicio, modalidadeInput.value, reposicao));
+      const link = linkWhatsapp(numeroWhatsappProfessor, mensagemConfirmacaoAula(dataEscolhidaAgendamento, horaInicio, modalidadeInput.value, reposicao, idiomaAula));
       if (link) abaWhatsapp.location = link; else abaWhatsapp.close();
     }
   } catch (e) {
@@ -925,7 +1002,7 @@ async function confirmarAgendamento(horaInicio, duracaoMinutos) {
 // Usa uma transação: o ID do documento é determinístico ("professor_data_hora"), então
 // duas tentativas simultâneas de marcar o MESMO horário disputam o mesmo documento — a
 // segunda falha com um erro claro, em vez de sobrescrever silenciosamente a primeira.
-async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, alunoId, alunoNome, reposicao) {
+async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, alunoId, alunoNome, reposicao, idioma) {
   const aulaId = `${professorId}_${data}_${horaInicio.replace(":", "")}`;
   const ref = db.collection("aulas").doc(aulaId);
 
@@ -938,6 +1015,7 @@ async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, a
       professorId, alunoId, alunoNome,
       data, horaInicio, horaFim, modalidade,
       reposicao: !!reposicao,
+      idioma: idiomaValido(idioma),
       status: "agendada",
       criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     });

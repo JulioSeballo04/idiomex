@@ -30,6 +30,7 @@
         <div class="contador-total" id="contador-total"></div>
       </div>
       <div class="acoes-topo">
+        <select id="seletor-idioma" class="seletor-idioma-aluno" title="Idioma que você está estudando" onchange="trocarIdiomaAtivo(this.value)" hidden></select>
         <button class="btn btn-secundario" onclick="iniciarQuiz()">🎯 Quiz rápido</button>
         <button class="btn btn-secundario" onclick="abrirAgendamento()">📅 Agendar aula</button>
         <button class="btn btn-secundario" onclick="abrirPerfil()">👤 Meu perfil</button>
@@ -91,6 +92,10 @@
         <div class="campo-agendamento campo-reposicao">
           <label class="rotulo-reposicao"><input type="checkbox" id="chk-reposicao"> Esta é uma aula de reposição</label>
           <p class="dica-reposicao" id="dica-reposicao"></p>
+        </div>
+        <div class="campo-agendamento" id="campo-idioma-aula" hidden>
+          <label for="select-idioma-aula">Idioma da aula</label>
+          <select id="select-idioma-aula" class="seletor-idioma-aluno"></select>
         </div>
         <div class="campo-agendamento" id="campo-modalidades-agendamento">
           <label>Modalidade</label>
