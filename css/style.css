@@ -189,6 +189,15 @@ textarea { resize: vertical; }
   to { opacity: 1; transform: none; }
 }
 
+.logo-app-topo {
+  display: block;
+  width: 220px;
+  max-width: 100%;
+  height: auto;
+  margin-bottom: 1.6rem;
+  animation: logoEntrada 0.9s ease-out forwards;
+}
+
 /* ============================================================
    TELA DE LOGIN / CADASTRO (index.html)
    ============================================================ */
