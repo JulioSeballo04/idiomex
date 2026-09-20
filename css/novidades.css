@@ -569,6 +569,8 @@
 .linha-periodo-config {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 0.4rem;
   gap: 0.6rem;
   font-size: 0.85rem;
   color: var(--ink-soft, #666);
@@ -578,10 +580,14 @@
   align-items: center;
   gap: 0.4em;
   min-width: 70px;
+  flex-shrink: 0;
   font-weight: 500;
   color: inherit;
 }
 .linha-periodo-config input[type="time"] {
+  flex: 1 1 110px;
+  min-width: 0;
+  max-width: 140px;
   padding: 0.3em 0.4em;
   border-radius: 6px;
   border: 1px solid var(--borda, #ddd);
