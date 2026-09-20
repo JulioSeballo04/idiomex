@@ -224,7 +224,7 @@
    escuro sobre fundo quase branco), mas no tema noturno --borda é só um
    pouco mais claro que o próprio fundo — o número ficava quase invisível
    (contraste ~1.5:1). --ink-soft com opacidade reduzida funciona nos dois. */
-.cal-day.is-past { color: var(--ink-soft); opacity: 0.55; background: var(--bg); }
+.cal-day.is-past { color: var(--ink-soft); opacity: 0.7; background: var(--bg); }
 .cal-day.is-off { background: rgba(193, 39, 45, 0.07); border-color: transparent; }
 .cal-day.is-available {
   cursor: pointer;
