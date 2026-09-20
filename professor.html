@@ -23,6 +23,11 @@
 <div class="app-shell">
   <nav class="indice-letras">
     <img class="marca" src="assets/apple-touch-icon.png" alt="Idiomex">
+    <div class="nav-lateral-professor">
+      <button class="nav-lateral-item ativa" id="navlat-agenda" onclick="mostrarAbaProfessor('agenda')" title="Agenda">📅</button>
+      <button class="nav-lateral-item" id="navlat-alunos" onclick="mostrarAbaProfessor('alunos')" title="Meus Alunos">👥</button>
+      <button class="nav-lateral-item" id="navlat-config" onclick="mostrarAbaProfessor('config')" title="Configurações">⚙️</button>
+    </div>
   </nav>
 
   <main class="conteudo">
@@ -128,6 +133,7 @@ function mostrarAbaProfessor(aba) {
   ["agenda", "alunos", "config"].forEach(function (nome) {
     document.getElementById("painel-aba-" + nome).classList.toggle("oculto", nome !== aba);
     document.getElementById("btn-aba-" + nome).classList.toggle("ativa", nome === aba);
+    document.getElementById("navlat-" + nome).classList.toggle("ativa", nome === aba);
   });
 }
 </script>
