@@ -43,30 +43,46 @@
       </div>
     </div>
 
-    <div class="codigo-professor">
-      Seu código: <strong id="codigo-professor">...</strong>
-      <button class="btn btn-secundario" style="padding:0.3em 0.8em; font-size:0.8rem;" onclick="copiarCodigo()">Copiar</button>
-      <span class="status-msg" id="status-copiar"></span>
-    </div>
-    <p style="color:var(--ink-soft); font-size:0.9rem; margin-top:-1rem; margin-bottom:1.6rem;">
-      Compartilhe esse código com seus alunos — eles usam ele para vincular a conta ao seu perfil.
-    </p>
-
-    <div class="idioma-professor">
-      <span class="rotulo-idiomas-professor">Idiomas que você ensina</span>
-      <div id="grupo-idiomas-professor" class="grupo-idiomas"></div>
-      <span class="status-msg" id="status-idioma"></span>
-    </div>
-    <p class="dica-idioma-professor">Seus alunos escolhem, entre esses idiomas, qual estudar — cada idioma tem o próprio vocabulário. Desmarcar um idioma não apaga palavras já cadastradas.</p>
-
     <h2 style="font-size:1.1rem;">Visão geral da turma</h2>
     <div id="visao-geral-turma"></div>
 
-    <h2 style="font-size:1.1rem;">Minha Agenda</h2>
-    <div class="agenda-topo">
-      <button class="btn btn-secundario" onclick="abrirConfigAgenda()">⚙️ Configurar disponibilidade</button>
+    <div class="abas-tipo">
+      <button class="aba-tipo ativa" id="btn-aba-agenda" onclick="mostrarAbaProfessor('agenda')">Agenda</button>
+      <button class="aba-tipo" id="btn-aba-alunos" onclick="mostrarAbaProfessor('alunos')">Meus Alunos</button>
+      <button class="aba-tipo" id="btn-aba-config" onclick="mostrarAbaProfessor('config')">Configurações</button>
     </div>
-    <div id="calendario-professor" style="margin-bottom:2rem;"></div>
+
+    <!-- AGENDA -->
+    <div id="painel-aba-agenda">
+      <div class="agenda-topo">
+        <button class="btn btn-secundario" onclick="abrirConfigAgenda()">⚙️ Configurar disponibilidade</button>
+      </div>
+      <div id="calendario-professor" style="margin-bottom:2rem;"></div>
+    </div>
+
+    <!-- MEUS ALUNOS -->
+    <div id="painel-aba-alunos" class="oculto">
+      <div class="lista-alunos" id="lista-alunos"></div>
+    </div>
+
+    <!-- CONFIGURAÇÕES -->
+    <div id="painel-aba-config" class="oculto">
+      <div class="codigo-professor">
+        Seu código: <strong id="codigo-professor">...</strong>
+        <button class="btn btn-secundario" style="padding:0.3em 0.8em; font-size:0.8rem;" onclick="copiarCodigo()">Copiar</button>
+        <span class="status-msg" id="status-copiar"></span>
+      </div>
+      <p style="color:var(--ink-soft); font-size:0.9rem; margin-top:-1rem; margin-bottom:1.6rem;">
+        Compartilhe esse código com seus alunos — eles usam ele para vincular a conta ao seu perfil.
+      </p>
+
+      <div class="idioma-professor">
+        <span class="rotulo-idiomas-professor">Idiomas que você ensina</span>
+        <div id="grupo-idiomas-professor" class="grupo-idiomas"></div>
+        <span class="status-msg" id="status-idioma"></span>
+      </div>
+      <p class="dica-idioma-professor">Seus alunos escolhem, entre esses idiomas, qual estudar — cada idioma tem o próprio vocabulário. Desmarcar um idioma não apaga palavras já cadastradas.</p>
+    </div>
 
     <div id="modal-config-agenda" class="modal-oculto">
       <div class="modal-conteudo modal-largo">
@@ -96,9 +112,6 @@
         <button class="btn btn-primario" style="margin-top:1rem;" onclick="salvarConfigAgenda()">Salvar disponibilidade</button>
       </div>
     </div>
-
-    <h2 style="font-size:1.1rem;">Seus alunos</h2>
-    <div class="lista-alunos" id="lista-alunos"></div>
   </main>
 </div>
 
@@ -110,5 +123,13 @@
 <script src="js/auth.js"></script>
 <script src="js/tema.js"></script>
 <script src="js/professor.js"></script>
+<script>
+function mostrarAbaProfessor(aba) {
+  ["agenda", "alunos", "config"].forEach(function (nome) {
+    document.getElementById("painel-aba-" + nome).classList.toggle("oculto", nome !== aba);
+    document.getElementById("btn-aba-" + nome).classList.toggle("ativa", nome === aba);
+  });
+}
+</script>
 </body>
 </html>
