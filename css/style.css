@@ -175,11 +175,17 @@ textarea { resize: vertical; }
   color: var(--ink-soft);
 }
 
-.logo-topo {
+.logo-hero {
   display: block;
-  height: 28px;
-  width: auto;
-  margin-bottom: 0.4rem;
+  width: min(420px, 90%);
+  height: auto;
+  margin-bottom: 1.6rem;
+  animation: logoEntrada 0.9s ease-out forwards;
+}
+
+@keyframes logoEntrada {
+  from { opacity: 0; transform: translateY(-16px) scale(0.96); }
+  to { opacity: 1; transform: none; }
 }
 
 /* ============================================================
@@ -189,6 +195,7 @@ textarea { resize: vertical; }
 .tela-auth {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 2rem 1rem;
