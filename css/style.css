@@ -382,6 +382,14 @@ textarea { resize: vertical; }
   .letra-tab { width: 36px; height: 36px; flex-shrink: 0; }
 
   .conteudo { padding: 1.4rem 1.1rem 3rem; }
+
+  /* Alvos de toque maiores no mobile — botões pequenos demais são
+     difíceis de acertar com o dedo (recomendação usual: ~40-44px). */
+  .btn { padding: 1em 1.1em; }
+  .btn-tema { width: 44px; height: 44px; }
+  .cal-nav button { width: 40px; height: 40px; }
+  .btn-fechar-modal { padding: 0.5em 0.6em; font-size: 1.3rem; }
+  .cal-day { min-height: 38px; }
 }
 
 /* Área de conteúdo */
