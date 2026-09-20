@@ -1,7 +1,7 @@
 # Idiomex
 
 Plataforma de **professores e alunos de idiomas** (inglês, espanhol,
-italiano, francês, japonês e mandarim), com contas de **professor** e
+italiano, francês, japonês, mandarim, alemão e coreano), com contas de **professor** e
 **aluno**. O professor escolhe o idioma que ensina; os alunos vinculados
 pelo código adicionam palavras nesse idioma, recebem a tradução e frases
 de exemplo geradas por IA. O professor acompanha o vocabulário de cada
