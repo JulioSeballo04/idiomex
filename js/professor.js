@@ -311,16 +311,18 @@ function renderizarVisaoGeralTurma() {
     <div class="visao-geral-cartoes">
       <div class="cartao-metrica">
         <div class="metrica-numero">${alunosCache.length}</div>
-        <div class="metrica-label">aluno(s) vinculado(s)</div>
+        <div class="metrica-label">${alunosCache.length === 1 ? "aluno vinculado" : "alunos vinculados"}</div>
       </div>
       <div class="cartao-metrica">
         <div class="metrica-numero">${totalPalavras}</div>
-        <div class="metrica-label">palavras no total</div>
+        <div class="metrica-label">${totalPalavras === 1 ? "palavra no total" : "palavras no total"}</div>
       </div>
-      <div class="cartao-metrica">
-        <div class="metrica-numero metrica-numero-nome">${maisAtivo && maisAtivo.qtd > 0 ? escapeHtml(maisAtivo.nome) : "—"}</div>
-        <div class="metrica-label">aluno mais ativo</div>
-      </div>
+      ${alunosCache.length > 1 ? `
+        <div class="cartao-metrica">
+          <div class="metrica-numero metrica-numero-nome">${maisAtivo && maisAtivo.qtd > 0 ? escapeHtml(maisAtivo.nome) : "—"}</div>
+          <div class="metrica-label">aluno mais ativo</div>
+        </div>
+      ` : ""}
     </div>
     ${inativos.length > 0 ? `
       <div class="aviso-inativos">
