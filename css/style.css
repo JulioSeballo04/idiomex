@@ -175,6 +175,13 @@ textarea { resize: vertical; }
   color: var(--ink-soft);
 }
 
+.logo-topo {
+  display: block;
+  height: 28px;
+  width: auto;
+  margin-bottom: 0.4rem;
+}
+
 /* ============================================================
    TELA DE LOGIN / CADASTRO (index.html)
    ============================================================ */
