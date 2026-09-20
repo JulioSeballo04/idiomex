@@ -291,9 +291,10 @@ textarea { resize: vertical; }
 }
 
 .marca {
-  font-family: var(--fonte-titulo);
-  font-size: 1.5rem;
-  color: #fff;
+  display: block;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   margin-bottom: 0.2rem;
 }
 
