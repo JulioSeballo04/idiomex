@@ -36,7 +36,9 @@ const IDIOMAS = {
   it: { nome: "Italiano", voz: "it-IT", exemplo: "mela / maçã",      usaEspacos: true,  cor: "#2F9E6B" },
   fr: { nome: "Francês",  voz: "fr-FR", exemplo: "pomme / maçã",     usaEspacos: true,  cor: "#8A5FD0" },
   ja: { nome: "Japonês",  voz: "ja-JP", exemplo: "りんご / maçã",     usaEspacos: false, cor: "#D64A6E" },
-  zh: { nome: "Mandarim", voz: "zh-CN", exemplo: "苹果 / maçã",       usaEspacos: false, cor: "#A67C00" }
+  zh: { nome: "Mandarim", voz: "zh-CN", exemplo: "苹果 / maçã",       usaEspacos: false, cor: "#A67C00" },
+  de: { nome: "Alemão",   voz: "de-DE", exemplo: "Apfel / maçã",     usaEspacos: true,  cor: "#B0313F" },
+  ko: { nome: "Coreano",  voz: "ko-KR", exemplo: "사과 / maçã",       usaEspacos: true,  cor: "#0047A0" }
 };
 const IDIOMA_PADRAO = "en";
 
@@ -48,7 +50,9 @@ const BANDEIRAS = {
   it: '<rect width="20" height="40" fill="#009246"/><rect x="20" width="20" height="40" fill="#fff"/><rect x="40" width="20" height="40" fill="#CE2B37"/>',
   fr: '<rect width="20" height="40" fill="#0055A4"/><rect x="20" width="20" height="40" fill="#fff"/><rect x="40" width="20" height="40" fill="#EF4135"/>',
   ja: '<rect width="60" height="40" fill="#fff"/><circle cx="30" cy="20" r="12" fill="#BC002D"/>',
-  zh: '<rect width="60" height="40" fill="#DE2910"/><polygon points="12,6 14.6,13.6 22.6,13.7 16.2,18.5 18.6,26.2 12,21.5 5.4,26.2 7.8,18.5 1.4,13.7 9.4,13.6" fill="#FFDE00"/>'
+  zh: '<rect width="60" height="40" fill="#DE2910"/><polygon points="12,6 14.6,13.6 22.6,13.7 16.2,18.5 18.6,26.2 12,21.5 5.4,26.2 7.8,18.5 1.4,13.7 9.4,13.6" fill="#FFDE00"/>',
+  de: '<rect width="60" height="40" fill="#000"/><rect y="13.33" width="60" height="13.34" fill="#DD0000"/><rect y="26.67" width="60" height="13.33" fill="#FFCE00"/>',
+  ko: '<rect width="60" height="40" fill="#fff"/><g transform="translate(30,20)"><path d="M0,-10 A5,5 0 0,1 0,0 A5,5 0 0,0 0,10 A10,10 0 0,1 0,-10 Z" fill="#CD2E3A"/><path d="M0,10 A5,5 0 0,1 0,0 A5,5 0 0,0 0,-10 A10,10 0 0,1 0,10 Z" fill="#0047A0"/></g>'
 };
 
 function bandeiraSvg(idioma, largura) {
@@ -64,7 +68,9 @@ const PALETAS_IDIOMA = {
   it: { acento: "#008C45", acentoForte: "#006B35", acentoSecundario: "#CD212A", bg: "#F5F8F3", borda: "#D8E4D2", inkSoft: "#5B6E55" },
   fr: { acento: "#0055A4", acentoForte: "#003F7D", acentoSecundario: "#EF4135", bg: "#F3F6FA", borda: "#D3DEEB", inkSoft: "#566A80" },
   ja: { acento: "#BC002D", acentoForte: "#93001F", acentoSecundario: "#3D4A5C", bg: "#FBF6F6", borda: "#EBD9DA", inkSoft: "#7A6466" },
-  zh: { acento: "#D02510", acentoForte: "#A21C0B", acentoSecundario: "#C98A00", bg: "#FCF5F1", borda: "#EEDCD2", inkSoft: "#7D6558" }
+  zh: { acento: "#D02510", acentoForte: "#A21C0B", acentoSecundario: "#C98A00", bg: "#FCF5F1", borda: "#EEDCD2", inkSoft: "#7D6558" },
+  de: { acento: "#B0313F", acentoForte: "#8A2531", acentoSecundario: "#C9A227", bg: "#FAF3F0", borda: "#EDD9D6", inkSoft: "#7A5C58" },
+  ko: { acento: "#0047A0", acentoForte: "#00397F", acentoSecundario: "#CD2E3A", bg: "#F2F6FB", borda: "#D6E1EE", inkSoft: "#57697F" }
 };
 
 function idiomaValido(id) {
