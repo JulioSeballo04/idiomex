@@ -14,14 +14,50 @@ service cloud.firestore {
         get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.professorId == professorId;
     }
 
+    // Função auxiliar: o código de professor {codigo} existe e aponta pro professor {professorId}
+    function codigoAponta(codigo, professorId) {
+      return codigo is string &&
+        exists(/databases/$(database)/documents/codigosProfessor/$(codigo)) &&
+        get(/databases/$(database)/documents/codigosProfessor/$(codigo)).data.professorId == professorId;
+    }
+
+    // Vínculo do aluno com um professor. Ao gravar um professorId, o aluno precisa
+    // informar em "codigoVinculo" o código desse professor — é a prova de que ele
+    // recebeu o código, sem poder se vincular a qualquer professor pelo console.
+    function vinculoValido(dados) {
+      return dados.get('professorId', null) == null ||
+        codigoAponta(dados.get('codigoVinculo', null), dados.professorId);
+    }
+
+    // Índice "código do professor -> uid do professor". É por aqui que o cadastro
+    // do aluno (e a troca de professor) descobre a quem o código pertence, lendo um
+    // único documento pelo código — sem precisar consultar a coleção "usuarios", o
+    // que antes obrigava a deixar nome e e-mail de TODOS os professores visíveis
+    // pra qualquer conta logada.
+    match /codigosProfessor/{codigo} {
+      // Só leitura direta pelo código (get). Listar a coleção fica proibido, pra
+      // ninguém conseguir baixar todos os códigos de uma vez.
+      allow get: if request.auth != null;
+      allow list: if false;
+
+      // Só o próprio professor cria a entrada do SEU código (o que está gravado no
+      // perfil dele). getAfter() enxerga o perfil mesmo quando ele é criado no mesmo
+      // lote de gravação, como acontece no cadastro. Como não existe "update", um
+      // código que já pertence a alguém nunca pode ser tomado por outra conta.
+      allow create: if request.auth != null &&
+        request.resource.data.professorId == request.auth.uid &&
+        getAfter(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.tipo == "professor" &&
+        getAfter(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.codigoProfessor == codigo;
+
+      // O dono pode apagar a entrada (exclusão da conta do professor)
+      allow delete: if request.auth != null && resource.data.professorId == request.auth.uid;
+    }
+
     match /usuarios/{userId} {
-      // Leitura: o próprio dono, o professor vinculado a esse aluno, OU qualquer
-      // autenticado quando o documento é de um PROFESSOR — isso é necessário para o
-      // fluxo de cadastro do aluno, que consulta a coleção "usuarios" filtrando por
-      // codigoProfessor antes de existir vínculo. Isso ainda expõe nome/e-mail de
-      // professores a qualquer conta autenticada (limitação do modelo client-only);
-      // para eliminar isso por completo, mova a validação do código para uma Cloud
-      // Function que resolve o código sem expor o documento inteiro.
+      // Leitura: o próprio dono, o professor vinculado a esse aluno, ou o aluno
+      // vinculado a esse professor (o aluno lê o perfil do professor pra saber quais
+      // idiomas ele ensina). O cadastro do aluno não precisa mais ler perfis de
+      // professores: ele resolve o código pela coleção "codigosProfessor".
       //
       // O segundo termo usa "resource.data...professorId" direto (não a função
       // ehProfessorDoAluno, que faz um get() no MESMO documento por um caminho
@@ -37,27 +73,30 @@ service cloud.firestore {
       allow read: if request.auth != null && (
         request.auth.uid == userId ||
         resource.data.get('professorId', null) == request.auth.uid ||
-        resource.data.tipo == "professor"
+        souAlunoDesteProfessor(userId)
       );
 
       // Criação: só o próprio usuário, e só com um "tipo" válido — evita que alguém
       // grave um valor arbitrário nesse campo (ex: "admin").
       allow create: if request.auth != null && request.auth.uid == userId &&
-        request.resource.data.tipo in ["aluno", "professor"];
+        request.resource.data.tipo in ["aluno", "professor"] &&
+        vinculoValido(request.resource.data);
 
       // Atualização — duas situações permitidas:
       // 1) o próprio dono, impedido de alterar os campos sensíveis que definem seu
-      //    papel e vínculo (tipo, professorId, codigoProfessor) — sem isso, um aluno
-      //    poderia se autopromover a "professor" ou trocar de professor direto pelo
-      //    console do navegador, sem revalidar o código.
+      //    papel (tipo, codigoProfessor) — sem isso, um aluno poderia se autopromover
+      //    a "professor" pelo console do navegador. O professorId só muda junto com
+      //    um codigoVinculo que aponte pro novo professor (troca de professor com
+      //    código válido), ou pra ficar sem professor.
       // 2) o professor atualmente vinculado ao aluno, mas só pra ZERAR o professorId
       //    (função "Remover aluno" do painel) — todo o resto do perfil do aluno
       //    (nome, e-mail, tipo, codigoProfessor) tem que continuar exatamente igual.
       allow update: if request.auth != null && (
         (request.auth.uid == userId &&
           request.resource.data.tipo == resource.data.tipo &&
-          request.resource.data.get('professorId', null) == resource.data.get('professorId', null) &&
-          request.resource.data.get('codigoProfessor', null) == resource.data.get('codigoProfessor', null)) ||
+          request.resource.data.get('codigoProfessor', null) == resource.data.get('codigoProfessor', null) &&
+          (request.resource.data.get('professorId', null) == resource.data.get('professorId', null) ||
+            vinculoValido(request.resource.data))) ||
 
         (resource.data.get('professorId', null) == request.auth.uid &&
           request.resource.data.get('professorId', null) == null &&
@@ -77,11 +116,13 @@ service cloud.firestore {
         allow write: if request.auth != null && request.auth.uid == userId;
       }
 
-      // Mensagens: o aluno só pode LER. Só o professor vinculado pode ESCREVER (inclui editar/excluir).
+      // Mensagens: o aluno só pode LER (e apagar, ao excluir a própria conta).
+      // Só o professor vinculado pode ESCREVER (inclui editar/excluir).
       match /mensagens/{mensagemId} {
         allow read: if request.auth != null &&
           (request.auth.uid == userId || ehProfessorDoAluno(userId));
         allow create, update, delete: if request.auth != null && ehProfessorDoAluno(userId);
+        allow delete: if request.auth != null && request.auth.uid == userId;
       }
 
       // Anotações pessoais: o aluno lê/escreve. O professor vinculado só pode LER (acompanhamento).

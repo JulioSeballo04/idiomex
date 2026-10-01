@@ -28,8 +28,56 @@ const IDIOMAS = {
   it: "italiano",
   fr: "francês",
   ja: "japonês",
-  zh: "mandarim (chinês simplificado)"
+  zh: "mandarim (chinês simplificado)",
+  de: "alemão",
+  ko: "coreano"
 };
+
+// Chave pública do app web do Firebase (a mesma de js/firebase-config.js — não é
+// segredo). Serve só pra perguntar ao Firebase Auth se o token de login é válido.
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || "AIzaSyCRXSlpf1GTj3VirFel8SOdNwXuniG6el8";
+
+// Limite de pedidos por usuário. Fica na memória de cada instância da function,
+// então é uma barreira contra abuso (scripts disparando pedidos), não uma cota
+// exata — a Vercel pode rodar mais de uma instância ao mesmo tempo.
+const LIMITE_PEDIDOS = 30;
+const JANELA_LIMITE_MS = 10 * 60 * 1000; // 10 minutos
+const pedidosPorUsuario = new Map(); // uid -> [instantes dos pedidos recentes]
+
+function excedeuLimite(uid) {
+  const agora = Date.now();
+  const recentes = (pedidosPorUsuario.get(uid) || []).filter((t) => agora - t < JANELA_LIMITE_MS);
+  if (recentes.length >= LIMITE_PEDIDOS) {
+    pedidosPorUsuario.set(uid, recentes);
+    return true;
+  }
+  recentes.push(agora);
+  pedidosPorUsuario.set(uid, recentes);
+  return false;
+}
+
+// Confere o token de login (Firebase ID token) mandado pelo app e devolve o uid,
+// ou null se o token for inválido/expirado. Usa a API REST do Firebase Auth, que
+// valida o token contra este projeto — sem precisar de chave de serviço.
+async function uidDoToken(idToken) {
+  if (!idToken) return null;
+  try {
+    const resposta = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken })
+      }
+    );
+    if (!resposta.ok) return null;
+    const dados = await resposta.json();
+    return dados?.users?.[0]?.localId || null;
+  } catch (e) {
+    console.error("Falha ao validar o login:", e);
+    return null;
+  }
+}
 
 const TAMANHO_MAXIMO_CAMPO = 60; // caracteres — suficiente para qualquer palavra/expressão real
 
@@ -39,11 +87,22 @@ export default async function handler(req, res) {
     res.setHeader("Access-Control-Allow-Origin", origem);
   }
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") {
     return res.status(405).json({ erro: "Método não permitido." });
+  }
+
+  // Só usuários logados no app podem gerar frases — sem isso, qualquer script
+  // (que pode mandar o cabeçalho Origin que quiser) gastaria a cota da IA.
+  const autorizacao = req.headers.authorization || "";
+  const uid = await uidDoToken(autorizacao.startsWith("Bearer ") ? autorizacao.slice(7) : "");
+  if (!uid) {
+    return res.status(401).json({ erro: "Faça login para gerar frases." });
+  }
+  if (excedeuLimite(uid)) {
+    return res.status(429).json({ frases: [], aviso: "Muitos pedidos seguidos. Espere alguns minutos e tente de novo." });
   }
 
   const { palavra, traducao, idioma } = req.body || {};

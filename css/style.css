@@ -300,6 +300,35 @@ html[data-tema="noturno"] img.logo-tema-noturno { display: block; }
   color: var(--ink);
 }
 
+.link-esqueci-senha {
+  display: block;
+  margin: 0.8rem auto 0;
+  padding: 0.2rem;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--acento-forte);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ---------- Conta: troca de professor e exclusão ---------- */
+.secao-conta {
+  margin-top: 1.6rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--borda);
+}
+.secao-conta h4 { margin: 0 0 0.3rem; font-size: 0.95rem; }
+.secao-perigo h4 { color: #B3412E; }
+.btn-perigo {
+  background: #B3412E;
+  border-color: #B3412E;
+  color: #fff;
+}
+.btn-perigo:hover { background: #963523; border-color: #963523; }
+html[data-tema="noturno"] .secao-perigo h4 { color: #F08A75; }
+
 .rodape-auth {
   margin-top: 1.2rem;
   font-size: 0.8rem;

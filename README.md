@@ -65,9 +65,12 @@ firebase deploy
 ## Como o vínculo professor-aluno funciona
 
 - Ao criar conta como **professor**, o sistema gera automaticamente um
-  código único (ex: `PROF-8X2K`), visível no painel dele.
-- Ao criar conta como **aluno**, é preciso digitar esse código — isso
-  grava `professorId` no perfil do aluno.
+  código único (ex: `PROF-8X2K`), visível no painel dele, e registra esse
+  código na coleção `codigosProfessor`.
+- Ao criar conta como **aluno**, é preciso digitar esse código — o app
+  procura o professor em `codigosProfessor` e grava `professorId` (e o
+  `codigoVinculo` usado) no perfil do aluno. O aluno pode trocar de
+  professor depois, em "Meu perfil", digitando o código do novo professor.
 - As regras do Firestore (`firestore.rules`) usam esse campo para
   liberar a leitura do vocabulário do aluno e das mensagens apenas
   para o professor vinculado.
@@ -79,6 +82,10 @@ usuarios/{uid}
   nome, email, tipo ("professor" | "aluno")
   codigoProfessor        -> só em professores
   professorId            -> só em alunos, aponta para o uid do professor
+  codigoVinculo          -> só em alunos, código usado para o vínculo
+
+codigosProfessor/{codigo}
+  professorId            -> uid do professor dono do código
 
 usuarios/{uid}/palavras/{id}
   palavraEn, traducaoPt, fraseExemplo, criadoEm
