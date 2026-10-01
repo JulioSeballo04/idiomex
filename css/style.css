@@ -208,6 +208,33 @@ input[type="radio"] {
   animation: logoEntrada 0.9s ease-out forwards;
 }
 
+/* Slogan logo abaixo do logo (texto, pra acompanhar o tema) */
+.slogan-logo {
+  margin: -0.9rem 0 1.4rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #1E9E83;
+  text-align: center;
+  animation: logoEntrada 0.9s ease-out forwards;
+}
+
+.slogan-hero {
+  max-width: 320px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.slogan-app-topo {
+  width: 220px;
+  max-width: 100%;
+  margin-top: -1.2rem;
+  margin-bottom: 1.6rem;
+  font-size: 0.85rem;
+}
+
+html[data-tema="noturno"] .slogan-logo { color: #5CCFB0; }
+
 /* No tema noturno, o "Idiomex" azul-escuro do logo some no fundo escuro:
    troca pela versão com o texto claro */
 img.logo-tema-noturno { display: none; }
