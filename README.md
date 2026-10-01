@@ -62,6 +62,15 @@ firebase init hosting   # escolha "usar pasta atual" como public
 firebase deploy
 ```
 
+## App no celular (PWA)
+
+O Idiomex pode ser instalado como app: no Android (Chrome), toque em
+**"Instalar app"** ou no menu ⋮ → **"Adicionar à tela inicial"**; no iPhone
+(Safari), toque em **Compartilhar** → **"Adicionar à Tela de Início"**. O
+`manifest.webmanifest` define nome, cores e ícones, e o `sw.js` guarda as
+telas do site para abrirem mesmo sem internet (os dados continuam vindo
+do Firebase).
+
 ## Como o vínculo professor-aluno funciona
 
 - Ao criar conta como **professor**, o sistema gera automaticamente um
