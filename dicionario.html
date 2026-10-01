@@ -95,6 +95,28 @@
         </div>
         <button class="btn btn-primario" style="margin-top:0.4rem;" onclick="salvarPerfil()">Salvar perfil</button>
         <p class="status-msg" id="status-perfil"></p>
+
+        <div class="secao-conta">
+          <h4>Professor</h4>
+          <p class="dica-perfil" id="dica-vinculo"></p>
+          <div class="campo-perfil">
+            <label for="perfil-codigo">Código do novo professor</label>
+            <input type="text" id="perfil-codigo" placeholder="Ex: PROF-8X2K">
+          </div>
+          <button class="btn btn-secundario" onclick="trocarDeProfessor()">Vincular a este professor</button>
+          <p class="status-msg" id="status-vinculo"></p>
+        </div>
+
+        <div class="secao-conta secao-perigo">
+          <h4>Excluir minha conta</h4>
+          <p class="dica-perfil">Apaga sua conta, seu vocabulário, suas anotações e os recados recebidos, e cancela suas próximas aulas. Não pode ser desfeito.</p>
+          <div class="campo-perfil">
+            <label for="excluir-senha-aluno">Sua senha</label>
+            <input type="password" id="excluir-senha-aluno" autocomplete="current-password">
+          </div>
+          <button class="btn btn-perigo" onclick="confirmarExclusaoDaConta('excluir-senha-aluno', 'status-excluir-aluno')">Excluir minha conta</button>
+          <p class="status-msg" id="status-excluir-aluno"></p>
+        </div>
       </div>
     </div>
 

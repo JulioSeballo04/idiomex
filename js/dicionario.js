@@ -426,9 +426,11 @@ async function adicionarPalavra(palavraEn, traducaoPt, notaPessoal) {
 
   // Pede as 5 frases de exemplo à function do Vercel (a chave da IA fica só lá no servidor)
   try {
+    // O token de login prova pro servidor que o pedido vem de um usuário do app
+    const token = await user.getIdToken();
     const resposta = await fetch(AI_ENDPOINT, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
       body: JSON.stringify({ palavra: palavraEn.trim(), traducao: traducaoPt.trim(), idioma: idiomaDoAluno })
     });
     const dados = await resposta.json();
@@ -679,6 +681,11 @@ function abrirPerfil() {
   document.getElementById("perfil-email").value = perfilAlunoAtual.emailContato || perfilAlunoAtual.email || "";
   document.getElementById("perfil-telefone").value = perfilAlunoAtual.telefone || "";
   document.getElementById("status-perfil").textContent = "";
+  document.getElementById("dica-vinculo").textContent = professorIdDoAluno
+    ? "Mudou de professor? Digite o código dele para vincular sua conta. Seu vocabulário continua com você."
+    : "Sua conta não está vinculada a nenhum professor. Digite o código do seu professor para se vincular.";
+  document.getElementById("perfil-codigo").value = "";
+  document.getElementById("status-vinculo").textContent = "";
   document.getElementById("modal-perfil").classList.remove("modal-oculto");
 }
 
@@ -708,6 +715,37 @@ async function salvarPerfil() {
   } catch (e) {
     console.error(e);
     statusEl.textContent = "Não foi possível salvar agora. Tente novamente.";
+  }
+}
+
+// Vincula o aluno a outro professor (ou de novo, depois de ter sido removido da turma)
+async function trocarDeProfessor() {
+  const user = auth.currentUser;
+  if (!user) return;
+  const statusEl = document.getElementById("status-vinculo");
+  const codigo = normalizarCodigo(document.getElementById("perfil-codigo").value);
+  if (!codigo) {
+    statusEl.textContent = "Digite o código do professor.";
+    return;
+  }
+
+  statusEl.textContent = "Verificando código...";
+  try {
+    const professorId = await professorDoCodigo(codigo);
+    if (!professorId) {
+      statusEl.textContent = "Código de professor inválido. Confira com seu professor.";
+      return;
+    }
+    if (professorId === professorIdDoAluno) {
+      statusEl.textContent = "Você já está vinculado a esse professor.";
+      return;
+    }
+    await db.collection("usuarios").doc(user.uid).update({ professorId, codigoVinculo: codigo });
+    statusEl.textContent = "Pronto! Carregando seu novo professor...";
+    setTimeout(() => window.location.reload(), 800);
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = "Não foi possível vincular agora. Tente novamente.";
   }
 }
 

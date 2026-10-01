@@ -89,6 +89,17 @@
         <span class="status-msg" id="status-idioma"></span>
       </div>
       <p class="dica-idioma-professor">Seus alunos escolhem, entre esses idiomas, qual estudar — cada idioma tem o próprio vocabulário. Desmarcar um idioma não apaga palavras já cadastradas.</p>
+
+      <div class="secao-conta secao-perigo">
+        <h4>Excluir minha conta</h4>
+        <p class="dica-perfil">Apaga sua conta, sua agenda e suas anotações, e desvincula seus alunos (eles continuam com as contas e o vocabulário deles). Não pode ser desfeito.</p>
+        <div class="campo-perfil">
+          <label for="excluir-senha-professor">Sua senha</label>
+          <input type="password" id="excluir-senha-professor" autocomplete="current-password">
+        </div>
+        <button class="btn btn-perigo" onclick="confirmarExclusaoDaConta('excluir-senha-professor', 'status-excluir-professor')">Excluir minha conta</button>
+        <p class="status-msg" id="status-excluir-professor"></p>
+      </div>
     </div>
 
     <div id="modal-config-agenda" class="modal-oculto">

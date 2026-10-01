@@ -50,6 +50,7 @@ auth.onAuthStateChanged(async (user) => {
   const perfil = (await db.collection("usuarios").doc(user.uid).get()).data();
   document.getElementById("nome-usuario").textContent = perfil.nome;
   document.getElementById("codigo-professor").textContent = perfil.codigoProfessor;
+  garantirCodigoNoIndice(user.uid, perfil.codigoProfessor);
   prepararSeletorIdioma(perfil);
 
   const hoje = new Date();
@@ -62,6 +63,24 @@ auth.onAuthStateChanged(async (user) => {
   escutarAnotacoesAgenda(user.uid);
   montarCalendarioProfessor();
 });
+
+// Contas criadas antes do índice "codigosProfessor" ainda não têm o código lá — e,
+// sem ele, novos alunos não conseguem usar o código. Cria a entrada na primeira
+// vez que o professor abre o painel.
+async function garantirCodigoNoIndice(uid, codigo) {
+  if (!codigo) return;
+  try {
+    const ref = db.collection("codigosProfessor").doc(codigo);
+    const doc = await ref.get();
+    if (!doc.exists) {
+      await ref.set({ professorId: uid });
+    } else if (doc.data().professorId !== uid) {
+      console.error("O código", codigo, "está registrado para outra conta.");
+    }
+  } catch (e) {
+    console.warn("Não foi possível registrar o código do professor:", e);
+  }
+}
 
 // Idiomas que o professor ensina (guardados em usuarios/{uid}.idiomas; contas antigas,
 // com o campo único "idioma" ou sem nada, aparecem só com esse idioma / Inglês)
