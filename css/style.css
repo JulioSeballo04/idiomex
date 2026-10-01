@@ -208,6 +208,12 @@ input[type="radio"] {
   animation: logoEntrada 0.9s ease-out forwards;
 }
 
+/* No tema noturno, o "Idiomex" azul-escuro do logo some no fundo escuro:
+   troca pela versão com o texto claro */
+img.logo-tema-noturno { display: none; }
+html[data-tema="noturno"] img.logo-tema-claro { display: none; }
+html[data-tema="noturno"] img.logo-tema-noturno { display: block; }
+
 /* ============================================================
    TELA DE LOGIN / CADASTRO (index.html)
    ============================================================ */
