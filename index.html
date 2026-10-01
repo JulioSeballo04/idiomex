@@ -15,6 +15,13 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="assets/favicon-192.png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#5F8567">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Idiomex">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<script src="js/pwa.js" defer></script>
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/novidades.css">
 </head>
@@ -90,6 +97,18 @@
 <script src="js/util.js"></script>
 <script src="js/auth.js"></script>
 <script>
+// Quem já está logado (ex: abrindo o app instalado no celular) vai direto pro seu painel.
+// Durante o cadastro o perfil ainda não existe nesse instante — aí não faz nada, e o
+// próprio cadastro redireciona quando terminar.
+auth.onAuthStateChanged(async function (user) {
+  if (!user) return;
+  try {
+    const perfil = await db.collection('usuarios').doc(user.uid).get();
+    if (perfil.exists) redirecionarPorTipo(perfil.data().tipo);
+  } catch (e) {
+    console.warn('Não foi possível abrir o painel automaticamente:', e);
+  }
+});
 function mostrarAba(aba) {
   const ehLogin = aba === 'login';
   document.getElementById('form-login').classList.toggle('oculto', !ehLogin);
