@@ -133,6 +133,8 @@ async function diagnostico(req, res) {
   return res.status(200).json(resultado);
 }
 
+const REGEX_TRADUCOES = /^TRADU[ÇC][ÕO]ES?\s*:\s*/i;
+
 const TAMANHO_MAXIMO_CAMPO = 60; // caracteres — suficiente para qualquer palavra/expressão real
 
 export default async function handler(req, res) {
@@ -182,7 +184,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const prompt = `Crie exatamente 5 frases curtas e simples em ${nomeIdioma} (nível iniciante/intermediário), cada uma usando a palavra "${palavra}"${traducao ? ` (que significa "${traducao}" em português)` : ""}. Use a palavra exatamente como foi escrita, sem trocar por sinônimos. Para cada frase, forneça também a tradução dela em português. Responda APENAS com as 5 linhas, uma por frase, no formato exato: frase em ${nomeIdioma} | tradução em português. Sem numeração, sem aspas, sem explicações extras.`;
+    // A primeira linha traz as traduções corretas da palavra: o app compara com a
+    // tradução que o aluno digitou e avisa quando ela não bate (ex: "fees" = "juros").
+    const prompt = `Você ajuda um aluno brasileiro a estudar ${nomeIdioma}. A palavra é "${palavra}"${traducao ? ` e o aluno anotou a tradução "${traducao}" (pode estar errada)` : ""}.
+Responda APENAS com 6 linhas, sem numeração, sem aspas e sem explicações:
+- Linha 1: TRADUÇÕES: até 3 traduções corretas e usuais da palavra em português, separadas por vírgula.
+- Linhas 2 a 6: 5 frases curtas, simples e naturais em ${nomeIdioma} (nível iniciante/intermediário), cada uma usando a palavra exatamente como foi escrita, no sentido correto dela, no formato: frase em ${nomeIdioma} | tradução natural em português.`;
 
     // Tenta os modelos em ordem. Passa pro próximo se o modelo não existir (404),
     // estiver sem cota (429), sobrecarregado (5xx) ou responder vazio — modelos mais
@@ -231,11 +238,18 @@ export default async function handler(req, res) {
       return res.status(200).json({ frases: [], aviso: ultimoErro || "IA não retornou frases desta vez." });
     }
 
-    // Quebra a resposta em linhas e separa frase/tradução pelo "|"
-    const frases = texto
+    // Quebra a resposta em linhas: a linha "TRADUÇÕES:" vira a lista de traduções,
+    // as demais são "frase | tradução"
+    const linhas = texto
       .split("\n")
-      .map((linha) => linha.replace(/^[\s\-•\d.)]+/, "").trim())
-      .filter((linha) => linha.length > 0)
+      .map((linha) => linha.replace(/\*\*/g, "").replace(/^[\s\-•\d.)]+/, "").trim())
+      .filter((linha) => linha.length > 0);
+    const linhaTraducoes = linhas.find((linha) => REGEX_TRADUCOES.test(linha));
+    const traducoes = linhaTraducoes
+      ? linhaTraducoes.replace(REGEX_TRADUCOES, "").split(/[,;]/).map((t) => t.trim().replace(/^"|"$/g, "")).filter(Boolean).slice(0, 3)
+      : [];
+    const frases = linhas
+      .filter((linha) => linha !== linhaTraducoes)
       .map((linha) => {
         const partes = linha.split("|");
         return {
@@ -246,7 +260,7 @@ export default async function handler(req, res) {
       .filter((item) => item.en.length > 0)
       .slice(0, 5);
 
-    return res.status(200).json({ frases });
+    return res.status(200).json({ frases, traducoes });
   } catch (erro) {
     console.error(erro);
     return res.status(500).json({ erro: "Falha ao gerar frase de exemplo." });

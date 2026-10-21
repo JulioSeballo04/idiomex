@@ -118,6 +118,41 @@ function dataDaqui(dias) {
     esperar(!(await aluno.$('textarea[id^="edicao-nota-"]')), 'editor continuou aberto');
   });
 
+  await caso('tradução errada: a IA avisa e um clique corrige ("fees" ≠ "juros")', async () => {
+    await aluno.fill('#input-palavra-en', 'fees'); await aluno.fill('#input-palavra-pt', 'Juros');
+    await aluno.click('.formulario-palavra button[type=submit]');
+    await aluno.click('.letra-tab:has-text("F")');
+    await aluno.waitForSelector('.aviso-traducao:has-text("taxas, tarifas")', { timeout: 8000 });
+    await aluno.click('.btn-usar-traducao:has-text("taxas")');
+    await aluno.waitForFunction(() => /taxas/.test(document.querySelector('.cartao-palavra .palavra-pt').textContent), null, { timeout: 5000 });
+    esperar(!(await aluno.$('.aviso-traducao')), 'aviso continuou depois de corrigir');
+  });
+
+  await caso('tradução certa não mostra aviso', async () => {
+    await aluno.click('.letra-tab:has-text("A")');
+    await aluno.waitForSelector('.cartao-palavra .frase-exemplo:has-text("apple")');
+    esperar(!(await aluno.$('.aviso-traducao')), 'aviso apareceu para "apple = maçã"');
+  });
+
+  await caso('corrigir a tradução pelo ✎', async () => {
+    aluno.respostaPrompt = 'maçã vermelha';
+    await aluno.click('.cartao-palavra .btn-editar-traducao');
+    await aluno.waitForSelector('.cartao-palavra .palavra-pt:has-text("maçã vermelha")', { timeout: 5000 });
+    aluno.respostaPrompt = undefined;
+  });
+
+  await caso('palavra antiga (frases sem tradução) pode gerar frases já traduzidas', async () => {
+    await aluno.evaluate(async () => {
+      await db.collection('usuarios').doc(auth.currentUser.uid).collection('palavras').add({
+        palavraEn: 'fear', traducaoPt: 'medo', idioma: 'en', criadoEm: firebase.firestore.FieldValue.serverTimestamp(),
+        frasesExemplo: ['I have a fear of heights.', 'Do not let fear control you.'] });
+    });
+    await aluno.click('.letra-tab:has-text("F")');
+    await aluno.click('button:has-text("Gerar frases com tradução")');
+    await aluno.waitForSelector('.frase-exemplo:has-text("I like the fear")', { timeout: 8000 });
+    esperar(await aluno.$('button:has-text("Ver tradução")'), 'frases novas sem tradução');
+  });
+
   await caso('quiz abre com 2 palavras e a frase tem a lacuna', async () => {
     await aluno.fill('#input-palavra-en', 'dog'); await aluno.fill('#input-palavra-pt', 'cachorro');
     await aluno.click('.formulario-palavra button[type=submit]');

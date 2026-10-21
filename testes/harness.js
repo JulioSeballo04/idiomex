@@ -8,6 +8,9 @@ const RAIZ = path.join(__dirname, '..');
 const PORTA = 8765;
 const SITE = `http://localhost:${PORTA}`;
 // Mesma versão do Firebase que as páginas carregam do CDN (instalada como "firebase-site")
+// Traduções "corretas" que a IA simulada devolve (as demais palavras: a do aluno)
+const TRADUCOES_SIMULADAS = { fees: ['taxas', 'tarifas'] };
+
 const FB = path.join(__dirname, 'node_modules/firebase-site');
 
 // Servidor de arquivos estáticos do site (sem dependências)
@@ -51,7 +54,8 @@ async function novoContexto(browser, opts = {}) {
     if (ctx.iaFalha) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ frases: [], aviso: 'falhou' }) });
     const p = corpo.palavra;
     r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ frases: [
-      { en: `I like the ${p} a lot.`, pt: 'Eu gosto muito.' }, { en: `This ${p} is new.`, pt: 'Isso é novo.' }] }) });
+      { en: `I like the ${p} a lot.`, pt: 'Eu gosto muito.' }, { en: `This ${p} is new.`, pt: 'Isso é novo.' }],
+      traducoes: (TRADUCOES_SIMULADAS[p.toLowerCase()] || [corpo.traducao]) }) });
   });
   // Não deixa o service worker interferir nos testes
   await ctx.addInitScript(() => { try { Object.defineProperty(navigator, 'serviceWorker', { value: { register: () => Promise.resolve() } }); } catch (e) {} });
@@ -62,7 +66,7 @@ async function novaPagina(ctx) {
   const p = await ctx.newPage();
   p.erros = [];
   p.on('pageerror', (e) => p.erros.push(e.message));
-  p.on('dialog', (d) => { p.ultimoDialogo = d.message(); d.accept(); });
+  p.on('dialog', (d) => { p.ultimoDialogo = d.message(); d.type() === 'prompt' && p.respostaPrompt !== undefined ? d.accept(p.respostaPrompt) : d.accept(); });
   return p;
 }
 

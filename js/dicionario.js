@@ -350,9 +350,12 @@ function desenharPalavras(grade) {
         return `<div class="frase-exemplo">"${escapeHtml(en)}" <button class="btn-falar-frase" type="button" title="Ouvir frase" onclick="falarFrase('${p.id}', ${indice})">🔊</button>${ptExibido ? `<br><span class="frase-traducao">${escapeHtml(ptExibido)}</span>` : ""}</div>`;
       }).join("");
       const temTraducao = p.frasesExemplo.some((f) => typeof f !== "string" && f.pt);
+      // Palavras antigas guardavam as frases sem tradução: dá pra gerar de novo, já traduzidas
       const botaoRevelar = temTraducao
         ? `<button class="btn-ver-traducao" onclick="alternarTraducao('${p.id}')">${revelada ? "🙈 Ocultar tradução" : "👁 Ver tradução"}</button>`
-        : "";
+        : frasesSendoGeradas.has(p.id)
+          ? `<span class="btn-ver-traducao">Gerando frases com tradução...</span>`
+          : `<button class="btn-ver-traducao" onclick="tentarGerarFrasesDeNovo('${p.id}')">↻ Gerar frases com tradução</button>`;
       frases = linhas + botaoRevelar;
     } else if (frasesTravadas(p)) {
       frases = `<div class="frase-exemplo">Não foi possível gerar frases de exemplo agora.
@@ -391,7 +394,8 @@ function desenharPalavras(grade) {
     cartao.innerHTML = `
       <button class="remover" title="Remover" onclick="removerPalavra('${p.id}')">✕</button>
       <div class="palavra-en">${escapeHtml(p.palavraEn)} <button class="btn-falar" type="button" title="Ouvir pronúncia" onclick="falarPalavra('${p.id}')">🔊</button></div>
-      <div class="palavra-pt">${escapeHtml(p.traducaoPt)}</div>
+      <div class="palavra-pt">${escapeHtml(p.traducaoPt)} <button class="btn-editar-traducao" type="button" title="Corrigir tradução" aria-label="Corrigir tradução" onclick="editarTraducao('${p.id}')">✎</button></div>
+      ${montarAvisoTraducao(p)}
       ${frases}
       ${blocoNota}
     `;
@@ -514,8 +518,10 @@ async function gerarFrasesDaPalavra(id, palavra, traducao, idioma) {
     });
     const dados = await resposta.json().catch(() => ({}));
     if (dados.frases && dados.frases.length > 0) {
+      const traducoes = Array.isArray(dados.traducoes) ? dados.traducoes.filter((t) => typeof t === "string" && t.trim()).slice(0, 3) : [];
       await ref.update({
         frasesExemplo: dados.frases,
+        traducoesSugeridas: traducoes.length ? traducoes : firebase.firestore.FieldValue.delete(),
         falhaAoGerarFrases: firebase.firestore.FieldValue.delete(),
         motivoFalhaFrases: firebase.firestore.FieldValue.delete()
       });
@@ -534,6 +540,58 @@ async function gerarFrasesDaPalavra(id, palavra, traducao, idioma) {
     frasesSendoGeradas.delete(id);
     renderizarPalavras();
   }
+}
+
+// -------------------- TRADUÇÃO DA PALAVRA --------------------
+
+// Compara traduções sem ligar pra maiúsculas, acentos, artigos e espaços
+function normalizarTraducao(texto) {
+  return String(texto || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ").replace(/\b(o|a|os|as|um|uma|uns|umas|de|do|da)\b/g, " ")
+    .replace(/\s+/g, " ").trim();
+}
+
+// A tradução do aluno "bate" se for igual a uma das sugeridas pela IA, ou uma contiver a
+// outra (ex: "taxa" e "taxas", "maçã" e "a maçã"); sem sugestões, não há o que comparar
+function traducaoConfere(p) {
+  const sugeridas = (p.traducoesSugeridas || []).map(normalizarTraducao).filter(Boolean);
+  if (!sugeridas.length) return true;
+  const partesDoAluno = String(p.traducaoPt || "").split(/[,;/]/).map(normalizarTraducao).filter(Boolean);
+  return partesDoAluno.some((t) => sugeridas.some((s) => s === t || s.includes(t) || t.includes(s)));
+}
+
+function montarAvisoTraducao(p) {
+  if (traducaoConfere(p)) return "";
+  const sugeridas = p.traducoesSugeridas.slice(0, 3);
+  const botoes = sugeridas.map((t, i) =>
+    `<button type="button" class="btn-usar-traducao" onclick="usarTraducaoSugerida('${p.id}', ${i})">Usar "${escapeHtml(t)}"</button>`
+  ).join("");
+  return `<div class="aviso-traducao">💡 Confira a tradução: a IA entende "${escapeHtml(p.palavraEn)}" como
+    <strong>${sugeridas.map(escapeHtml).join(", ")}</strong>.<div class="acoes-aviso-traducao">${botoes}</div></div>`;
+}
+
+async function salvarTraducao(id, novaTraducao) {
+  const user = auth.currentUser;
+  const texto = String(novaTraducao || "").trim();
+  if (!user || !texto) return;
+  try {
+    await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id).update({ traducaoPt: texto });
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível salvar a tradução. Tente novamente.");
+  }
+}
+
+function editarTraducao(id) {
+  const p = cacheDePalavras.find((x) => x.id === id);
+  if (!p) return;
+  const nova = prompt(`Tradução de "${p.palavraEn}":`, p.traducaoPt || "");
+  if (nova !== null && nova.trim() && nova.trim() !== p.traducaoPt) salvarTraducao(id, nova);
+}
+
+function usarTraducaoSugerida(id, indice) {
+  const p = cacheDePalavras.find((x) => x.id === id);
+  if (p && p.traducoesSugeridas && p.traducoesSugeridas[indice]) salvarTraducao(id, p.traducoesSugeridas[indice]);
 }
 
 function tentarGerarFrasesDeNovo(id) {
