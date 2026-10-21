@@ -25,9 +25,11 @@ gratuita, sem cartão).
 
 ## Passo 2 — Aplicar as regras de segurança
 
-1. Ainda no Firestore, vá na aba **Regras**.
-2. Copie todo o conteúdo do arquivo `firestore.rules` deste projeto e cole lá.
-3. Clique em **Publicar**.
+As regras ficam no arquivo `firestore.rules` e são publicadas junto com o
+site pelo `firebase deploy` (Passo 5). Se preferir publicar só elas, sem o
+site, rode `firebase deploy --only firestore:rules` — ou, no Console do
+Firebase, vá em Firestore → **Regras**, cole o conteúdo do arquivo e clique
+em **Publicar**.
 
 Isso garante que um aluno só vê os próprios dados, e um professor só
 vê os alunos vinculados a ele pelo código.
@@ -61,6 +63,12 @@ firebase login
 firebase init hosting   # escolha "usar pasta atual" como public
 firebase deploy
 ```
+
+## Testes automáticos
+
+A pasta `testes/` tem testes das regras do Firestore, do servidor da IA e do
+app no navegador (cadastro, vocabulário, recados, agenda...), todos com o
+Firebase emulado. Veja como rodar em [`testes/README.md`](testes/README.md).
 
 ## App no celular (PWA)
 

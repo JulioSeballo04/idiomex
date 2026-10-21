@@ -355,7 +355,13 @@ function renderizarListaAlunos() {
   renderizarVisaoGeralTurma();
   montarCalendarioProfessor();
 
+  // A lista é redesenhada a cada atualização em tempo real (palavra nova de qualquer
+  // aluno, aula marcada...) — preserva o recado/relatório que estiver sendo digitado
   const lista = document.getElementById("lista-alunos");
+  redesenharPreservandoCampos(lista, () => desenharListaAlunos(lista));
+}
+
+function desenharListaAlunos(lista) {
   lista.innerHTML = "";
 
   alunosCache.forEach((aluno) => {
@@ -647,24 +653,47 @@ function cancelarEdicaoMensagem(alunoId) {
 async function salvarEdicaoMensagem(alunoId, msgId) {
   const novoTexto = document.getElementById(`edicao-msg-${msgId}`).value.trim();
   if (!novoTexto) return;
-  await db.collection("usuarios").doc(alunoId).collection("mensagens")
-    .doc(msgId).update({ texto: novoTexto });
-  estadoAlunos[alunoId].mensagemEmEdicaoId = null;
+  try {
+    await db.collection("usuarios").doc(alunoId).collection("mensagens")
+      .doc(msgId).update({ texto: novoTexto });
+    estadoAlunos[alunoId].mensagemEmEdicaoId = null;
+    renderizarListaAlunos(); // fecha o editor (a atualização em tempo real chega antes de zerar o id)
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível salvar o recado. Tente novamente.");
+  }
 }
 
 async function excluirMensagem(alunoId, msgId) {
-  await db.collection("usuarios").doc(alunoId).collection("mensagens").doc(msgId).delete();
+  if (!confirm("Excluir esse recado? O aluno deixa de vê-lo.")) return;
+  try {
+    await db.collection("usuarios").doc(alunoId).collection("mensagens").doc(msgId).delete();
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível excluir o recado. Tente novamente.");
+  }
 }
 
-async function enviarMensagem(alunoId) {
-  const input = document.getElementById(`input-mensagem-${alunoId}`);
-  const texto = input.value.trim();
+// Envia o texto de um campo e limpa o campo só depois de gravar. O campo é buscado
+// de novo depois do "await": a tela pode ter sido redesenhada nesse meio-tempo, e
+// limpar a referência antiga não limparia o campo que está na tela.
+async function enviarTextoDoCampo(idCampo, colecao) {
+  const campo = document.getElementById(idCampo);
+  const texto = campo ? campo.value.trim() : "";
   if (!texto) return;
-  await db.collection("usuarios").doc(alunoId).collection("mensagens").add({
-    texto,
-    criadoEm: firebase.firestore.FieldValue.serverTimestamp()
-  });
-  input.value = "";
+  try {
+    await colecao.add({ texto, criadoEm: firebase.firestore.FieldValue.serverTimestamp() });
+    const atual = document.getElementById(idCampo);
+    if (atual) atual.value = "";
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível salvar agora. Confira sua internet e tente de novo — o texto continua no campo.");
+  }
+}
+
+function enviarMensagem(alunoId) {
+  return enviarTextoDoCampo(`input-mensagem-${alunoId}`,
+    db.collection("usuarios").doc(alunoId).collection("mensagens"));
 }
 
 // -------------------- ABA: RELATÓRIO DE AULAS --------------------
@@ -698,29 +727,34 @@ function montarAbaRelatorio(alunoId) {
   return formulario + lista;
 }
 
-async function adicionarRelatorio(alunoId) {
-  const input = document.getElementById(`input-relatorio-${alunoId}`);
-  const texto = input.value.trim();
-  if (!texto) return;
-  await db.collection("usuarios").doc(alunoId).collection("relatorios").add({
-    texto,
-    criadoEm: firebase.firestore.FieldValue.serverTimestamp()
-  });
-  input.value = "";
+function adicionarRelatorio(alunoId) {
+  return enviarTextoDoCampo(`input-relatorio-${alunoId}`,
+    db.collection("usuarios").doc(alunoId).collection("relatorios"));
 }
 
 async function excluirRelatorio(alunoId, relatorioId) {
-  await db.collection("usuarios").doc(alunoId).collection("relatorios").doc(relatorioId).delete();
+  if (!confirm("Excluir esse registro de aula?")) return;
+  try {
+    await db.collection("usuarios").doc(alunoId).collection("relatorios").doc(relatorioId).delete();
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível excluir o registro. Tente novamente.");
+  }
 }
 
 // -------------------- CÓDIGO DO PROFESSOR --------------------
 
-function copiarCodigo() {
+async function copiarCodigo() {
   const codigo = document.getElementById("codigo-professor").textContent;
-  navigator.clipboard.writeText(codigo);
   const status = document.getElementById("status-copiar");
-  status.textContent = "Copiado!";
-  setTimeout(() => (status.textContent = ""), 1500);
+  try {
+    await navigator.clipboard.writeText(codigo);
+    status.textContent = "Copiado!";
+  } catch (e) {
+    // Sem permissão de área de transferência (alguns navegadores/celulares)
+    status.textContent = "Não deu pra copiar — selecione o código e copie manualmente.";
+  }
+  setTimeout(() => (status.textContent = ""), 2500);
 }
 
 // -------------------- AGENDA: DISPONIBILIDADE --------------------
@@ -837,9 +871,20 @@ async function salvarConfigAgenda() {
   }
 
   const whatsapp = document.getElementById("config-whatsapp").value.trim();
+  const digitos = apenasDigitos(whatsapp);
+  if (whatsapp && (digitos.length < 10 || digitos.length > 13)) {
+    alert("WhatsApp inválido — use DDD + número (ex: 11 91234-5678), ou deixe em branco.");
+    return;
+  }
   const dados = { duracaoAulaMinutos, modalidades, disponibilidade, whatsapp };
-  await db.collection("usuarios").doc(professorIdAtual)
-    .collection("configuracaoAgenda").doc("dados").set(dados);
+  try {
+    await db.collection("usuarios").doc(professorIdAtual)
+      .collection("configuracaoAgenda").doc("dados").set(dados);
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível salvar a disponibilidade. Tente novamente.");
+    return;
+  }
 
   configAgendaAtual = dados;
   fecharConfigAgenda();
@@ -1291,7 +1336,17 @@ async function cancelarAulaComoProfessor(aulaId) {
 }
 
 async function concluirAula(aulaId) {
-  await db.collection("aulas").doc(aulaId).update({ status: "concluida" });
+  const aula = aulasCache.find((a) => a.id === aulaId);
+  const agora = new Date();
+  const aindaNaoComecou = aula && (aula.data > dataDeHojeISO() ||
+    (aula.data === dataDeHojeISO() && minutosDoHorario(aula.horaInicio) > agora.getHours() * 60 + agora.getMinutes()));
+  if (aindaNaoComecou && !confirm("Essa aula ainda não aconteceu. Marcar como concluída mesmo assim?")) return;
+  try {
+    await db.collection("aulas").doc(aulaId).update({ status: "concluida" });
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível concluir a aula agora. Tente novamente.");
+  }
 }
 
 // -------------------- ABA: AULAS MARCADAS (por aluno) --------------------

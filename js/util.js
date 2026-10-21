@@ -12,6 +12,45 @@ function escapeHtml(texto) {
   return div.innerHTML;
 }
 
+// Redesenha um pedaço da tela sem perder o que a pessoa está digitando. As telas
+// são redesenhadas inteiras a cada atualização em tempo real (palavra nova de um
+// aluno, aula marcada...) — sem isso, um recado ou anotação pela metade sumia, e
+// o cursor saía do campo. Guarda o texto dos campos com id e o foco/cursor, roda o
+// redesenho e devolve tudo aos campos que continuarem existindo.
+function redesenharPreservandoCampos(container, redesenhar) {
+  const valores = {};
+  if (container) {
+    container.querySelectorAll("textarea[id], input[type=text][id]").forEach((campo) => {
+      valores[campo.id] = campo.value;
+    });
+  }
+  const ativo = document.activeElement;
+  const idAtivo = ativo && ativo.id && valores[ativo.id] !== undefined ? ativo.id : null;
+  const selecao = idAtivo ? [ativo.selectionStart, ativo.selectionEnd] : null;
+
+  redesenhar();
+
+  Object.keys(valores).forEach((id) => {
+    const campo = document.getElementById(id);
+    if (campo && campo.value !== valores[id]) campo.value = valores[id];
+  });
+  if (idAtivo) {
+    const campo = document.getElementById(idAtivo);
+    if (campo) {
+      campo.focus();
+      try { campo.setSelectionRange(selecao[0], selecao[1]); } catch (e) {}
+    }
+  }
+}
+
+// Esc fecha a janela (modal) que estiver aberta, como o botão ✕ dela
+document.addEventListener("keydown", (evento) => {
+  if (evento.key !== "Escape") return;
+  const aberto = document.querySelector('[id^="modal-"]:not(.modal-oculto)');
+  const fechar = aberto && aberto.querySelector(".btn-fechar-modal");
+  if (fechar) fechar.click();
+});
+
 // Lê um texto em voz alta usando a Web Speech API do navegador (sem custo,
 // sem depender de nenhuma API externa). Se o navegador não suportar, não faz nada.
 function falar(texto, idioma) {
@@ -159,8 +198,14 @@ function somarMinutos(horaStr, minutos) {
   return `${hh}:${mm}`;
 }
 
+function minutosDoHorario(horaStr) {
+  const [h, m] = String(horaStr).split(":").map(Number);
+  return h * 60 + m;
+}
+
 // A partir dos blocos de disponibilidade de um dia (ex: [{inicio:"08:00", fim:"12:00"}]),
 // gera a lista de horários de início possíveis para aulas de "duracaoMinutos".
+// Sem repetidos e em ordem, mesmo que o professor configure períodos que se sobrepõem.
 function gerarSlotsDoDia(blocos, duracaoMinutos) {
   const slots = [];
   (blocos || []).forEach((bloco) => {
@@ -175,7 +220,23 @@ function gerarSlotsDoDia(blocos, duracaoMinutos) {
       minutoAtual += duracaoMinutos;
     }
   });
-  return slots;
+  return [...new Set(slots)].sort();
+}
+
+// Tira os horários que batem com alguma aula já marcada. Compara intervalos (e não
+// só o horário de início): se o professor mudou a duração das aulas, uma aula das
+// 09:00 às 09:50 ainda bloqueia um horário novo das 09:30.
+function slotsSemConflito(slots, duracaoMinutos, aulasMarcadas) {
+  const ocupados = aulasMarcadas.map((a) => {
+    const inicio = minutosDoHorario(a.horaInicio);
+    const fim = a.horaFim ? minutosDoHorario(a.horaFim) : inicio + duracaoMinutos;
+    return [inicio, fim];
+  });
+  return slots.filter((h) => {
+    const inicio = minutosDoHorario(h);
+    const fim = inicio + duracaoMinutos;
+    return !ocupados.some(([oi, of]) => inicio < of && oi < fim);
+  });
 }
 
 // ============================================================

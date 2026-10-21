@@ -30,15 +30,25 @@ async function cadastrar(nome, email, senha, tipo, codigoProfessor, idiomas) {
   const statusEl = document.getElementById("status-cadastro");
 
   // Valida antes de criar a conta no Auth, pra um erro aqui não deixar conta órfã
+  nome = (nome || "").trim();
+  if (!nome) {
+    statusEl.textContent = "Digite seu nome.";
+    return;
+  }
   if (tipo === "professor" && (!Array.isArray(idiomas) || idiomas.length === 0)) {
     statusEl.textContent = "Escolha pelo menos um idioma que você ensina.";
     return;
   }
+  if (tipo === "aluno" && !normalizarCodigo(codigoProfessor)) {
+    statusEl.textContent = "Informe o código do professor para vincular sua conta.";
+    return;
+  }
   statusEl.textContent = "Criando conta...";
 
+  let cred = null;
   try {
     // 1. Cria usuário no Firebase Auth
-    const cred = await auth.createUserWithEmailAndPassword(email, senha);
+    cred = await auth.createUserWithEmailAndPassword(email, senha);
     const uid = cred.user.uid;
 
     const dadosUsuario = {
@@ -80,6 +90,12 @@ async function cadastrar(nome, email, senha, tipo, codigoProfessor, idiomas) {
     statusEl.textContent = "Conta criada! Redirecionando...";
     redirecionarPorTipo(tipo);
   } catch (erro) {
+    // A conta de login já foi criada mas o perfil não (ex: código de professor
+    // errado): desfaz a conta, senão o e-mail ficava "já cadastrado" sem perfil e
+    // a pessoa não conseguia nem entrar nem se cadastrar de novo.
+    if (cred && cred.user) {
+      await cred.user.delete().catch((e) => console.warn("Não foi possível desfazer a conta incompleta:", e));
+    }
     statusEl.textContent = traduzErro(erro);
   }
 }
@@ -114,6 +130,7 @@ async function entrar(email, senha) {
 
     const doc = await db.collection("usuarios").doc(uid).get();
     if (!doc.exists) {
+      await auth.signOut();
       throw new Error("Perfil não encontrado. Fale com o suporte.");
     }
     redirecionarPorTipo(doc.data().tipo);

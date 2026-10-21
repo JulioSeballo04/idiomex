@@ -1,0 +1,18 @@
+{
+  "name": "idiomex-testes",
+  "private": true,
+  "description": "Testes automáticos do Idiomex: regras do Firestore e fluxos do app no navegador",
+  "scripts": {
+    "test": "npm run test:regras && npm run test:e2e",
+    "test:regras": "firebase emulators:exec --config ../firebase.json --only firestore --project demo-idiomex \"node regras.test.mjs\"",
+    "test:e2e": "firebase emulators:exec --config ../firebase.json --only auth,firestore --project demo-idiomex \"node e2e.test.js\"",
+    "test:ia": "node ia.test.mjs"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase": "^12.0.0",
+    "firebase-site": "npm:firebase@9.23.0",
+    "firebase-tools": "^14.0.0",
+    "playwright": "1.56.1"
+  }
+}

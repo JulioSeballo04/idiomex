@@ -116,6 +116,10 @@ function escutarAnotacoes(uid) {
 
 function renderizarAnotacoes() {
   const container = document.getElementById("lista-anotacoes");
+  redesenharPreservandoCampos(container, () => desenharAnotacoes(container));
+}
+
+function desenharAnotacoes(container) {
   container.innerHTML = "";
   cacheDeAnotacoes.forEach((a) => {
     const cartao = document.createElement("div");
@@ -146,11 +150,18 @@ function renderizarAnotacoes() {
 async function adicionarAnotacao(texto) {
   const user = auth.currentUser;
   if (!user || !texto.trim()) return;
-  await db.collection("usuarios").doc(user.uid).collection("anotacoes").add({
-    texto: texto.trim(),
-    criadoEm: firebase.firestore.FieldValue.serverTimestamp()
-  });
-  document.getElementById("input-anotacoes").value = "";
+  const statusEl = document.getElementById("status-anotacao");
+  try {
+    await db.collection("usuarios").doc(user.uid).collection("anotacoes").add({
+      texto: texto.trim(),
+      criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    document.getElementById("input-anotacoes").value = "";
+    statusEl.textContent = "";
+  } catch (e) {
+    console.error(e);
+    statusEl.textContent = "Não foi possível salvar a anotação. Tente novamente.";
+  }
 }
 
 function editarAnotacao(id) {
@@ -168,15 +179,27 @@ async function salvarEdicaoAnotacao(id) {
   if (!user) return;
   const novoTexto = document.getElementById(`edicao-texto-${id}`).value.trim();
   if (!novoTexto) return;
-  await db.collection("usuarios").doc(user.uid).collection("anotacoes").doc(id)
-    .update({ texto: novoTexto });
-  anotacaoEmEdicaoId = null;
+  try {
+    await db.collection("usuarios").doc(user.uid).collection("anotacoes").doc(id)
+      .update({ texto: novoTexto });
+    anotacaoEmEdicaoId = null;
+    renderizarAnotacoes(); // fecha o editor (a atualização em tempo real chega antes de zerar o id)
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível salvar a anotação. Tente novamente.");
+  }
 }
 
 async function excluirAnotacao(id) {
   const user = auth.currentUser;
   if (!user) return;
-  await db.collection("usuarios").doc(user.uid).collection("anotacoes").doc(id).delete();
+  if (!confirm("Excluir essa anotação?")) return;
+  try {
+    await db.collection("usuarios").doc(user.uid).collection("anotacoes").doc(id).delete();
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível excluir a anotação. Tente novamente.");
+  }
 }
 
 // Escuta em tempo real a coleção de palavras do aluno logado
@@ -285,6 +308,21 @@ function falarFrase(id, indice) {
 
 function renderizarPalavras() {
   const grade = document.getElementById("grade-cartoes");
+  redesenharPreservandoCampos(grade, () => desenharPalavras(grade));
+}
+
+// Uma palavra sem frases há mais de 1 minuto ficou sem resposta da IA (ex: a aba
+// foi fechada no meio do pedido) — trata igual a uma falha, com opção de tentar de novo
+const ESPERA_MAXIMA_FRASES_MS = 60 * 1000;
+const frasesSendoGeradas = new Set(); // ids das palavras com pedido em andamento nesta aba
+
+function frasesTravadas(p) {
+  if (frasesSendoGeradas.has(p.id)) return false;
+  if (p.falhaAoGerarFrases) return true;
+  return !!(p.criadoEm && Date.now() - p.criadoEm.toMillis() > ESPERA_MAXIMA_FRASES_MS);
+}
+
+function desenharPalavras(grade) {
   grade.innerHTML = "";
 
   // Na tela Início não mostramos a lista de palavras — só nas telas de cada letra
@@ -316,8 +354,9 @@ function renderizarPalavras() {
         ? `<button class="btn-ver-traducao" onclick="alternarTraducao('${p.id}')">${revelada ? "🙈 Ocultar tradução" : "👁 Ver tradução"}</button>`
         : "";
       frases = linhas + botaoRevelar;
-    } else if (p.falhaAoGerarFrases) {
-      frases = `<div class="frase-exemplo">Não foi possível gerar frases de exemplo agora.</div>`;
+    } else if (frasesTravadas(p)) {
+      frases = `<div class="frase-exemplo">Não foi possível gerar frases de exemplo agora.
+        <button class="btn-tentar-frases" type="button" onclick="tentarGerarFrasesDeNovo('${p.id}')">↻ Tentar de novo</button></div>`;
     } else {
       frases = `<div class="frase-exemplo">Gerando frases de exemplo...</div>`;
     }
@@ -373,22 +412,36 @@ async function salvarNotaPalavra(id) {
   const user = auth.currentUser;
   if (!user) return;
   const texto = document.getElementById(`edicao-nota-${id}`).value.trim();
-  await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id)
-    .update({ notaPessoal: texto });
-  notaPalavraEmEdicaoId = null;
+  try {
+    await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id)
+      .update({ notaPessoal: texto ? texto : firebase.firestore.FieldValue.delete() });
+    notaPalavraEmEdicaoId = null;
+    renderizarPalavras(); // fecha o editor (a atualização em tempo real chega antes de zerar o id)
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível salvar a anotação. Tente novamente.");
+  }
 }
 
 async function removerNotaPalavra(id) {
   const user = auth.currentUser;
   if (!user) return;
-  await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id)
-    .update({ notaPessoal: firebase.firestore.FieldValue.delete() });
+  if (!confirm("Excluir a anotação dessa palavra?")) return;
+  try {
+    await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id)
+      .update({ notaPessoal: firebase.firestore.FieldValue.delete() });
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível excluir a anotação. Tente novamente.");
+  }
 }
 
 // Adiciona uma nova palavra: salva no Firestore e pede a frase de exemplo à IA
+let salvandoPalavra = false; // evita gravar a mesma palavra duas vezes num clique duplo
+
 async function adicionarPalavra(palavraEn, traducaoPt, notaPessoal) {
   const user = auth.currentUser;
-  if (!user || !palavraEn.trim() || !traducaoPt.trim()) return;
+  if (!user || !palavraEn.trim() || !traducaoPt.trim() || salvandoPalavra) return;
 
   const statusEl = document.getElementById("status-palavra");
 
@@ -404,6 +457,9 @@ async function adicionarPalavra(palavraEn, traducaoPt, notaPessoal) {
   }
 
   statusEl.textContent = "Salvando...";
+  salvandoPalavra = true;
+  const botao = document.getElementById("btn-adicionar-palavra");
+  if (botao) botao.disabled = true;
 
   const dadosPalavra = {
     palavraEn: palavraEn.trim(),
@@ -417,43 +473,81 @@ async function adicionarPalavra(palavraEn, traducaoPt, notaPessoal) {
     dadosPalavra.notaPessoal = notaPessoal.trim();
   }
 
-  const ref = await db.collection("usuarios").doc(user.uid).collection("palavras").add(dadosPalavra);
+  let ref;
+  try {
+    ref = db.collection("usuarios").doc(user.uid).collection("palavras").doc();
+    frasesSendoGeradas.add(ref.id);
+    await ref.set(dadosPalavra);
+  } catch (e) {
+    console.error(e);
+    frasesSendoGeradas.delete(ref && ref.id);
+    statusEl.textContent = "Não foi possível salvar a palavra. Confira sua internet e tente de novo.";
+    return;
+  } finally {
+    salvandoPalavra = false;
+    if (botao) botao.disabled = false;
+  }
 
+  // Só limpa o formulário depois de salvar — se der erro, o que foi digitado continua lá
   document.getElementById("input-palavra-en").value = "";
   document.getElementById("input-palavra-pt").value = "";
   document.getElementById("input-palavra-nota").value = "";
   statusEl.textContent = "";
 
-  // Pede as 5 frases de exemplo à function do Vercel (a chave da IA fica só lá no servidor)
+  await gerarFrasesDaPalavra(ref.id, dadosPalavra.palavraEn, dadosPalavra.traducaoPt, dadosPalavra.idioma);
+}
+
+// Pede as 5 frases de exemplo à function do Vercel (a chave da IA fica só lá no servidor)
+async function gerarFrasesDaPalavra(id, palavra, traducao, idioma) {
+  const user = auth.currentUser;
+  if (!user) return;
+  const ref = db.collection("usuarios").doc(user.uid).collection("palavras").doc(id);
+  frasesSendoGeradas.add(id);
   try {
     // O token de login prova pro servidor que o pedido vem de um usuário do app
     const token = await user.getIdToken();
     const resposta = await fetch(AI_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-      body: JSON.stringify({ palavra: palavraEn.trim(), traducao: traducaoPt.trim(), idioma: idiomaDoAluno })
+      body: JSON.stringify({ palavra, traducao, idioma })
     });
     const dados = await resposta.json();
     if (dados.frases && dados.frases.length > 0) {
-      await db.collection("usuarios").doc(user.uid).collection("palavras").doc(ref.id)
-        .update({ frasesExemplo: dados.frases });
+      await ref.update({ frasesExemplo: dados.frases, falhaAoGerarFrases: firebase.firestore.FieldValue.delete() });
     } else {
       // A IA respondeu mas não trouxe frases (quota, sobrecarga etc.) — marca a
       // palavra para não ficar com "Gerando frases de exemplo..." pra sempre.
-      await db.collection("usuarios").doc(user.uid).collection("palavras").doc(ref.id)
-        .update({ frasesExemplo: [], falhaAoGerarFrases: true });
+      if (dados.aviso) console.warn("IA:", dados.aviso);
+      await ref.update({ frasesExemplo: [], falhaAoGerarFrases: true });
     }
   } catch (e) {
     console.warn("Não foi possível gerar as frases de exemplo agora:", e);
-    await db.collection("usuarios").doc(user.uid).collection("palavras").doc(ref.id)
-      .update({ frasesExemplo: [], falhaAoGerarFrases: true }).catch(() => {});
+    await ref.update({ frasesExemplo: [], falhaAoGerarFrases: true }).catch(() => {});
+  } finally {
+    frasesSendoGeradas.delete(id);
+    renderizarPalavras();
   }
+}
+
+function tentarGerarFrasesDeNovo(id) {
+  const p = cacheDePalavras.find((x) => x.id === id);
+  if (!p || frasesSendoGeradas.has(id)) return;
+  frasesSendoGeradas.add(id);
+  renderizarPalavras(); // mostra "Gerando frases de exemplo..." na hora
+  gerarFrasesDaPalavra(id, p.palavraEn, p.traducaoPt, idiomaDaPalavra(p));
 }
 
 async function removerPalavra(id) {
   const user = auth.currentUser;
   if (!user) return;
-  await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id).delete();
+  const p = cacheDePalavras.find((x) => x.id === id);
+  if (!confirm(`Remover "${p ? p.palavraEn : "essa palavra"}" do seu vocabulário?`)) return;
+  try {
+    await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id).delete();
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível remover a palavra. Tente novamente.");
+  }
 }
 
 // -------------------- QUIZ RÁPIDO --------------------
@@ -487,9 +581,12 @@ function iniciarQuiz() {
 
 function gerarPerguntaQuiz(elegiveis) {
   const alvo = elegiveis[Math.floor(Math.random() * elegiveis.length)];
+  // Só frases em que a palavra inteira aparece (senão a "lacuna" não esconderia nada
+  // e a resposta ficaria à mostra na própria frase)
+  const regex = regexDaPalavra(alvo.palavraEn);
   const frasesValidas = alvo.frasesExemplo
     .map((f) => (typeof f === "string" ? f : f.en))
-    .filter((texto) => texto && texto.toLowerCase().includes(alvo.palavraEn.toLowerCase()));
+    .filter((texto) => texto && regex.test(texto));
 
   if (frasesValidas.length === 0) {
     // Essa palavra não tem frase utilizável (raro) — tenta outra
@@ -500,7 +597,7 @@ function gerarPerguntaQuiz(elegiveis) {
   }
 
   const fraseTexto = frasesValidas[Math.floor(Math.random() * frasesValidas.length)];
-  const fraseComLacuna = fraseTexto.replace(regexDaPalavra(alvo.palavraEn), "_____");
+  const fraseComLacuna = fraseTexto.replace(regex, "_____");
 
   const outrasPalavras = elegiveis.filter((p) => p.id !== alvo.id).map((p) => p.palavraEn);
   const distratores = embaralhar(outrasPalavras).slice(0, Math.min(3, outrasPalavras.length));
@@ -610,8 +707,13 @@ function renderizarMinhasAulas() {
   if (!painel || !lista) return;
 
   const hojeIso = dataDeHojeISO();
+  const agora = new Date();
+  const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
+  // Aula de hoje que já terminou não é mais "próxima" (e não faz sentido cancelar)
+  const aindaVai = (a) => a.data > hojeIso ||
+    (a.data === hojeIso && minutosDoHorario(a.horaFim || a.horaInicio) > minutosAgora);
   const futuras = minhasAulasCache
-    .filter((a) => a.status === "agendada" && a.data >= hojeIso)
+    .filter((a) => a.status === "agendada" && aindaVai(a))
     .sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio));
 
   if (futuras.length === 0) {
@@ -751,10 +853,20 @@ async function trocarDeProfessor() {
 
 // Abre o modal de agendamento, carregando a configuração de agenda do professor vinculado
 async function abrirAgendamento() {
-  if (!professorIdDoAluno) return;
+  if (!professorIdDoAluno) {
+    alert("Sua conta não está vinculada a um professor. Vincule-se em \"Meu perfil\" para agendar aulas.");
+    return;
+  }
 
-  const snap = await db.collection("usuarios").doc(professorIdDoAluno)
-    .collection("configuracaoAgenda").doc("dados").get();
+  let snap;
+  try {
+    snap = await db.collection("usuarios").doc(professorIdDoAluno)
+      .collection("configuracaoAgenda").doc("dados").get();
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível carregar a agenda do professor. Confira sua internet e tente de novo.");
+    return;
+  }
 
   if (!snap.exists) {
     alert("Seu professor ainda não configurou horários disponíveis para agendamento.");
@@ -913,16 +1025,23 @@ async function selecionarDataAgendamento(dataEscolhida) {
 
   container.innerHTML = `<p class="vazio">Carregando horários...</p>`;
 
-  const snap = await db.collection("aulas")
-    .where("professorId", "==", professorIdDoAluno)
-    .where("data", "==", dataEscolhida)
-    .get();
-  const ocupados = new Set(
-    snap.docs.map((d) => d.data()).filter((a) => a.status === "agendada").map((a) => a.horaInicio)
-  );
+  let marcadas;
+  try {
+    const snap = await db.collection("aulas")
+      .where("professorId", "==", professorIdDoAluno)
+      .where("data", "==", dataEscolhida)
+      .get();
+    marcadas = snap.docs.map((d) => d.data()).filter((a) => a.status === "agendada");
+  } catch (e) {
+    console.error(e);
+    container.innerHTML = `<p class="vazio">Não foi possível carregar os horários. Tente de novo.</p>`;
+    return;
+  }
+  // Outra data pode ter sido escolhida enquanto esta carregava
+  if (dataEscolhida !== dataEscolhidaAgendamento) return;
 
   const duracao = configAgendaProfessor.duracaoAulaMinutos || 50;
-  let slots = gerarSlotsDoDia(blocos, duracao).filter((h) => !ocupados.has(h));
+  let slots = slotsSemConflito(gerarSlotsDoDia(blocos, duracao), duracao, marcadas);
 
   // Se a data escolhida for hoje, esconde horários que já passaram
   if (dataEscolhida === dataDeHojeISO()) {

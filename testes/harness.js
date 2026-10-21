@@ -1,0 +1,88 @@
+// Ambiente dos testes de ponta a ponta: o site servido localmente, o Firebase
+// emulado (login e banco, com as regras de verdade) e a IA simulada.
+const { chromium } = require('playwright');
+const fs = require('fs');
+const http = require('http');
+const path = require('path');
+const RAIZ = path.join(__dirname, '..');
+const PORTA = 8765;
+const SITE = `http://localhost:${PORTA}`;
+// Mesma versão do Firebase que as páginas carregam do CDN (instalada como "firebase-site")
+const FB = path.join(__dirname, 'node_modules/firebase-site');
+
+// Servidor de arquivos estáticos do site (sem dependências)
+const TIPOS = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.png': 'image/png',
+  '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
+function subirSite() {
+  return new Promise((resolve) => {
+    const servidor = http.createServer((req, res) => {
+      const caminho = path.normalize(decodeURIComponent(req.url.split('?')[0])).replace(/^([/\\])+/, '');
+      const arquivo = path.join(RAIZ, caminho || 'index.html');
+      if (!arquivo.startsWith(RAIZ) || !fs.existsSync(arquivo) || fs.statSync(arquivo).isDirectory()) {
+        res.writeHead(404); return res.end();
+      }
+      res.writeHead(200, { 'Content-Type': TIPOS[path.extname(arquivo)] || 'application/octet-stream' });
+      fs.createReadStream(arquivo).pipe(res);
+    });
+    servidor.listen(PORTA, () => resolve(servidor));
+  });
+}
+
+async function novoContexto(browser, opts = {}) {
+  const ctx = await browser.newContext({ viewport: opts.viewport || { width: 1100, height: 900 } });
+  await ctx.route('https://www.gstatic.com/firebasejs/9.23.0/*', (r) => {
+    const nome = r.request().url().split('/').pop();
+    r.fulfill({ path: path.join(FB, nome), contentType: 'application/javascript' });
+  });
+  await ctx.route('**/js/firebase-config.js', (r) => {
+    let src = fs.readFileSync(path.join(RAIZ, 'js/firebase-config.js'), 'utf8')
+      .replace(/projectId: "[^"]+"/, 'projectId: "demo-idiomex"')
+      .replace(/const AI_ENDPOINT = "[^"]+"/, `const AI_ENDPOINT = "${SITE}/api/gerar-frase"`);
+    src += '\nauth.useEmulator("http://127.0.0.1:9099");\ndb.useEmulator("127.0.0.1", 8089);\n';
+    r.fulfill({ body: src, contentType: 'application/javascript' });
+  });
+  ctx.pedidosIA = [];
+  ctx.iaFalha = !!opts.iaFalha;
+  await ctx.route('**/api/gerar-frase', async (r) => {
+    const req = r.request();
+    if (req.method() === 'OPTIONS') return r.fulfill({ status: 200 });
+    const corpo = JSON.parse(req.postData() || '{}');
+    ctx.pedidosIA.push({ auth: req.headers()['authorization'] || '', corpo });
+    if (ctx.iaFalha) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ frases: [], aviso: 'falhou' }) });
+    const p = corpo.palavra;
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ frases: [
+      { en: `I like the ${p} a lot.`, pt: 'Eu gosto muito.' }, { en: `This ${p} is new.`, pt: 'Isso é novo.' }] }) });
+  });
+  // Não deixa o service worker interferir nos testes
+  await ctx.addInitScript(() => { try { Object.defineProperty(navigator, 'serviceWorker', { value: { register: () => Promise.resolve() } }); } catch (e) {} });
+  return ctx;
+}
+
+async function novaPagina(ctx) {
+  const p = await ctx.newPage();
+  p.erros = [];
+  p.on('pageerror', (e) => p.erros.push(e.message));
+  p.on('dialog', (d) => { p.ultimoDialogo = d.message(); d.accept(); });
+  return p;
+}
+
+async function cadastrar(p, { tipo, nome, email, senha = 'senha123', codigo = '' }) {
+  await p.goto(`${SITE}/index.html`);
+  await p.click('#btn-aba-cadastro');
+  await p.selectOption('#cadTipo', tipo);
+  await p.fill('#cadNome', nome);
+  await p.fill('#cadEmail', email);
+  await p.fill('#cadSenha', senha);
+  if (tipo === 'aluno') await p.fill('#cadCodigo', codigo);
+  await p.click('#form-cadastro button[type=submit]');
+}
+
+let ok = 0, falhas = [];
+async function caso(nome, fn) {
+  try { await fn(); ok++; console.log('  ✔', nome); }
+  catch (e) { falhas.push(nome); console.log('  ✘', nome, '—', e.message.split('\n')[0]); }
+}
+function esperar(cond, msg) { if (!cond) throw new Error(msg); }
+function resumo() { console.log(`\n${ok} passaram, ${falhas.length} falharam`); if (falhas.length) console.log('Falhas:\n - ' + falhas.join('\n - ')); }
+
+module.exports = { chromium, SITE, subirSite, novoContexto, novaPagina, cadastrar, caso, esperar, resumo, falhas };
