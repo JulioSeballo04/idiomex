@@ -734,9 +734,17 @@ html[data-tema="noturno"] .secao-perigo h4 { color: #F08A75; }
   line-height: 1.45;
 }
 .frase-traducao {
+  display: inline-block;
   font-style: normal;
   color: var(--ink-soft);
   font-size: 0.82rem;
+  transition: filter 0.35s ease, opacity 0.35s ease;
+}
+/* Tradução oculta: desfocada (dá pra tentar adivinhar antes de ver) */
+.traducoes-ocultas .frase-traducao {
+  filter: blur(5px);
+  opacity: 0.6;
+  user-select: none;
 }
 
 .btn-tentar-frases {
@@ -804,6 +812,38 @@ html[data-tema="noturno"] .secao-perigo h4 { color: #F08A75; }
   cursor: pointer;
   padding: 0;
   margin-bottom: 0.6rem;
+}
+
+/* Botão do olho: o mesmo ícone nos dois estados; com a tradução à mostra, um risco é
+   desenhado sobre o olho. A cada clique o olho dá uma "piscada". */
+.btn-olho {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.icone-olho {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+.icone-olho .olho { transform-origin: 12px 12px; }
+.icone-olho .risco {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 0.3s ease;
+}
+.btn-olho.revelada .icone-olho .risco { stroke-dashoffset: 0; }
+.btn-olho.piscando .icone-olho .olho { animation: piscar-olho 0.3s ease; }
+@keyframes piscar-olho {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .frase-traducao, .icone-olho .risco { transition: none; }
+  .btn-olho.piscando .icone-olho .olho { animation: none; }
 }
 
 .nota-palavra {

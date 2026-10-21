@@ -153,6 +153,17 @@ function dataDaqui(dias) {
     esperar(await aluno.$('button:has-text("Ver tradução")'), 'frases novas sem tradução');
   });
 
+  await caso('olho: "Ver tradução" mostra e "Ocultar tradução" esconde as traduções das frases', async () => {
+    await aluno.click('.letra-tab:has-text("A")');
+    const cartao = '.cartao-palavra:has(.palavra-en:has-text("apple"))';
+    await aluno.waitForSelector(`${cartao}.traducoes-ocultas .btn-olho:has-text("Ver tradução")`, { timeout: 5000 });
+    await aluno.click(`${cartao} .btn-olho`);
+    await aluno.waitForSelector(`${cartao}:not(.traducoes-ocultas) .btn-olho.revelada:has-text("Ocultar tradução")`, { timeout: 3000 });
+    esperar(await aluno.$eval(`${cartao} .frase-traducao`, (t) => t.getAttribute('aria-hidden') === 'false'), 'tradução continuou marcada como oculta');
+    await aluno.click(`${cartao} .btn-olho`);
+    await aluno.waitForSelector(`${cartao}.traducoes-ocultas .btn-olho:not(.revelada):has-text("Ver tradução")`, { timeout: 3000 });
+  });
+
   await caso('quiz abre com 2 palavras e a frase tem a lacuna', async () => {
     await aluno.fill('#input-palavra-en', 'dog'); await aluno.fill('#input-palavra-pt', 'cachorro');
     await aluno.click('.formulario-palavra button[type=submit]');
