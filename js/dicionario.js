@@ -278,18 +278,35 @@ function renderizarTela() {
   renderizarPalavras();
 }
 
-// Transforma o texto em asteriscos, preservando espaços (ex: "I like it" -> "* **** **")
-function mascarar(texto) {
-  return texto.replace(/\S/g, "*");
+// Ícone de olho do botão "Ver tradução / Ocultar tradução". É sempre o mesmo olho:
+// com a tradução à mostra, um risco é desenhado por cima dele (olho riscado = ocultar).
+const ICONE_OLHO = `<svg class="icone-olho" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+  <g class="olho"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></g>
+  <line class="risco" x1="4" y1="4" x2="20" y2="20" pathLength="1"/>
+</svg>`;
+
+function botaoVerTraducao(id, revelada) {
+  return `<button class="btn-ver-traducao btn-olho${revelada ? " revelada" : ""}" type="button" aria-pressed="${revelada}" onclick="alternarTraducao('${id}', this)">
+    ${ICONE_OLHO}<span class="rotulo-olho">${revelada ? "Ocultar tradução" : "Ver tradução"}</span></button>`;
 }
 
-function alternarTraducao(id) {
-  if (traducoesReveladas.has(id)) {
-    traducoesReveladas.delete(id);
-  } else {
-    traducoesReveladas.add(id);
-  }
-  renderizarPalavras();
+// Mostra/oculta as traduções das frases de uma palavra. Muda só as classes do cartão
+// (sem redesenhar a lista), pra a transição do desfoque e do olho acontecer.
+function alternarTraducao(id, botao) {
+  const revelada = !traducoesReveladas.has(id);
+  if (revelada) traducoesReveladas.add(id); else traducoesReveladas.delete(id);
+
+  const cartao = botao && botao.closest(".cartao-palavra");
+  if (!cartao) { renderizarPalavras(); return; }
+  cartao.classList.toggle("traducoes-ocultas", !revelada);
+  cartao.querySelectorAll(".frase-traducao").forEach((t) => t.setAttribute("aria-hidden", String(!revelada)));
+  botao.classList.toggle("revelada", revelada);
+  botao.setAttribute("aria-pressed", String(revelada));
+  botao.querySelector(".rotulo-olho").textContent = revelada ? "Ocultar tradução" : "Ver tradução";
+  // reinicia a "piscada" do olho a cada clique
+  botao.classList.remove("piscando");
+  void botao.offsetWidth;
+  botao.classList.add("piscando");
 }
 
 // Fala a palavra (no idioma que o aluno estuda) de um cartão específico
@@ -337,22 +354,22 @@ function desenharPalavras(grade) {
 
   lista.forEach((p) => {
     const cartao = document.createElement("div");
-    cartao.className = "cartao-palavra";
-
     const revelada = traducoesReveladas.has(p.id);
+    cartao.className = "cartao-palavra" + (revelada ? "" : " traducoes-ocultas");
     let frases;
     if (p.frasesExemplo && p.frasesExemplo.length > 0) {
       const linhas = p.frasesExemplo.map((f, indice) => {
         // Compatibilidade: frases antigas eram só texto (string); as novas são {en, pt}
         const en = typeof f === "string" ? f : f.en;
         const pt = typeof f === "string" ? "" : f.pt;
-        const ptExibido = pt ? (revelada ? pt : mascarar(pt)) : "";
-        return `<div class="frase-exemplo">"${escapeHtml(en)}" <button class="btn-falar-frase" type="button" title="Ouvir frase" onclick="falarFrase('${p.id}', ${indice})">🔊</button>${ptExibido ? `<br><span class="frase-traducao">${escapeHtml(ptExibido)}</span>` : ""}</div>`;
+        // A tradução fica sempre no cartão, desfocada enquanto estiver oculta
+        const traducao = pt ? `<br><span class="frase-traducao" aria-hidden="${!revelada}">${escapeHtml(pt)}</span>` : "";
+        return `<div class="frase-exemplo">"${escapeHtml(en)}" <button class="btn-falar-frase" type="button" title="Ouvir frase" onclick="falarFrase('${p.id}', ${indice})">🔊</button>${traducao}</div>`;
       }).join("");
       const temTraducao = p.frasesExemplo.some((f) => typeof f !== "string" && f.pt);
       // Palavras antigas guardavam as frases sem tradução: dá pra gerar de novo, já traduzidas
       const botaoRevelar = temTraducao
-        ? `<button class="btn-ver-traducao" onclick="alternarTraducao('${p.id}')">${revelada ? "🙈 Ocultar tradução" : "👁 Ver tradução"}</button>`
+        ? botaoVerTraducao(p.id, revelada)
         : frasesSendoGeradas.has(p.id)
           ? `<span class="btn-ver-traducao">Gerando frases com tradução...</span>`
           : `<button class="btn-ver-traducao" onclick="tentarGerarFrasesDeNovo('${p.id}')">↻ Gerar frases com tradução</button>`;
