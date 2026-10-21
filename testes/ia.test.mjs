@@ -34,7 +34,7 @@ globalThis.fetch = async (url, opts = {}) => {
   if (modo === "404") return json(404, { error: { message: `models/${modelo} is not found` } });
   if (modo === "403") return json(403, { error: { message: "API key not valid" } });
   if (modo === "vazio") return json(200, { candidates: [{ content: { parts: [{ text: "pensando...", thought: true }] }, finishReason: "MAX_TOKENS" }] });
-  return json(200, { candidates: [{ content: { parts: [{ text: "Hallo Welt | Olá mundo" }] } }] });
+  return json(200, { candidates: [{ content: { parts: [{ text: "**TRADUÇÕES:** mundo, Terra\nHallo Welt | Olá mundo" }] } }] });
 };
 
 const { default: handler } = await import(new URL("../api/gerar-frase.js", import.meta.url));
@@ -72,6 +72,11 @@ await caso("gera frases e separa frase | tradução", async () => {
   const r = await chamar(logado, { palavra: "Welt", traducao: "mundo", idioma: "de" });
   assert.equal(r.c, 200);
   assert.deepEqual(r.j.frases, [{ en: "Hallo Welt", pt: "Olá mundo" }]);
+});
+await caso("devolve as traduções corretas da palavra (linha TRADUÇÕES)", async () => {
+  const r = await chamar(logado, { palavra: "Welt", traducao: "juros", idioma: "de" });
+  assert.deepEqual(r.j.traducoes, ["mundo", "Terra"]);
+  assert.ok(simulado.pedidosGemini[0].prompt.includes('anotou a tradução "juros" (pode estar errada)'));
 });
 await caso("modelo inexistente (404) passa para o próximo", async () => {
   simulado.modelos = { "gemini-3.1-flash-lite": "404" };

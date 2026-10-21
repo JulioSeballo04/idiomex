@@ -753,6 +753,39 @@ html[data-tema="noturno"] .secao-perigo h4 { color: #F08A75; }
   cursor: pointer;
 }
 
+.btn-editar-traducao {
+  background: none;
+  border: none;
+  padding: 0 0.2rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+  opacity: 0.6;
+}
+.btn-editar-traducao:hover { opacity: 1; color: var(--acento-forte); }
+
+.aviso-traducao {
+  margin: 0.5rem 0 0.7rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  background: rgba(201, 138, 44, 0.12);
+  border: 1px solid rgba(201, 138, 44, 0.35);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.acoes-aviso-traducao { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.45rem; }
+.btn-usar-traducao {
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--acento-forte);
+  cursor: pointer;
+}
+.btn-usar-traducao:hover { border-color: var(--acento); }
+
 .motivo-falha-frases {
   display: block;
   margin-top: 0.3rem;
