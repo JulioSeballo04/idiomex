@@ -25,16 +25,62 @@ function normalizarCodigo(codigo) {
   return (codigo || "").trim().toUpperCase();
 }
 
+// true enquanto entrar/cadastrar está em andamento: a própria função redireciona no
+// final, e a tela inicial não deve redirecionar junto (seriam duas navegações)
+let loginEmAndamento = false;
+let redirecionando = false;
+
+// -------------------- GOOGLE --------------------
+// Contas novas são criadas só com o Google: assim o e-mail da conta é comprovadamente
+// da pessoa (no cadastro por e-mail e senha, qualquer um podia usar o e-mail de outro).
+// Quem já tinha conta com e-mail e senha continua entrando normalmente.
+
+function provedorGoogle() {
+  const provedor = new firebase.auth.GoogleAuthProvider();
+  provedor.setCustomParameters({ prompt: "select_account" }); // deixa escolher a conta Google
+  return provedor;
+}
+
+function entrouComGoogle(user) {
+  return !!user && user.providerData.some((p) => p.providerId === "google.com");
+}
+
+// Botão "Entrar com Google" da tela de login. Se a conta Google ainda não tem
+// cadastro no Idiomex, leva para "Criar conta" com o nome já preenchido.
+async function entrarComGoogle() {
+  const statusEl = document.getElementById("status-login");
+  statusEl.textContent = "Abrindo o Google...";
+  loginEmAndamento = true;
+  try {
+    const cred = await auth.signInWithPopup(provedorGoogle());
+    const perfil = await db.collection("usuarios").doc(cred.user.uid).get();
+    if (perfil.exists) {
+      redirecionarPorTipo(perfil.data().tipo);
+      return;
+    }
+    statusEl.textContent = "";
+    pedirParaCompletarCadastro(cred.user);
+  } catch (erro) {
+    statusEl.textContent = traduzErro(erro);
+  } finally {
+    loginEmAndamento = false;
+  }
+}
+
+// Conta Google sem cadastro no Idiomex: abre a aba "Criar conta" já com o nome do Google
+function pedirParaCompletarCadastro(user) {
+  if (typeof mostrarAba === "function") mostrarAba("cadastro");
+  const campoNome = document.getElementById("cadNome");
+  if (campoNome && !campoNome.value) campoNome.value = user.displayName || "";
+  document.getElementById("status-cadastro").textContent =
+    `Falta pouco! Confira seu nome, escolha se você é aluno ou professor e clique em "Criar conta com Google" (${user.email}).`;
+}
+
 // -------------------- CADASTRO --------------------
-async function cadastrar(nome, email, senha, tipo, codigoProfessor, idiomas) {
+async function cadastrar(nome, tipo, codigoProfessor, idiomas) {
   const statusEl = document.getElementById("status-cadastro");
 
-  // Valida antes de criar a conta no Auth, pra um erro aqui não deixar conta órfã
-  nome = (nome || "").trim();
-  if (!nome) {
-    statusEl.textContent = "Digite seu nome.";
-    return;
-  }
+  // Valida antes de abrir o Google, pra um erro aqui não deixar conta sem perfil
   if (tipo === "professor" && (!Array.isArray(idiomas) || idiomas.length === 0)) {
     statusEl.textContent = "Escolha pelo menos um idioma que você ensina.";
     return;
@@ -43,17 +89,39 @@ async function cadastrar(nome, email, senha, tipo, codigoProfessor, idiomas) {
     statusEl.textContent = "Informe o código do professor para vincular sua conta.";
     return;
   }
-  statusEl.textContent = "Criando conta...";
 
-  let cred = null;
+  let user = entrouComGoogle(auth.currentUser) ? auth.currentUser : null;
+  let contaNova = false;
+  loginEmAndamento = true;
   try {
-    // 1. Cria usuário no Firebase Auth
-    cred = await auth.createUserWithEmailAndPassword(email, senha);
-    const uid = cred.user.uid;
+    // 1. Login com o Google (se ainda não entrou pelo botão da tela de login)
+    if (!user) {
+      statusEl.textContent = "Abrindo o Google...";
+      const cred = await auth.signInWithPopup(provedorGoogle());
+      user = cred.user;
+      contaNova = !!(cred.additionalUserInfo && cred.additionalUserInfo.isNewUser);
+    }
+    const uid = user.uid;
+
+    // Essa conta Google já tem cadastro: só entra
+    const existente = await db.collection("usuarios").doc(uid).get();
+    if (existente.exists) {
+      statusEl.textContent = "Você já tem cadastro. Entrando...";
+      redirecionarPorTipo(existente.data().tipo);
+      return;
+    }
+
+    // O nome pode ser editado no formulário; em branco, vale o nome da conta Google
+    nome = (nome || "").trim() || (user.displayName || "").trim();
+    if (!nome) {
+      statusEl.textContent = "Digite seu nome e clique em \"Criar conta com Google\" de novo.";
+      return;
+    }
+    statusEl.textContent = "Criando conta...";
 
     const dadosUsuario = {
       nome,
-      email,
+      email: user.email,
       tipo, // "professor" ou "aluno"
       criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     };
@@ -68,35 +136,28 @@ async function cadastrar(nome, email, senha, tipo, codigoProfessor, idiomas) {
 
     if (tipo === "aluno") {
       const codigo = normalizarCodigo(codigoProfessor);
-      if (!codigo) {
-        throw new Error("Informe o código do professor para vincular sua conta.");
-      }
       // Verifica se o código pertence a um professor de verdade
       const professorId = await professorDoCodigo(codigo);
       if (!professorId) {
         throw new Error("Código de professor inválido. Confira com seu professor.");
       }
-
       dadosUsuario.professorId = professorId;
       dadosUsuario.codigoVinculo = codigo; // as regras do Firestore conferem esse código
       // 2. Salva o perfil no Firestore
       await db.collection("usuarios").doc(uid).set(dadosUsuario);
     }
 
-    // Manda o e-mail de confirmação do endereço. Não bloqueia o acesso: um e-mail
-    // que não chega não pode impedir o aluno de usar o app.
-    cred.user.sendEmailVerification().catch((e) => console.warn("Falha ao enviar a confirmação de e-mail:", e));
-
     statusEl.textContent = "Conta criada! Redirecionando...";
     redirecionarPorTipo(tipo);
   } catch (erro) {
-    // A conta de login já foi criada mas o perfil não (ex: código de professor
-    // errado): desfaz a conta, senão o e-mail ficava "já cadastrado" sem perfil e
-    // a pessoa não conseguia nem entrar nem se cadastrar de novo.
-    if (cred && cred.user) {
-      await cred.user.delete().catch((e) => console.warn("Não foi possível desfazer a conta incompleta:", e));
+    // Conta Google recém-criada mas sem perfil (ex: código de professor errado):
+    // desfaz, pra pessoa poder tentar de novo do zero
+    if (contaNova && user) {
+      await user.delete().catch((e) => console.warn("Não foi possível desfazer a conta incompleta:", e));
     }
     statusEl.textContent = traduzErro(erro);
+  } finally {
+    loginEmAndamento = false;
   }
 }
 
@@ -123,6 +184,7 @@ async function salvarPerfilDeProfessor(uid, dadosUsuario) {
 async function entrar(email, senha) {
   const statusEl = document.getElementById("status-login");
   statusEl.textContent = "Entrando...";
+  loginEmAndamento = true;
 
   try {
     const cred = await auth.signInWithEmailAndPassword(email, senha);
@@ -136,6 +198,8 @@ async function entrar(email, senha) {
     redirecionarPorTipo(doc.data().tipo);
   } catch (erro) {
     statusEl.textContent = traduzErro(erro);
+  } finally {
+    loginEmAndamento = false;
   }
 }
 
@@ -170,13 +234,17 @@ async function apagarSubcolecao(ref) {
   }
 }
 
-// Exclui a conta logada e os dados dela. Pede a senha de novo porque o Firebase
-// só deixa excluir a conta logo depois de um login recente.
+// Exclui a conta logada e os dados dela. Confirma a identidade de novo (Google ou
+// senha) porque o Firebase só deixa excluir a conta logo depois de um login recente.
 async function excluirMinhaConta(senha) {
   const user = auth.currentUser;
   if (!user) return;
-  const credencial = firebase.auth.EmailAuthProvider.credential(user.email, senha);
-  await user.reauthenticateWithCredential(credencial);
+  if (entrouComGoogle(user)) {
+    await user.reauthenticateWithPopup(provedorGoogle());
+  } else {
+    const credencial = firebase.auth.EmailAuthProvider.credential(user.email, senha);
+    await user.reauthenticateWithCredential(credencial);
+  }
 
   const perfilRef = db.collection("usuarios").doc(user.uid);
   const perfil = (await perfilRef.get()).data() || {};
@@ -196,7 +264,7 @@ async function excluirMinhaConta(senha) {
     }
   } else {
     // Cancela as aulas futuras, pra o horário voltar a ficar livre na agenda do professor
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = dataDeHojeISO();
     const aulas = await db.collection("aulas").where("alunoId", "==", user.uid).get();
     for (const aula of aulas.docs) {
       const dados = aula.data();
@@ -218,7 +286,7 @@ async function excluirMinhaConta(senha) {
 async function confirmarExclusaoDaConta(campoSenhaId, statusId) {
   const statusEl = document.getElementById(statusId);
   const senha = document.getElementById(campoSenhaId).value;
-  if (!senha) {
+  if (!senha && !entrouComGoogle(auth.currentUser)) {
     statusEl.textContent = "Digite sua senha para confirmar.";
     return;
   }
@@ -233,6 +301,7 @@ async function confirmarExclusaoDaConta(campoSenhaId, statusId) {
 }
 
 function redirecionarPorTipo(tipo) {
+  redirecionando = true;
   if (tipo === "professor") {
     window.location.href = "professor.html";
   } else {
@@ -257,6 +326,13 @@ function traduzErro(erro) {
     "auth/invalid-login-credentials": "E-mail ou senha incorretos.",
     "auth/too-many-requests": "Muitas tentativas. Espere alguns minutos e tente de novo.",
     "auth/requires-recent-login": "Por segurança, saia e entre de novo antes de fazer isso.",
+    "auth/popup-closed-by-user": "A janela do Google foi fechada antes de terminar. Tente de novo.",
+    "auth/cancelled-popup-request": "A janela do Google foi fechada antes de terminar. Tente de novo.",
+    "auth/popup-blocked": "O navegador bloqueou a janela do Google. Permita pop-ups para este site e tente de novo.",
+    "auth/unauthorized-domain": "Este endereço ainda não está autorizado para entrar com Google (Firebase → Authentication → Configurações → Domínios autorizados).",
+    "auth/operation-not-allowed": "O login com Google ainda não foi ativado no Firebase (Authentication → Método de login → Google).",
+    "auth/account-exists-with-different-credential": "Esse e-mail já tem conta com senha no Idiomex. Entre com e-mail e senha.",
+    "auth/user-mismatch": "Escolha a mesma conta Google com que você entrou.",
     "permission-denied": "Você não tem permissão para fazer isso."
   };
   return mapa[codigo] || erro.message || "Ocorreu um erro. Tente novamente.";
@@ -269,6 +345,8 @@ function exigirLogin(tipoEsperado) {
       window.location.href = "index.html";
       return;
     }
+    // Conta Google não tem senha: esconde os campos que pedem senha (ex: excluir conta)
+    document.querySelectorAll("[data-so-senha]").forEach((el) => { el.hidden = entrouComGoogle(user); });
     const doc = await db.collection("usuarios").doc(user.uid).get();
     if (!doc.exists || (tipoEsperado && doc.data().tipo !== tipoEsperado)) {
       window.location.href = "index.html";

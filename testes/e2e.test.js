@@ -20,23 +20,31 @@ function dataDaqui(dias) {
   let codigo = '';
 
   console.log('\nCadastro e login');
-  await caso('professor se cadastra e vê o código', async () => {
-    await h.cadastrar(prof, { tipo: 'professor', nome: 'Prof Ana', email: `ana-${id}@t.com` });
+  await caso('cadastro não tem mais e-mail e senha (só Google)', async () => {
+    await prof.goto(`${SITE}/index.html`);
+    await prof.click('#btn-aba-cadastro');
+    esperar(!(await prof.$('#cadEmail')) && !(await prof.$('#cadSenha')), 'ainda tem campos de e-mail/senha no cadastro');
+    esperar(await prof.$('#form-cadastro button:has-text("Criar conta com Google")'), 'sem botão "Criar conta com Google"');
+  });
+
+  await caso('professor se cadastra com Google; nome em branco usa o nome da conta Google', async () => {
+    await h.cadastrar(prof, { tipo: 'professor', nome: '', nomeGoogle: 'Ana Google', email: `ana-${id}@t.com` });
     await prof.waitForURL('**/professor.html', { timeout: 10000 });
     await prof.waitForFunction(() => /^PROF-/.test(document.getElementById('codigo-professor').textContent), null, { timeout: 10000 });
     codigo = await prof.textContent('#codigo-professor');
+    await prof.waitForFunction(() => document.getElementById('nome-usuario').textContent === 'Ana Google', null, { timeout: 5000 });
   });
 
   await caso('código inválido não deixa conta "presa": dá pra cadastrar de novo com o mesmo e-mail', async () => {
-    await h.cadastrar(aluno, { tipo: 'aluno', nome: 'Bia', email: `bia-${id}@t.com`, codigo: 'PROF-ZZZZ' });
+    await h.cadastrar(aluno, { tipo: 'aluno', nome: 'Bia', nomeGoogle: 'Beatriz Souza', email: `bia-${id}@t.com`, codigo: 'PROF-ZZZZ' });
     await aluno.waitForFunction(() => /inválido/i.test(document.getElementById('status-cadastro').textContent), null, { timeout: 8000 });
-    await h.cadastrar(aluno, { tipo: 'aluno', nome: 'Bia', email: `bia-${id}@t.com`, codigo });
+    await h.cadastrar(aluno, { tipo: 'aluno', nome: 'Bia', nomeGoogle: 'Beatriz Souza', email: `bia-${id}@t.com`, codigo });
     await aluno.waitForURL('**/dicionario.html', { timeout: 8000 }).catch(async () => {
       throw new Error('ficou na tela de cadastro: ' + await aluno.textContent('#status-cadastro'));
     });
   });
   if (!aluno.url().includes('dicionario')) {
-    await h.cadastrar(aluno, { tipo: 'aluno', nome: 'Bia', email: `bia2-${id}@t.com`, codigo });
+    await h.cadastrar(aluno, { tipo: 'aluno', nome: 'Bia', nomeGoogle: 'Beatriz Souza', email: `bia2-${id}@t.com`, codigo });
     await aluno.waitForURL('**/dicionario.html', { timeout: 10000 });
   }
 
@@ -45,10 +53,56 @@ function dataDaqui(dias) {
     await aluno.waitForURL('**/dicionario.html', { timeout: 8000 });
   });
 
+  await caso('nome digitado no cadastro substitui o nome da conta Google', async () => {
+    await aluno.waitForFunction(() => document.getElementById('titulo-topo').textContent === 'Bia', null, { timeout: 8000 });
+  });
+
+  await caso('"Entrar com Google" sem cadastro leva para completar o cadastro, com o nome do Google', async () => {
+    const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
+    await h.usarContaGoogle(p, { email: `novo-${id}@t.com`, nome: 'Carla Nova' });
+    await p.click('button:has-text("Entrar com Google")');
+    await p.waitForSelector('#form-cadastro:not(.oculto)', { timeout: 8000 });
+    esperar((await p.inputValue('#cadNome')) === 'Carla Nova', 'nome não veio do Google');
+    esperar(/Falta pouco/.test(await p.textContent('#status-cadastro')), 'sem instrução para completar');
+    await p.fill('#cadCodigo', codigo);
+    await p.click('#form-cadastro button[type=submit]');
+    await p.waitForURL('**/dicionario.html', { timeout: 10000 });
+    await ctx.close();
+  });
+
+  const contaAntiga = { email: `antiga-${id}@t.com`, senha: 'senha123' };
+  await h.criarContaAntigaComSenha({ ...contaAntiga, perfil: { nome: 'Conta Antiga', tipo: 'aluno' } });
+
+  await caso('conta antiga de e-mail e senha continua entrando', async () => {
+    const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
+    await p.goto(`${SITE}/index.html`);
+    await p.fill('#loginEmail', contaAntiga.email); await p.fill('#loginSenha', contaAntiga.senha);
+    await p.click('#form-login button[type=submit]');
+    await p.waitForURL('**/dicionario.html', { timeout: 10000 });
+    await ctx.close();
+  });
+
+  await caso('conta nova de e-mail e senha criada por fora do app não consegue criar perfil', async () => {
+    const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
+    await p.goto(`${SITE}/index.html`);
+    // Cria a conta pelo Firebase (como um script faria) e tenta gravar o perfil direto
+    // no servidor do banco, com o token dessa conta
+    const { uid, token } = await p.evaluate(async () => {
+      const cred = await auth.createUserWithEmailAndPassword('intruso@t.com', 'senha123');
+      return { uid: cred.user.uid, token: await cred.user.getIdToken() };
+    });
+    const r = await fetch(`http://127.0.0.1:8089/v1/projects/demo-idiomex/databases/(default)/documents/usuarios/${uid}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ fields: { nome: { stringValue: 'X' }, tipo: { stringValue: 'professor' } } })
+    });
+    esperar(r.status === 403, `perfil foi aceito (HTTP ${r.status})`);
+    await ctx.close();
+  });
+
   await caso('login com senha errada mostra mensagem em português', async () => {
     const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
     await p.goto(`${SITE}/index.html`);
-    await p.fill('#loginEmail', `ana-${id}@t.com`); await p.fill('#loginSenha', 'errada!!');
+    await p.fill('#loginEmail', contaAntiga.email); await p.fill('#loginSenha', 'errada!!');
     await p.click('#form-login button[type=submit]');
     await p.waitForFunction(() => { const t = document.getElementById('status-login').textContent; return t && t !== 'Entrando...'; }, null, { timeout: 8000 });
     const msg = await p.textContent('#status-login');
@@ -278,21 +332,39 @@ function dataDaqui(dias) {
   await caso('"Esqueci minha senha" envia o link', async () => {
     const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
     await p.goto(`${SITE}/index.html`);
-    await p.fill('#loginEmail', `ana-${id}@t.com`);
+    await p.fill('#loginEmail', contaAntiga.email);
     await p.click('.link-esqueci-senha');
     await p.waitForFunction(() => /link/.test(document.getElementById('status-login').textContent), null, { timeout: 8000 });
     await ctx.close();
   });
 
-  await caso('aluno exclui a conta e não consegue mais entrar', async () => {
+  await caso('aluno com Google exclui a conta (sem pedir senha) e o cadastro some', async () => {
     const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
     await h.cadastrar(p, { tipo: 'aluno', nome: 'Edu', email: `edu-${id}@t.com`, codigo });
     await p.waitForURL('**/dicionario.html', { timeout: 10000 }); await p.waitForSelector('#input-palavra-en'); await dormir(1000);
     await p.click('button:has-text("Meu perfil")');
-    await p.fill('#excluir-senha-aluno', 'senha123');
+    esperar(!(await p.isVisible('#excluir-senha-aluno')), 'pediu senha para conta Google');
     await p.click('button:has-text("Excluir minha conta")');
     await p.waitForURL('**/index.html', { timeout: 10000, waitUntil: 'commit' }).catch(() => {}); await p.waitForSelector('#loginEmail');
-    await p.fill('#loginEmail', `edu-${id}@t.com`); await p.fill('#loginSenha', 'senha123');
+    await p.click('button:has-text("Entrar com Google")');
+    await p.waitForSelector('#form-cadastro:not(.oculto)', { timeout: 8000 });
+    esperar(!p.url().includes('dicionario'), 'entrou numa conta excluída');
+    await ctx.close();
+  });
+
+  await caso('conta antiga de e-mail e senha exclui a conta com a senha', async () => {
+    const conta = { email: `antiga2-${id}@t.com`, senha: 'senha123' };
+    await h.criarContaAntigaComSenha({ ...conta, perfil: { nome: 'Antiga Dois', tipo: 'aluno' } });
+    const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
+    await p.goto(`${SITE}/index.html`);
+    await p.fill('#loginEmail', conta.email); await p.fill('#loginSenha', conta.senha);
+    await p.click('#form-login button[type=submit]');
+    await p.waitForURL('**/dicionario.html', { timeout: 10000 }); await p.waitForSelector('#input-palavra-en'); await dormir(1000);
+    await p.click('button:has-text("Meu perfil")');
+    await p.fill('#excluir-senha-aluno', conta.senha);
+    await p.click('button:has-text("Excluir minha conta")');
+    await p.waitForURL('**/index.html', { timeout: 10000, waitUntil: 'commit' }).catch(() => {}); await p.waitForSelector('#loginEmail');
+    await p.fill('#loginEmail', conta.email); await p.fill('#loginSenha', conta.senha);
     await p.click('#form-login button[type=submit]');
     await p.waitForFunction(() => { const t = document.getElementById('status-login').textContent; return t && t !== 'Entrando...'; }, null, { timeout: 8000 });
     esperar(!p.url().includes('dicionario'), 'entrou numa conta excluída');

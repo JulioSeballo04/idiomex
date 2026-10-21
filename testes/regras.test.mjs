@@ -4,7 +4,9 @@ import { doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, collection, getD
 
 const env = await initializeTestEnvironment({ projectId: "demo-idiomex",
   firestore: { rules: readFileSync(new URL("../firestore.rules", import.meta.url), "utf8"), host: "127.0.0.1", port: 8089 } });
-const db = (uid) => env.authenticatedContext(uid).firestore();
+// Contas novas entram com Google; "dbSenha" simula uma conta de e-mail e senha
+const db = (uid) => env.authenticatedContext(uid, { firebase: { sign_in_provider: "google.com" } }).firestore();
+const dbSenha = (uid) => env.authenticatedContext(uid, { firebase: { sign_in_provider: "password" } }).firestore();
 let ok = 0, bad = 0;
 async function t(nome, p) { try { await p; ok++; console.log("ok  ", nome); } catch (e) { bad++; console.log("FAIL", nome, e.message.split("\n")[0]); } }
 
@@ -30,6 +32,15 @@ await t("student cannot claim a code", assertFails(setDoc(doc(db("S9"), "codigos
 // Legacy professor migration
 await t("legacy professor registers own code", setDoc(doc(db("P0"), "codigosProfessor/PROF-AAAA"), { professorId: "P0" }));
 await t("cannot register someone else's code", assertFails(setDoc(doc(db("P1"), "codigosProfessor/PROF-AAAA"), { professorId: "P1" })));
+// Cadastro novo com e-mail e senha não consegue criar perfil
+await t("email/password account cannot create a profile", assertFails(setDoc(doc(dbSenha("E1"), "usuarios/E1"), { tipo: "aluno", nome: "e", email: "e@x" })));
+const e2 = dbSenha("E2"); const be = writeBatch(e2);
+be.set(doc(e2, "usuarios/E2"), { tipo: "professor", nome: "E2", email: "e2@x", codigoProfessor: "PROF-EEEE" });
+be.set(doc(e2, "codigosProfessor/PROF-EEEE"), { professorId: "E2" });
+await t("email/password account cannot sign up as professor", assertFails(be.commit()));
+// Conta antiga de e-mail e senha (perfil já existe) continua usando o app
+await t("legacy email/password student edits own profile", updateDoc(doc(dbSenha("OLD"), "usuarios/OLD"), { telefone: "11988887777" }));
+await t("legacy email/password student reads own professor", getDoc(doc(dbSenha("OLD"), "usuarios/P0")));
 // Lookup / list
 await t("authed get code", getDoc(doc(db("S1"), "codigosProfessor/PROF-BBBB")));
 await t("list codes denied", assertFails(getDocs(collection(db("S1"), "codigosProfessor"))));
