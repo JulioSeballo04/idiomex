@@ -20,6 +20,13 @@ function dataDaqui(dias) {
   let codigo = '';
 
   console.log('\nCadastro e login');
+  await caso('tela de login só tem "Entrar com Google" (sem e-mail, senha ou "Esqueci minha senha")', async () => {
+    await prof.goto(`${SITE}/index.html`);
+    esperar(await prof.isVisible('button:has-text("Entrar com Google")'), 'sem botão do Google');
+    esperar(!(await prof.$('input[type=email]')) && !(await prof.$('input[type=password]')), 'ainda tem campo de e-mail ou senha');
+    esperar(!(await prof.$('text=Esqueci minha senha')), 'ainda tem "Esqueci minha senha"');
+  });
+
   await caso('cadastro não tem mais e-mail e senha (só Google)', async () => {
     await prof.goto(`${SITE}/index.html`);
     await prof.click('#btn-aba-cadastro');
@@ -70,18 +77,6 @@ function dataDaqui(dias) {
     await ctx.close();
   });
 
-  const contaAntiga = { email: `antiga-${id}@t.com`, senha: 'senha123' };
-  await h.criarContaAntigaComSenha({ ...contaAntiga, perfil: { nome: 'Conta Antiga', tipo: 'aluno' } });
-
-  await caso('conta antiga de e-mail e senha continua entrando', async () => {
-    const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
-    await p.goto(`${SITE}/index.html`);
-    await p.fill('#loginEmail', contaAntiga.email); await p.fill('#loginSenha', contaAntiga.senha);
-    await p.click('#form-login button[type=submit]');
-    await p.waitForURL('**/dicionario.html', { timeout: 10000 });
-    await ctx.close();
-  });
-
   await caso('conta nova de e-mail e senha criada por fora do app não consegue criar perfil', async () => {
     const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
     await p.goto(`${SITE}/index.html`);
@@ -96,17 +91,6 @@ function dataDaqui(dias) {
       body: JSON.stringify({ fields: { nome: { stringValue: 'X' }, tipo: { stringValue: 'professor' } } })
     });
     esperar(r.status === 403, `perfil foi aceito (HTTP ${r.status})`);
-    await ctx.close();
-  });
-
-  await caso('login com senha errada mostra mensagem em português', async () => {
-    const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
-    await p.goto(`${SITE}/index.html`);
-    await p.fill('#loginEmail', contaAntiga.email); await p.fill('#loginSenha', 'errada!!');
-    await p.click('#form-login button[type=submit]');
-    await p.waitForFunction(() => { const t = document.getElementById('status-login').textContent; return t && t !== 'Entrando...'; }, null, { timeout: 8000 });
-    const msg = await p.textContent('#status-login');
-    esperar(/incorret|Senha/i.test(msg) && !/firebase|auth\//i.test(msg), 'mensagem: ' + msg);
     await ctx.close();
   });
 
@@ -329,44 +313,16 @@ function dataDaqui(dias) {
   }
 
   console.log('\nConta');
-  await caso('"Esqueci minha senha" envia o link', async () => {
-    const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
-    await p.goto(`${SITE}/index.html`);
-    await p.fill('#loginEmail', contaAntiga.email);
-    await p.click('.link-esqueci-senha');
-    await p.waitForFunction(() => /link/.test(document.getElementById('status-login').textContent), null, { timeout: 8000 });
-    await ctx.close();
-  });
-
   await caso('aluno com Google exclui a conta (sem pedir senha) e o cadastro some', async () => {
     const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
     await h.cadastrar(p, { tipo: 'aluno', nome: 'Edu', email: `edu-${id}@t.com`, codigo });
     await p.waitForURL('**/dicionario.html', { timeout: 10000 }); await p.waitForSelector('#input-palavra-en'); await dormir(1000);
     await p.click('button:has-text("Meu perfil")');
-    esperar(!(await p.isVisible('#excluir-senha-aluno')), 'pediu senha para conta Google');
+    esperar(!(await p.$('input[type=password]')), 'pediu senha para excluir a conta');
     await p.click('button:has-text("Excluir minha conta")');
-    await p.waitForURL('**/index.html', { timeout: 10000, waitUntil: 'commit' }).catch(() => {}); await p.waitForSelector('#loginEmail');
+    await p.waitForURL('**/index.html', { timeout: 10000, waitUntil: 'commit' }).catch(() => {}); await p.waitForSelector('button:has-text("Entrar com Google")');
     await p.click('button:has-text("Entrar com Google")');
     await p.waitForSelector('#form-cadastro:not(.oculto)', { timeout: 8000 });
-    esperar(!p.url().includes('dicionario'), 'entrou numa conta excluída');
-    await ctx.close();
-  });
-
-  await caso('conta antiga de e-mail e senha exclui a conta com a senha', async () => {
-    const conta = { email: `antiga2-${id}@t.com`, senha: 'senha123' };
-    await h.criarContaAntigaComSenha({ ...conta, perfil: { nome: 'Antiga Dois', tipo: 'aluno' } });
-    const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
-    await p.goto(`${SITE}/index.html`);
-    await p.fill('#loginEmail', conta.email); await p.fill('#loginSenha', conta.senha);
-    await p.click('#form-login button[type=submit]');
-    await p.waitForURL('**/dicionario.html', { timeout: 10000 }); await p.waitForSelector('#input-palavra-en'); await dormir(1000);
-    await p.click('button:has-text("Meu perfil")');
-    await p.fill('#excluir-senha-aluno', conta.senha);
-    await p.click('button:has-text("Excluir minha conta")');
-    await p.waitForURL('**/index.html', { timeout: 10000, waitUntil: 'commit' }).catch(() => {}); await p.waitForSelector('#loginEmail');
-    await p.fill('#loginEmail', conta.email); await p.fill('#loginSenha', conta.senha);
-    await p.click('#form-login button[type=submit]');
-    await p.waitForFunction(() => { const t = document.getElementById('status-login').textContent; return t && t !== 'Entrando...'; }, null, { timeout: 8000 });
     esperar(!p.url().includes('dicionario'), 'entrou numa conta excluída');
     await ctx.close();
   });
