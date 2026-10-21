@@ -103,23 +103,6 @@ async function cadastrar(p, { tipo, nome = '', nomeGoogle = 'Conta Google', emai
   await p.click('#form-cadastro button[type=submit]');
 }
 
-// Conta criada antes da mudança para o Google: e-mail e senha + perfil já existente.
-// É gravada direto nos emuladores (o app não cria mais contas assim).
-async function criarContaAntigaComSenha({ email, senha, perfil }) {
-  const r = await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: senha, returnSecureToken: true })
-  });
-  const { localId } = await r.json();
-  const fields = {};
-  for (const [k, v] of Object.entries({ ...perfil, email })) fields[k] = { stringValue: String(v) };
-  await fetch(`http://127.0.0.1:8089/v1/projects/demo-idiomex/databases/(default)/documents/usuarios/${localId}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer owner' },
-    body: JSON.stringify({ fields })
-  });
-  return localId;
-}
-
 let ok = 0, falhas = [];
 async function caso(nome, fn) {
   try { await fn(); ok++; console.log('  ✔', nome); }
@@ -128,4 +111,4 @@ async function caso(nome, fn) {
 function esperar(cond, msg) { if (!cond) throw new Error(msg); }
 function resumo() { console.log(`\n${ok} passaram, ${falhas.length} falharam`); if (falhas.length) console.log('Falhas:\n - ' + falhas.join('\n - ')); }
 
-module.exports = { chromium, SITE, subirSite, usarContaGoogle, criarContaAntigaComSenha, novoContexto, novaPagina, cadastrar, caso, esperar, resumo, falhas };
+module.exports = { chromium, SITE, subirSite, usarContaGoogle, novoContexto, novaPagina, cadastrar, caso, esperar, resumo, falhas };

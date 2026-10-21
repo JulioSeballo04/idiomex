@@ -31,9 +31,10 @@ let loginEmAndamento = false;
 let redirecionando = false;
 
 // -------------------- GOOGLE --------------------
-// Contas novas são criadas só com o Google: assim o e-mail da conta é comprovadamente
-// da pessoa (no cadastro por e-mail e senha, qualquer um podia usar o e-mail de outro).
-// Quem já tinha conta com e-mail e senha continua entrando normalmente.
+// O Idiomex entra só com o Google: assim o e-mail da conta é comprovadamente da pessoa
+// (com e-mail e senha, qualquer um podia criar conta com o e-mail de outro). Quem tinha
+// conta antiga com e-mail e senha num Gmail entra com o Google desse mesmo Gmail: o
+// Firebase junta as duas formas de login na mesma conta, com os mesmos dados.
 
 function provedorGoogle() {
   const provedor = new firebase.auth.GoogleAuthProvider();
@@ -180,49 +181,6 @@ async function salvarPerfilDeProfessor(uid, dadosUsuario) {
   throw new Error("Não foi possível gerar seu código de professor. Tente novamente.");
 }
 
-// -------------------- LOGIN --------------------
-async function entrar(email, senha) {
-  const statusEl = document.getElementById("status-login");
-  statusEl.textContent = "Entrando...";
-  loginEmAndamento = true;
-
-  try {
-    const cred = await auth.signInWithEmailAndPassword(email, senha);
-    const uid = cred.user.uid;
-
-    const doc = await db.collection("usuarios").doc(uid).get();
-    if (!doc.exists) {
-      await auth.signOut();
-      throw new Error("Perfil não encontrado. Fale com o suporte.");
-    }
-    redirecionarPorTipo(doc.data().tipo);
-  } catch (erro) {
-    statusEl.textContent = traduzErro(erro);
-  } finally {
-    loginEmAndamento = false;
-  }
-}
-
-// -------------------- ESQUECI MINHA SENHA --------------------
-async function recuperarSenha(email) {
-  const statusEl = document.getElementById("status-login");
-  email = (email || "").trim();
-  if (!email) {
-    statusEl.textContent = "Digite seu e-mail acima e clique em \"Esqueci minha senha\" de novo.";
-    return;
-  }
-  statusEl.textContent = "Enviando...";
-  try {
-    await auth.sendPasswordResetEmail(email);
-    statusEl.textContent = "Se existir uma conta com esse e-mail, você vai receber um link para criar uma nova senha.";
-  } catch (erro) {
-    // "Conta não encontrada" recebe a mesma resposta, pra não revelar quais e-mails têm conta
-    statusEl.textContent = erro.code === "auth/user-not-found"
-      ? "Se existir uma conta com esse e-mail, você vai receber um link para criar uma nova senha."
-      : traduzErro(erro);
-  }
-}
-
 // -------------------- EXCLUIR CONTA --------------------
 // Apaga todos os documentos de uma subcoleção do usuário (em lotes de até 400)
 async function apagarSubcolecao(ref) {
@@ -234,17 +192,12 @@ async function apagarSubcolecao(ref) {
   }
 }
 
-// Exclui a conta logada e os dados dela. Confirma a identidade de novo (Google ou
-// senha) porque o Firebase só deixa excluir a conta logo depois de um login recente.
-async function excluirMinhaConta(senha) {
+// Exclui a conta logada e os dados dela. Confirma a identidade de novo pelo Google,
+// porque o Firebase só deixa excluir a conta logo depois de um login recente.
+async function excluirMinhaConta() {
   const user = auth.currentUser;
   if (!user) return;
-  if (entrouComGoogle(user)) {
-    await user.reauthenticateWithPopup(provedorGoogle());
-  } else {
-    const credencial = firebase.auth.EmailAuthProvider.credential(user.email, senha);
-    await user.reauthenticateWithCredential(credencial);
-  }
+  await user.reauthenticateWithPopup(provedorGoogle());
 
   const perfilRef = db.collection("usuarios").doc(user.uid);
   const perfil = (await perfilRef.get()).data() || {};
@@ -283,17 +236,12 @@ async function excluirMinhaConta(senha) {
 }
 
 // Fluxo de exclusão usado pelos botões "Excluir minha conta" (aluno e professor)
-async function confirmarExclusaoDaConta(campoSenhaId, statusId) {
+async function confirmarExclusaoDaConta(statusId) {
   const statusEl = document.getElementById(statusId);
-  const senha = document.getElementById(campoSenhaId).value;
-  if (!senha && !entrouComGoogle(auth.currentUser)) {
-    statusEl.textContent = "Digite sua senha para confirmar.";
-    return;
-  }
-  if (!confirm("Excluir sua conta de vez? Seus dados serão apagados e isso não pode ser desfeito.")) return;
+  if (!confirm("Excluir sua conta de vez? Seus dados serão apagados e isso não pode ser desfeito.\n\nO Google vai pedir para confirmar a sua conta.")) return;
   statusEl.textContent = "Excluindo...";
   try {
-    await excluirMinhaConta(senha);
+    await excluirMinhaConta();
   } catch (erro) {
     console.error(erro);
     statusEl.textContent = traduzErro(erro);
@@ -317,13 +265,6 @@ function sair() {
 function traduzErro(erro) {
   const codigo = erro.code || "";
   const mapa = {
-    "auth/email-already-in-use": "Este e-mail já está cadastrado.",
-    "auth/invalid-email": "E-mail inválido.",
-    "auth/weak-password": "A senha precisa ter pelo menos 6 caracteres.",
-    "auth/wrong-password": "Senha incorreta.",
-    "auth/user-not-found": "Não existe conta com esse e-mail.",
-    "auth/invalid-credential": "E-mail ou senha incorretos.",
-    "auth/invalid-login-credentials": "E-mail ou senha incorretos.",
     "auth/too-many-requests": "Muitas tentativas. Espere alguns minutos e tente de novo.",
     "auth/requires-recent-login": "Por segurança, saia e entre de novo antes de fazer isso.",
     "auth/popup-closed-by-user": "A janela do Google foi fechada antes de terminar. Tente de novo.",
@@ -331,7 +272,7 @@ function traduzErro(erro) {
     "auth/popup-blocked": "O navegador bloqueou a janela do Google. Permita pop-ups para este site e tente de novo.",
     "auth/unauthorized-domain": "Este endereço ainda não está autorizado para entrar com Google (Firebase → Authentication → Configurações → Domínios autorizados).",
     "auth/operation-not-allowed": "O login com Google ainda não foi ativado no Firebase (Authentication → Método de login → Google).",
-    "auth/account-exists-with-different-credential": "Esse e-mail já tem conta com senha no Idiomex. Entre com e-mail e senha.",
+    "auth/account-exists-with-different-credential": "Esse e-mail tinha uma conta antiga com senha no Idiomex. Fale com o suporte para passar a conta para o Google.",
     "auth/user-mismatch": "Escolha a mesma conta Google com que você entrou.",
     "permission-denied": "Você não tem permissão para fazer isso."
   };
@@ -345,8 +286,6 @@ function exigirLogin(tipoEsperado) {
       window.location.href = "index.html";
       return;
     }
-    // Conta Google não tem senha: esconde os campos que pedem senha (ex: excluir conta)
-    document.querySelectorAll("[data-so-senha]").forEach((el) => { el.hidden = entrouComGoogle(user); });
     const doc = await db.collection("usuarios").doc(user.uid).get();
     if (!doc.exists || (tipoEsperado && doc.data().tipo !== tipoEsperado)) {
       window.location.href = "index.html";

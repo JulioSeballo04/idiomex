@@ -335,19 +335,6 @@ html[data-tema="noturno"] img.logo-tema-noturno { display: block; }
   text-align: center;
 }
 
-.link-esqueci-senha {
-  display: block;
-  margin: 0.8rem auto 0;
-  padding: 0.2rem;
-  background: none;
-  border: none;
-  font: inherit;
-  font-size: 0.85rem;
-  color: var(--acento-forte);
-  text-decoration: underline;
-  cursor: pointer;
-}
-
 /* ---------- Conta: troca de professor e exclusão ---------- */
 .secao-conta {
   margin-top: 1.6rem;
