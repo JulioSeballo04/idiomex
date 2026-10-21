@@ -56,27 +56,81 @@ function excedeuLimite(uid) {
   return false;
 }
 
-// Confere o token de login (Firebase ID token) mandado pelo app e devolve o uid,
-// ou null se o token for inválido/expirado. Usa a API REST do Firebase Auth, que
-// valida o token contra este projeto — sem precisar de chave de serviço.
-async function uidDoToken(idToken) {
-  if (!idToken) return null;
+// Confere o token de login (Firebase ID token) mandado pelo app. Usa a API REST do
+// Firebase Auth, que valida o token contra este projeto — sem chave de serviço.
+// Devolve { uid } se o login é válido, { invalido: true } se o token é inválido ou
+// expirou, ou { erroServidor } se a própria conferência falhou (configuração).
+//
+// "site" vai no cabeçalho Referer: a chave web do Firebase costuma ser restrita aos
+// sites do app (Google Cloud → Credenciais), e sem o Referer o Google recusa o
+// pedido vindo do servidor como se fosse de um site desconhecido.
+async function conferirLogin(idToken, site) {
+  if (!idToken) return { invalido: true };
   try {
     const resposta = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Referer": `${site}/` },
         body: JSON.stringify({ idToken })
       }
     );
-    if (!resposta.ok) return null;
-    const dados = await resposta.json();
-    return dados?.users?.[0]?.localId || null;
+    const dados = await resposta.json().catch(() => ({}));
+    if (resposta.ok) {
+      const uid = dados?.users?.[0]?.localId;
+      return uid ? { uid } : { invalido: true };
+    }
+    const mensagem = dados?.error?.message || `HTTP ${resposta.status}`;
+    // Token ruim/expirado é problema do pedido; qualquer outra coisa (chave
+    // bloqueada, API desativada...) é problema de configuração do servidor.
+    if (/INVALID_ID_TOKEN|TOKEN_EXPIRED|USER_NOT_FOUND|USER_DISABLED/.test(mensagem)) return { invalido: true };
+    console.error("Falha ao validar o login no Firebase:", mensagem);
+    return { erroServidor: mensagem };
   } catch (e) {
     console.error("Falha ao validar o login:", e);
-    return null;
+    return { erroServidor: String(e.message || e) };
   }
+}
+
+// Modelos do Gemini, na ordem de preferência. Se um deles não existir (404), estiver
+// sem cota (429) ou sobrecarregado (5xx), tenta o próximo.
+const MODELOS = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite"];
+const TEMPO_MAXIMO_MODELO_MS = 9000; // por modelo; a function pode rodar até 30 s (vercel.json)
+
+function siteDoPedido(req) {
+  const origem = req.headers.origin;
+  if (origem) return origem;
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  return host ? `https://${host}` : ORIGENS_PERMITIDAS[0];
+}
+
+// GET /api/gerar-frase?diagnostico=1 — confere a configuração sem gastar cota de
+// geração e sem mostrar nenhum segredo: se a chave do Gemini existe e funciona,
+// quais dos modelos usados estão disponíveis, e se a conferência de login funciona.
+async function diagnostico(req, res) {
+  const resultado = { chaveGeminiConfigurada: !!process.env.GEMINI_API_KEY };
+  if (resultado.chaveGeminiConfigurada) {
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000&key=${process.env.GEMINI_API_KEY}`);
+      const dados = await r.json().catch(() => ({}));
+      resultado.chaveGeminiFunciona = r.ok;
+      if (r.ok) {
+        const existentes = new Set((dados.models || []).map((m) => m.name.replace(/^models\//, "")));
+        resultado.modelos = Object.fromEntries(MODELOS.map((m) => [m, existentes.has(m)]));
+      } else {
+        resultado.erroGemini = dados?.error?.message || `HTTP ${r.status}`;
+      }
+    } catch (e) {
+      resultado.chaveGeminiFunciona = false;
+      resultado.erroGemini = String(e.message || e);
+    }
+  }
+  // Um token de mentira: se a conferência estiver funcionando, o Firebase responde
+  // "token inválido"; se a chave estiver bloqueada, aparece o erro de configuração.
+  const login = await conferirLogin("token-de-diagnostico", siteDoPedido(req));
+  resultado.conferenciaDeLoginFunciona = !login.erroServidor;
+  if (login.erroServidor) resultado.erroLogin = login.erroServidor;
+  return res.status(200).json(resultado);
 }
 
 const TAMANHO_MAXIMO_CAMPO = 60; // caracteres — suficiente para qualquer palavra/expressão real
@@ -86,10 +140,13 @@ export default async function handler(req, res) {
   if (ORIGENS_PERMITIDAS.includes(origem)) {
     res.setHeader("Access-Control-Allow-Origin", origem);
   }
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method === "GET" && req.query && req.query.diagnostico !== undefined) {
+    return diagnostico(req, res);
+  }
   if (req.method !== "POST") {
     return res.status(405).json({ erro: "Método não permitido." });
   }
@@ -97,10 +154,14 @@ export default async function handler(req, res) {
   // Só usuários logados no app podem gerar frases — sem isso, qualquer script
   // (que pode mandar o cabeçalho Origin que quiser) gastaria a cota da IA.
   const autorizacao = req.headers.authorization || "";
-  const uid = await uidDoToken(autorizacao.startsWith("Bearer ") ? autorizacao.slice(7) : "");
-  if (!uid) {
-    return res.status(401).json({ erro: "Faça login para gerar frases." });
+  const login = await conferirLogin(autorizacao.startsWith("Bearer ") ? autorizacao.slice(7) : "", siteDoPedido(req));
+  if (login.erroServidor) {
+    return res.status(500).json({ frases: [], aviso: "O servidor não conseguiu conferir o login (configuração da chave do Firebase)." });
   }
+  if (login.invalido) {
+    return res.status(401).json({ frases: [], aviso: "Faça login de novo para gerar frases." });
+  }
+  const uid = login.uid;
   if (excedeuLimite(uid)) {
     return res.status(429).json({ frases: [], aviso: "Muitos pedidos seguidos. Espere alguns minutos e tente de novo." });
   }
@@ -123,38 +184,51 @@ export default async function handler(req, res) {
   try {
     const prompt = `Crie exatamente 5 frases curtas e simples em ${nomeIdioma} (nível iniciante/intermediário), cada uma usando a palavra "${palavra}"${traducao ? ` (que significa "${traducao}" em português)` : ""}. Use a palavra exatamente como foi escrita, sem trocar por sinônimos. Para cada frase, forneça também a tradução dela em português. Responda APENAS com as 5 linhas, uma por frase, no formato exato: frase em ${nomeIdioma} | tradução em português. Sem numeração, sem aspas, sem explicações extras.`;
 
-    // Tenta o modelo principal; se estiver sobrecarregado (erro 503), tenta um modelo alternativo
-    const modelos = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite"];
-    let dados, resposta;
+    // Tenta os modelos em ordem. Passa pro próximo se o modelo não existir (404),
+    // estiver sem cota (429), sobrecarregado (5xx) ou responder vazio — modelos mais
+    // novos "pensam" antes de responder e esse raciocínio também gasta o limite de
+    // tokens da resposta, por isso o limite é folgado. Erros de chave (400/401/403)
+    // valem para todos os modelos, então param na hora.
+    let texto = "";
+    let ultimoErro = "";
+    for (const modelo of MODELOS) {
+      let resposta;
+      try {
+        resposta = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { maxOutputTokens: 2048 }
+            }),
+            signal: AbortSignal.timeout(TEMPO_MAXIMO_MODELO_MS)
+          }
+        );
+      } catch (e) {
+        ultimoErro = `${modelo}: sem resposta (${e.name === "TimeoutError" ? "demorou demais" : e.message})`;
+        console.warn("Gemini falhou, tentando o próximo modelo —", ultimoErro);
+        continue;
+      }
+      const dados = await resposta.json().catch(() => ({}));
 
-    for (const modelo of modelos) {
-      resposta = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 320 }
-          })
-        }
-      );
-      dados = await resposta.json();
-
-      if (resposta.ok) break; // deu certo, para de tentar outros modelos
-      if (resposta.status !== 503) break; // erro diferente de sobrecarga, não adianta tentar outro modelo
-      console.warn(`Modelo ${modelo} sobrecarregado, tentando o próximo...`);
+      if (resposta.ok) {
+        texto = (dados?.candidates?.[0]?.content?.parts || [])
+          .filter((p) => !p.thought && typeof p.text === "string")
+          .map((p) => p.text).join("").trim();
+        if (texto) break;
+        ultimoErro = `${modelo}: resposta vazia (${dados?.candidates?.[0]?.finishReason || "sem motivo"})`;
+      } else {
+        ultimoErro = `${modelo}: ${dados?.error?.message || `HTTP ${resposta.status}`}`;
+        if ([400, 401, 403].includes(resposta.status)) break;
+      }
+      console.warn("Gemini falhou, tentando o próximo modelo —", ultimoErro);
     }
-
-    if (!resposta.ok) {
-      console.error("Erro da API do Gemini:", dados);
-      return res.status(200).json({ frases: [], aviso: dados?.error?.message || "Erro ao consultar a IA." });
-    }
-
-    const texto = dados?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
     if (!texto) {
-      return res.status(200).json({ frases: [], aviso: "IA não retornou frases desta vez." });
+      console.error("Nenhum modelo do Gemini gerou frases:", ultimoErro);
+      return res.status(200).json({ frases: [], aviso: ultimoErro || "IA não retornou frases desta vez." });
     }
 
     // Quebra a resposta em linhas e separa frase/tradução pelo "|"

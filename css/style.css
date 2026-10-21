@@ -753,6 +753,15 @@ html[data-tema="noturno"] .secao-perigo h4 { color: #F08A75; }
   cursor: pointer;
 }
 
+.motivo-falha-frases {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  font-style: normal;
+  color: var(--ink-soft);
+  word-break: break-word;
+}
+
 .btn-ver-traducao {
   background: none;
   border: none;

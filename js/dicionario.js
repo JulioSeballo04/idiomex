@@ -356,7 +356,8 @@ function desenharPalavras(grade) {
       frases = linhas + botaoRevelar;
     } else if (frasesTravadas(p)) {
       frases = `<div class="frase-exemplo">Não foi possível gerar frases de exemplo agora.
-        <button class="btn-tentar-frases" type="button" onclick="tentarGerarFrasesDeNovo('${p.id}')">↻ Tentar de novo</button></div>`;
+        <button class="btn-tentar-frases" type="button" onclick="tentarGerarFrasesDeNovo('${p.id}')">↻ Tentar de novo</button>
+        ${p.motivoFalhaFrases ? `<span class="motivo-falha-frases">Detalhe: ${escapeHtml(p.motivoFalhaFrases)}</span>` : ""}</div>`;
     } else {
       frases = `<div class="frase-exemplo">Gerando frases de exemplo...</div>`;
     }
@@ -511,18 +512,24 @@ async function gerarFrasesDaPalavra(id, palavra, traducao, idioma) {
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
       body: JSON.stringify({ palavra, traducao, idioma })
     });
-    const dados = await resposta.json();
+    const dados = await resposta.json().catch(() => ({}));
     if (dados.frases && dados.frases.length > 0) {
-      await ref.update({ frasesExemplo: dados.frases, falhaAoGerarFrases: firebase.firestore.FieldValue.delete() });
+      await ref.update({
+        frasesExemplo: dados.frases,
+        falhaAoGerarFrases: firebase.firestore.FieldValue.delete(),
+        motivoFalhaFrases: firebase.firestore.FieldValue.delete()
+      });
     } else {
       // A IA respondeu mas não trouxe frases (quota, sobrecarga etc.) — marca a
-      // palavra para não ficar com "Gerando frases de exemplo..." pra sempre.
-      if (dados.aviso) console.warn("IA:", dados.aviso);
-      await ref.update({ frasesExemplo: [], falhaAoGerarFrases: true });
+      // palavra para não ficar com "Gerando frases de exemplo..." pra sempre, e
+      // guarda o motivo, que aparece discreto no cartão (ajuda a achar o problema).
+      const motivo = String(dados.aviso || dados.erro || `servidor respondeu ${resposta.status}`).slice(0, 200);
+      console.warn("IA:", motivo);
+      await ref.update({ frasesExemplo: [], falhaAoGerarFrases: true, motivoFalhaFrases: motivo });
     }
   } catch (e) {
     console.warn("Não foi possível gerar as frases de exemplo agora:", e);
-    await ref.update({ frasesExemplo: [], falhaAoGerarFrases: true }).catch(() => {});
+    await ref.update({ frasesExemplo: [], falhaAoGerarFrases: true, motivoFalhaFrases: "sem conexão com o servidor da IA" }).catch(() => {});
   } finally {
     frasesSendoGeradas.delete(id);
     renderizarPalavras();
