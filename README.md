@@ -20,7 +20,11 @@ gratuita, sem cartão).
 2. Dentro do projeto, clique no ícone `</>` para adicionar um "App da Web".
 3. Copie o objeto `firebaseConfig` que aparecer.
 4. Cole esses valores no arquivo `js/firebase-config.js` (substitua os campos `SEU_...`).
-5. No menu lateral, vá em **Build > Authentication** → aba "Sign-in method" → ative **E-mail/senha**.
+5. No menu lateral, vá em **Build > Authentication** → aba "Sign-in method" → ative **Google**
+   (contas novas são criadas só com o Google) e mantenha **E-mail/senha** ativo
+   (para quem já tinha conta assim continuar entrando).
+   Ainda em Authentication → **Settings → Authorized domains**, adicione o endereço
+   do site (ex: `idiomex.vercel.app`) — sem isso, a janela do Google não abre.
 6. Vá em **Build > Firestore Database** → "Criar banco de dados" → modo produção → escolha uma região (ex: `southamerica-east1`, mais perto do Brasil).
 
 ## Passo 2 — Aplicar as regras de segurança

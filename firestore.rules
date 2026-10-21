@@ -78,7 +78,12 @@ service cloud.firestore {
 
       // Criação: só o próprio usuário, e só com um "tipo" válido — evita que alguém
       // grave um valor arbitrário nesse campo (ex: "admin").
+      //
+      // Perfis novos só com login do Google: o e-mail da conta é comprovadamente da
+      // pessoa. Contas antigas de e-mail e senha já têm perfil e continuam funcionando;
+      // uma conta nova de e-mail e senha (criada por fora do app) não consegue perfil.
       allow create: if request.auth != null && request.auth.uid == userId &&
+        request.auth.token.firebase.sign_in_provider == "google.com" &&
         request.resource.data.tipo in ["aluno", "professor"] &&
         vinculoValido(request.resource.data);
 

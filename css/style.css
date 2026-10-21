@@ -300,6 +300,41 @@ html[data-tema="noturno"] img.logo-tema-noturno { display: block; }
   color: var(--ink);
 }
 
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  width: 100%;
+  background: #fff;
+  color: #1f1f1f;
+  border: 1px solid #dadce0;
+  font-weight: 600;
+}
+.btn-google:hover { background: #f7f8f8; border-color: #c6c9cc; }
+.logo-google { flex-shrink: 0; }
+
+.divisor-ou {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 1.1rem 0 0.9rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+.divisor-ou::before, .divisor-ou::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--borda);
+}
+
+.dica-cadastro {
+  margin: 0.8rem 0 0;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
 .link-esqueci-senha {
   display: block;
   margin: 0.8rem auto 0;

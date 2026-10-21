@@ -11,6 +11,20 @@ const SITE = `http://localhost:${PORTA}`;
 // Traduções "corretas" que a IA simulada devolve (as demais palavras: a do aluno)
 const TRADUCOES_SIMULADAS = { fees: ['taxas', 'tarifas'] };
 
+// A janela real do Google precisa de apis.google.com. Nos testes, "entrar com Google"
+// usa uma credencial Google simulada, que o emulador do Firebase aceita: a conta
+// escolhida vem de sessionStorage (veja usarContaGoogle) e o login fica registrado
+// como Google de verdade (provedor google.com), inclusive para as regras do banco.
+const GOOGLE_SIMULADO = `
+function __credencialGoogleTeste() {
+  const c = JSON.parse(sessionStorage.getItem("__contaGoogle") || "null");
+  if (!c) { const e = new Error("sem conta Google simulada"); e.code = "auth/popup-closed-by-user"; throw e; }
+  return firebase.auth.GoogleAuthProvider.credential(JSON.stringify({ sub: c.sub, email: c.email, email_verified: true, name: c.nome }));
+}
+auth.signInWithPopup = async () => auth.signInWithCredential(__credencialGoogleTeste());
+auth.onAuthStateChanged((u) => { if (u) u.reauthenticateWithPopup = async () => u.reauthenticateWithCredential(__credencialGoogleTeste()); });
+`;
+
 const FB = path.join(__dirname, 'node_modules/firebase-site');
 
 // Servidor de arquivos estáticos do site (sem dependências)
@@ -41,7 +55,7 @@ async function novoContexto(browser, opts = {}) {
     let src = fs.readFileSync(path.join(RAIZ, 'js/firebase-config.js'), 'utf8')
       .replace(/projectId: "[^"]+"/, 'projectId: "demo-idiomex"')
       .replace(/const AI_ENDPOINT = [^;]+;/, `const AI_ENDPOINT = "${SITE}/api/gerar-frase";`);
-    src += '\nauth.useEmulator("http://127.0.0.1:9099");\ndb.useEmulator("127.0.0.1", 8089);\n';
+    src += '\nauth.useEmulator("http://127.0.0.1:9099");\ndb.useEmulator("127.0.0.1", 8089);\n' + GOOGLE_SIMULADO;
     r.fulfill({ body: src, contentType: 'application/javascript' });
   });
   ctx.pedidosIA = [];
@@ -70,15 +84,40 @@ async function novaPagina(ctx) {
   return p;
 }
 
-async function cadastrar(p, { tipo, nome, email, senha = 'senha123', codigo = '' }) {
+// Escolhe a conta Google que a "janela do Google" simulada vai devolver nessa aba
+async function usarContaGoogle(p, { email, nome }) {
+  if (!p.url().startsWith(SITE)) await p.goto(`${SITE}/index.html`);
+  await p.evaluate((c) => sessionStorage.setItem('__contaGoogle', JSON.stringify(c)),
+    { sub: 'g-' + email.replace(/[^a-z0-9]/gi, ''), email, nome });
+}
+
+// Cadastro pela tela "Criar conta" (com Google). "nome" é o que a pessoa digita no
+// formulário (pode ficar em branco); "nomeGoogle" é o nome da conta Google.
+async function cadastrar(p, { tipo, nome = '', nomeGoogle = 'Conta Google', email, codigo = '' }) {
   await p.goto(`${SITE}/index.html`);
+  await usarContaGoogle(p, { email, nome: nomeGoogle });
   await p.click('#btn-aba-cadastro');
   await p.selectOption('#cadTipo', tipo);
   await p.fill('#cadNome', nome);
-  await p.fill('#cadEmail', email);
-  await p.fill('#cadSenha', senha);
   if (tipo === 'aluno') await p.fill('#cadCodigo', codigo);
   await p.click('#form-cadastro button[type=submit]');
+}
+
+// Conta criada antes da mudança para o Google: e-mail e senha + perfil já existente.
+// É gravada direto nos emuladores (o app não cria mais contas assim).
+async function criarContaAntigaComSenha({ email, senha, perfil }) {
+  const r = await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: senha, returnSecureToken: true })
+  });
+  const { localId } = await r.json();
+  const fields = {};
+  for (const [k, v] of Object.entries({ ...perfil, email })) fields[k] = { stringValue: String(v) };
+  await fetch(`http://127.0.0.1:8089/v1/projects/demo-idiomex/databases/(default)/documents/usuarios/${localId}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer owner' },
+    body: JSON.stringify({ fields })
+  });
+  return localId;
 }
 
 let ok = 0, falhas = [];
@@ -89,4 +128,4 @@ async function caso(nome, fn) {
 function esperar(cond, msg) { if (!cond) throw new Error(msg); }
 function resumo() { console.log(`\n${ok} passaram, ${falhas.length} falharam`); if (falhas.length) console.log('Falhas:\n - ' + falhas.join('\n - ')); }
 
-module.exports = { chromium, SITE, subirSite, novoContexto, novaPagina, cadastrar, caso, esperar, resumo, falhas };
+module.exports = { chromium, SITE, subirSite, usarContaGoogle, criarContaAntigaComSenha, novoContexto, novaPagina, cadastrar, caso, esperar, resumo, falhas };
