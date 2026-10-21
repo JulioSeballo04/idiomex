@@ -37,7 +37,7 @@ async function novoContexto(browser, opts = {}) {
   await ctx.route('**/js/firebase-config.js', (r) => {
     let src = fs.readFileSync(path.join(RAIZ, 'js/firebase-config.js'), 'utf8')
       .replace(/projectId: "[^"]+"/, 'projectId: "demo-idiomex"')
-      .replace(/const AI_ENDPOINT = "[^"]+"/, `const AI_ENDPOINT = "${SITE}/api/gerar-frase"`);
+      .replace(/const AI_ENDPOINT = [^;]+;/, `const AI_ENDPOINT = "${SITE}/api/gerar-frase";`);
     src += '\nauth.useEmulator("http://127.0.0.1:9099");\ndb.useEmulator("127.0.0.1", 8089);\n';
     r.fulfill({ body: src, contentType: 'application/javascript' });
   });

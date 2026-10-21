@@ -49,9 +49,12 @@ vê os alunos vinculados a ele pelo código.
    - Nome: `GEMINI_API_KEY`
    - Valor: a chave que você criou no Passo 3
 5. Clique em **Deploy**.
-6. Quando terminar, copie a URL do projeto (ex: `https://meu-dicionario.vercel.app`).
-7. No arquivo `js/firebase-config.js`, atualize a constante `AI_ENDPOINT` para:
-   `https://meu-dicionario.vercel.app/api/gerar-frase`
+6. A Vercel publica o repositório inteiro: o site abre direto pelo endereço
+   da Vercel e já chama a IA no mesmo endereço, sem configurar nada.
+7. Se o site também for aberto pelo Firebase Hosting, confira em
+   `js/firebase-config.js` se a constante `AI_ENDPOINT_VERCEL` aponta para o
+   endereço de produção do projeto na Vercel (Settings → Domains), seguido de
+   `/api/gerar-frase`.
 
 ## Passo 5 — Publicar o site (Firebase Hosting)
 

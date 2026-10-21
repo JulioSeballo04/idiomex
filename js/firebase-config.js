@@ -24,7 +24,10 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// Endereço da sua function no Vercel que gera as frases de exemplo.
-// Depois de fazer o deploy no Vercel, troque pela URL real, ex:
-// "https://meu-dicionario.vercel.app/api/gerar-frase"
-const AI_ENDPOINT = "https://meu-dicionario.vercel.app/api/gerar-frase";
+// Endereço da function da Vercel que gera as frases de exemplo (api/gerar-frase.js).
+// A Vercel publica este repositório inteiro (projeto "idiomex"): quando o site é
+// aberto por um endereço da Vercel, a function está no mesmo endereço do site
+// (vale também para as prévias de cada mudança). Aberto pelo Firebase Hosting, o
+// site chama o endereço de produção do projeto na Vercel.
+const AI_ENDPOINT_VERCEL = "https://idiomex.vercel.app/api/gerar-frase";
+const AI_ENDPOINT = location.hostname.endsWith(".vercel.app") ? "/api/gerar-frase" : AI_ENDPOINT_VERCEL;
