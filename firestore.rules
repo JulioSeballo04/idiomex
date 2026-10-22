@@ -53,6 +53,16 @@ service cloud.firestore {
       allow delete: if request.auth != null && resource.data.professorId == request.auth.uid;
     }
 
+    // "Plano" do aluno, definido pelo professor: quantas aulas por semana ele pode
+    // marcar (0 = sem limite) e quantas reposições o professor já concedeu. Guarda o
+    // professorId junto: se o aluno trocar de professor, o plano antigo não vale mais.
+    function planoValido(plano) {
+      return plano.keys().hasOnly(["professorId", "aulasPorSemana", "reposicoesConcedidas"]) &&
+        plano.professorId == request.auth.uid &&
+        plano.aulasPorSemana is int && plano.aulasPorSemana >= 0 && plano.aulasPorSemana <= 14 &&
+        plano.reposicoesConcedidas is int && plano.reposicoesConcedidas >= 0 && plano.reposicoesConcedidas <= 1000;
+    }
+
     match /usuarios/{userId} {
       // Leitura: o próprio dono, o professor vinculado a esse aluno, ou o aluno
       // vinculado a esse professor (o aluno lê o perfil do professor pra saber quais
@@ -85,9 +95,10 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == userId &&
         request.auth.token.firebase.sign_in_provider == "google.com" &&
         request.resource.data.tipo in ["aluno", "professor"] &&
+        !("plano" in request.resource.data) &&
         vinculoValido(request.resource.data);
 
-      // Atualização — duas situações permitidas:
+      // Atualização — três situações permitidas:
       // 1) o próprio dono, impedido de alterar os campos sensíveis que definem seu
       //    papel (tipo, codigoProfessor) — sem isso, um aluno poderia se autopromover
       //    a "professor" pelo console do navegador. O professorId só muda junto com
@@ -96,8 +107,11 @@ service cloud.firestore {
       // 2) o professor atualmente vinculado ao aluno, mas só pra ZERAR o professorId
       //    (função "Remover aluno" do painel) — todo o resto do perfil do aluno
       //    (nome, e-mail, tipo, codigoProfessor) tem que continuar exatamente igual.
+      // 3) o professor vinculado define o plano do aluno (aulas por semana e
+      //    reposições) — e só isso; o aluno nunca mexe no próprio plano.
       allow update: if request.auth != null && (
         (request.auth.uid == userId &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(["plano"]) &&
           request.resource.data.tipo == resource.data.tipo &&
           request.resource.data.get('codigoProfessor', null) == resource.data.get('codigoProfessor', null) &&
           (request.resource.data.get('professorId', null) == resource.data.get('professorId', null) ||
@@ -108,7 +122,11 @@ service cloud.firestore {
           request.resource.data.tipo == resource.data.tipo &&
           request.resource.data.nome == resource.data.nome &&
           request.resource.data.email == resource.data.email &&
-          request.resource.data.get('codigoProfessor', null) == resource.data.get('codigoProfessor', null))
+          request.resource.data.get('codigoProfessor', null) == resource.data.get('codigoProfessor', null)) ||
+
+        (resource.data.get('professorId', null) == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["plano"]) &&
+          planoValido(request.resource.data.plano))
       );
 
       allow delete: if request.auth != null && request.auth.uid == userId;

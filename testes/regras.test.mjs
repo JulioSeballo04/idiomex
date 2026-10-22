@@ -63,6 +63,16 @@ await t("student cannot become professor", assertFails(updateDoc(doc(db("S1"), "
 // Professor removes student
 await t("professor removes student", updateDoc(doc(db("P0"), "usuarios/S1"), { professorId: deleteField() }));
 await t("unlinked student relinks", updateDoc(doc(db("S1"), "usuarios/S1"), { professorId: "P1", codigoVinculo: "PROF-BBBB" }));
+// Plano do aluno (aulas por semana e reposições), definido pelo professor
+const plano = (prof, aulas, repos) => ({ plano: { professorId: prof, aulasPorSemana: aulas, reposicoesConcedidas: repos } });
+await t("linked professor sets student plan", updateDoc(doc(db("P1"), "usuarios/S1"), plano("P1", 2, 1)));
+await t("unlinked professor cannot set plan", assertFails(updateDoc(doc(db("P0"), "usuarios/S1"), plano("P0", 5, 9))));
+await t("professor cannot set plan for another professor id", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), plano("P0", 2, 1))));
+await t("professor cannot change other student fields with the plan", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), { ...plano("P1", 2, 1), nome: "Hacker" })));
+await t("invalid plan values rejected", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), plano("P1", -1, 1))));
+await t("student cannot change own plan", assertFails(updateDoc(doc(db("S1"), "usuarios/S1"), plano("P1", 7, 99))));
+await t("student still edits own contact with a plan set", updateDoc(doc(db("S1"), "usuarios/S1"), { telefone: "11977776666" }));
+await t("student cannot create profile with a plan", assertFails(setDoc(doc(db("S7"), "usuarios/S7"), { tipo: "aluno", nome: "s7", email: "s7@x", professorId: "P1", codigoVinculo: "PROF-BBBB", ...plano("P1", 7, 99) })));
 // Messages deletion by student
 await setDoc(doc(db("P1"), "usuarios/S1/mensagens/m1"), { texto: "oi" });
 await t("student deletes own messages", deleteDoc(doc(db("S1"), "usuarios/S1/mensagens/m1")));

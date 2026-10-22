@@ -953,7 +953,7 @@ function novoAgendamento() {
     erroHorarios: false,
     modalidade: null,
     idioma: null,
-    reposicao: quantidadeAulasParaRepor() > 0,
+    reposicao: false,
     confirmada: null,      // dados da aula depois de confirmada (tela de sucesso)
     salvando: false,
     erro: ""
@@ -1003,6 +1003,15 @@ async function abrirAgendamento() {
   }
 
   configAgendaProfessor = snap.data();
+
+  // Plano (aulas por semana e reposições) sempre fresco: o professor pode ter
+  // mudado com a página aberta
+  try {
+    const meuPerfil = await db.collection("usuarios").doc(auth.currentUser.uid).get();
+    if (meuPerfil.exists) perfilAlunoAtual = meuPerfil.data();
+  } catch (e) {
+    console.warn("Não foi possível atualizar o plano de aulas:", e);
+  }
 
   // Não deixa a falta de permissão nessa coleção (ex: regras do Firestore
   // ainda não republicadas) travar o agendamento inteiro — nesse caso só
@@ -1056,14 +1065,13 @@ function idiomasParaAula() {
   return idiomasDoProfessorDoAluno.length ? idiomasDoProfessorDoAluno : [IDIOMA_PADRAO];
 }
 
-// Aulas que o aluno ainda tem pra repor: as canceladas pelo professor menos as
-// reposições que ele já marcou (ou fez). Nunca fica negativo.
-function quantidadeAulasParaRepor() {
-  const canceladasPeloProfessor = minhasAulasCache
-    .filter((a) => a.status === "cancelada" && a.canceladoPor === "professor").length;
-  const reposicoes = minhasAulasCache
-    .filter((a) => a.reposicao === true && (a.status === "agendada" || a.status === "concluida")).length;
-  return Math.max(0, canceladasPeloProfessor - reposicoes);
+// Plano do aluno com o professor atual e o que ele permite na semana da data escolhida
+function situacaoDoPlano(dataIso) {
+  const plano = planoDoAluno(perfilAlunoAtual, professorIdDoAluno);
+  const saldo = saldoReposicoes(plano, minhasAulasCache, professorIdDoAluno);
+  const limite = plano.aulasPorSemana;
+  const naSemana = dataIso ? aulasNaSemana(minhasAulasCache, professorIdDoAluno, dataIso) : 0;
+  return { limite, naSemana, semanaCheia: limite > 0 && naSemana >= limite, saldo };
 }
 
 function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade, reposicao, idiomaAula) {
@@ -1130,7 +1138,17 @@ function renderizarAgendamento() {
   if (!modalidades.includes(agendamento.modalidade)) agendamento.modalidade = modalidades[0] || null;
   const idiomas = idiomasParaAula();
   if (!idiomas.includes(agendamento.idioma)) agendamento.idioma = idiomas.includes(idiomaDoAluno) ? idiomaDoAluno : idiomas[0];
-  const qtdRepor = quantidadeAulasParaRepor();
+  const plano = situacaoDoPlano(agendamento.data);
+  // Reposição só com crédito; com a semana cheia, a aula só pode ser reposição
+  if (plano.saldo === 0) agendamento.reposicao = false;
+  else if (plano.semanaCheia) agendamento.reposicao = true;
+  const linhasPlano = [];
+  if (plano.limite > 0) {
+    linhasPlano.push(agendamento.data
+      ? `Semana de ${escapeHtml(formatarDataBR(inicioDaSemanaISO(agendamento.data)).slice(0, 5))}: <strong>${plano.naSemana} de ${plano.limite}</strong> aula${plano.limite > 1 ? "s" : ""} do seu plano`
+      : `Seu plano: <strong>${plano.limite}</strong> aula${plano.limite > 1 ? "s" : ""} por semana`);
+  }
+  linhasPlano.push(`Reposições disponíveis: <strong>${plano.saldo}</strong>`);
 
   const cartaoConfirmar = `
     <div class="cartao-passo${dataHoraEscolhidas ? "" : " passo-bloqueado"}">
@@ -1149,9 +1167,11 @@ function renderizarAgendamento() {
             ${modalidades.map((m) => `<label><input type="radio" name="modalidade-agendamento" value="${m}" ${m === agendamento.modalidade ? "checked" : ""} onchange="agendamento.modalidade = this.value"> ${m === "online" ? "Online" : "Presencial"}</label>`).join("")}
           </div>
         </div>` : ""}
+      <div class="plano-agendamento">${linhasPlano.map((l) => `<div>${l}</div>`).join("")}</div>
       <div class="campo-agendamento campo-reposicao">
-        <label class="rotulo-reposicao"><input type="checkbox" id="chk-reposicao" ${agendamento.reposicao ? "checked" : ""} onchange="agendamento.reposicao = this.checked"> Esta é uma aula de reposição</label>
-        ${qtdRepor > 0 ? `<p class="dica-reposicao">Você tem ${qtdRepor} aula${qtdRepor > 1 ? "s" : ""} para repor (cancelada${qtdRepor > 1 ? "s" : ""} pelo professor).</p>` : ""}
+        <label class="rotulo-reposicao"><input type="checkbox" id="chk-reposicao" ${agendamento.reposicao ? "checked" : ""} ${plano.saldo === 0 || plano.semanaCheia ? "disabled" : ""} onchange="agendamento.reposicao = this.checked; renderizarAgendamento()"> Usar 1 crédito de reposição nesta aula</label>
+        ${plano.semanaCheia && plano.saldo > 0 ? `<p class="dica-reposicao">As aulas do seu plano nessa semana já estão marcadas — esta vai usar 1 reposição.</p>` : ""}
+        ${plano.semanaCheia && plano.saldo === 0 ? `<p class="dica-reposicao aviso-plano">As aulas do seu plano nessa semana já estão marcadas e você não tem reposições. Escolha outra semana ou fale com seu professor.</p>` : ""}
       </div>
       ${agendamento.erro ? `<p class="erro-agendamento" role="alert">${escapeHtml(agendamento.erro)}</p>` : ""}
       <button type="button" class="btn btn-primario btn-confirmar-agendamento" id="btn-confirmar-agendamento" onclick="confirmarAgendamento()" ${dataHoraEscolhidas && !agendamento.salvando ? "" : "disabled"}>
@@ -1340,6 +1360,17 @@ async function confirmarAgendamento() {
   }
   if (!agendamento.modalidade) {
     agendamento.erro = "Seu professor ainda não definiu se atende online ou presencial.";
+    renderizarAgendamento();
+    return;
+  }
+  const plano = situacaoDoPlano(agendamento.data);
+  if (agendamento.reposicao && plano.saldo === 0) {
+    agendamento.erro = "Você não tem créditos de reposição.";
+    renderizarAgendamento();
+    return;
+  }
+  if (!agendamento.reposicao && plano.semanaCheia) {
+    agendamento.erro = `Você já marcou as ${plano.limite} aula${plano.limite > 1 ? "s" : ""} do seu plano nessa semana.`;
     renderizarAgendamento();
     return;
   }
