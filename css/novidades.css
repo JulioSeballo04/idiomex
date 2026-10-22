@@ -748,3 +748,29 @@ html[data-tema="noturno"] .titulo-grupo-dia.atrasadas { color: #F08A75; }
 .rotulo-meses-liberados { font-weight: 600; font-size: 0.9rem; }
 .grupo-meses { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; }
 .opcao-mes { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.88rem; }
+
+/* ---------- Plano do aluno (professor) e no agendamento (aluno) ---------- */
+.plano-aluno {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem 1.6rem;
+  padding: 0.7rem 0.9rem; margin: 0.4rem 0 0.8rem;
+  border: 1px solid var(--borda); border-radius: 10px; background: var(--bg);
+}
+.campo-plano { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; font-weight: 600; color: var(--ink-soft); }
+.campo-plano select { padding: 0.35em 0.5em; border-radius: 8px; border: 1px solid var(--borda); background: var(--bg-cartao); color: var(--ink); font-size: 0.9rem; }
+.contador-reposicoes { display: inline-flex; align-items: center; gap: 0.6rem; }
+.saldo-reposicoes { min-width: 1.6em; text-align: center; font-size: 1.05rem; color: var(--ink); }
+.btn-contador {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--borda); background: var(--bg-cartao); color: var(--acento-forte);
+  font-size: 1.1rem; font-weight: 700; cursor: pointer; line-height: 1;
+}
+.btn-contador:hover:not(:disabled) { border-color: var(--acento); }
+.btn-contador:disabled { opacity: 0.4; cursor: not-allowed; }
+.dica-plano { flex-basis: 100%; margin: 0; font-size: 0.78rem; color: var(--ink-soft); }
+
+.plano-agendamento {
+  margin: 0.2rem 0 0.8rem; padding: 0.55rem 0.75rem; border-radius: 8px;
+  background: var(--bg); font-size: 0.84rem; line-height: 1.6;
+}
+.aviso-plano { color: #8f2f1f; }
+html[data-tema="noturno"] .aviso-plano { color: #F08A75; }

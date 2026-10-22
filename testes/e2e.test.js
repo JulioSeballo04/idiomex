@@ -408,10 +408,75 @@ function dataDaqui(dias) {
   });
   await ctxGabi.close();
 
+  console.log('\nPlano do aluno (aulas por semana e reposições)');
+  const ctxHugo = await h.novoContexto(browser); const hugo = await h.novaPagina(ctxHugo);
+  await h.cadastrar(hugo, { tipo: 'aluno', nome: 'Hugo', email: `hugo-${id}@t.com`, codigo });
+  await hugo.waitForURL('**/dicionario.html', { timeout: 10000 }); await hugo.waitForSelector('#input-palavra-en'); await dormir(1500);
+  const blocoHugo = '.aluno-bloco:has(.item-aluno:has-text("Hugo"))';
+  const saldoNoPainel = () => prof.textContent(`${blocoHugo} .saldo-reposicoes`);
+
+  async function confirmarPrimeiroHorario(p) {
+    await abrirAgendamentoNoDia(p, dia);
+    await p.click('.btn-slot-horario >> nth=0');
+    await p.waitForSelector('.resumo-passo', { timeout: 3000 });
+  }
+
+  await caso('professor define 1 aula por semana no painel do aluno', async () => {
+    await prof.click('#btn-aba-alunos');
+    await prof.click(`${blocoHugo} .item-aluno`);
+    await prof.selectOption(`${blocoHugo} .plano-aluno select`, '1');
+    await hugo.waitForFunction(async () => {
+      const p = (await db.collection('usuarios').doc(auth.currentUser.uid).get()).data().plano;
+      return p && p.aulasPorSemana === 1;
+    }, null, { timeout: 5000 });
+    esperar((await saldoNoPainel()).trim() === '0', 'saldo inicial diferente de 0');
+  });
+
+  await caso('com a semana cheia e sem reposição, o aluno não consegue marcar outra aula', async () => {
+    await confirmarPrimeiroHorario(hugo);
+    await hugo.click('#btn-confirmar-agendamento');
+    await hugo.waitForSelector('.agendamento-sucesso', { timeout: 8000 });
+    await hugo.keyboard.press('Escape');
+    await confirmarPrimeiroHorario(hugo);
+    esperar(await hugo.isDisabled('#chk-reposicao'), 'deixou marcar reposição sem crédito');
+    await hugo.waitForSelector('.aviso-plano', { timeout: 3000 });
+    await hugo.click('#btn-confirmar-agendamento');
+    await hugo.waitForSelector('.erro-agendamento:has-text("do seu plano nessa semana")', { timeout: 3000 });
+    esperar((await hugo.evaluate(() => aulasFuturasDoAluno().length)) === 1, 'marcou a segunda aula da semana');
+    await hugo.keyboard.press('Escape');
+  });
+
+  await caso('professor dá 1 reposição (+) e o aluno marca a aula extra usando o crédito', async () => {
+    await prof.click(`${blocoHugo} button[aria-label="Dar 1 reposição"]`);
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is(\"1\")`, { timeout: 5000 });
+    await confirmarPrimeiroHorario(hugo);
+    await hugo.waitForSelector('.plano-agendamento:has-text("Reposições disponíveis: 1")', { timeout: 3000 });
+    esperar(await hugo.isChecked('#chk-reposicao'), 'não usou a reposição automaticamente com a semana cheia');
+    await hugo.click('#btn-confirmar-agendamento');
+    await hugo.waitForSelector('.agendamento-sucesso:has-text("Reposição")', { timeout: 8000 });
+    await hugo.keyboard.press('Escape');
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is(\"0\")`, { timeout: 5000 });
+  });
+
+  await caso('cancelar a aula de reposição devolve o crédito', async () => {
+    const repo = await hugo.evaluate(() => minhasAulasCache.find((a) => a.reposicao && a.status === 'agendada').id);
+    await hugo.evaluate((id) => cancelarMinhaAula(id), repo);
+    await hugo.waitForFunction(() => situacaoDoPlano(null).saldo === 1, null, { timeout: 5000 });
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is(\"1\")`, { timeout: 5000 });
+  });
+
+  await caso('professor tira o crédito (−) e o saldo não fica negativo', async () => {
+    await prof.click(`${blocoHugo} button[aria-label="Tirar 1 reposição"]`);
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is(\"0\")`, { timeout: 5000 });
+    esperar(await prof.isDisabled(`${blocoHugo} button[aria-label="Tirar 1 reposição"]`), '"−" continua ativo com saldo 0');
+  });
+  await ctxHugo.close();
+
   await caso('aluno sem professor recebe aviso ao clicar em "Agendar aula"', async () => {
     const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
     await h.cadastrar(p, { tipo: 'aluno', nome: 'Duda', email: `duda-${id}@t.com`, codigo });
     await p.waitForURL('**/dicionario.html', { timeout: 10000 }); await p.waitForSelector('#input-palavra-en');
+    await p.waitForFunction(() => auth.currentUser, null, { timeout: 8000 });
     await p.evaluate(async () => { await db.collection('usuarios').doc(auth.currentUser.uid).update({ professorId: null }); });
     await p.reload(); await p.waitForSelector('#input-palavra-en'); await dormir(1500);
     p.ultimoDialogo = null;

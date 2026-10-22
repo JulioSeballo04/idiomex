@@ -480,7 +480,67 @@ function montarHtmlDetalheAluno(alunoId) {
   else if (estado.abaAtiva === "aulas") conteudo = montarAbaAulas(alunoId);
   else conteudo = montarAbaVocabulario(alunoId);
 
-  return montarContatoAluno(alunoId) + abas + conteudo;
+  return montarContatoAluno(alunoId) + montarPlanoAluno(alunoId) + abas + conteudo;
+}
+
+// -------------------- PLANO DO ALUNO (aulas por semana e reposições) --------------------
+
+function montarPlanoAluno(alunoId) {
+  const aluno = alunosCache.find((a) => a.id === alunoId);
+  if (!aluno) return "";
+  const plano = planoDoAluno(aluno, professorIdAtual);
+  const aulasDoAluno = aulasCache.filter((a) => a.alunoId === alunoId);
+  const saldo = saldoReposicoes(plano, aulasDoAluno, professorIdAtual);
+  const usadas = reposicoesUsadas(aulasDoAluno, professorIdAtual);
+  const nestaSemana = aulasNaSemana(aulasDoAluno, professorIdAtual, dataDeHojeISO());
+  const opcoes = [0, 1, 2, 3, 4, 5, 6, 7].map((n) =>
+    `<option value="${n}" ${n === plano.aulasPorSemana ? "selected" : ""}>${n === 0 ? "Sem limite" : n}</option>`).join("");
+  return `
+    <div class="plano-aluno">
+      <label class="campo-plano">Aulas por semana
+        <select onchange="definirAulasPorSemana('${alunoId}', this.value)">${opcoes}</select>
+      </label>
+      <div class="campo-plano">
+        <span>Reposições disponíveis</span>
+        <div class="contador-reposicoes">
+          <button type="button" class="btn-contador" aria-label="Tirar 1 reposição" onclick="ajustarReposicoes('${alunoId}', -1)" ${saldo === 0 ? "disabled" : ""}>−</button>
+          <strong class="saldo-reposicoes">${saldo}</strong>
+          <button type="button" class="btn-contador" aria-label="Dar 1 reposição" onclick="ajustarReposicoes('${alunoId}', 1)">+</button>
+        </div>
+      </div>
+      <p class="dica-plano">Nesta semana: ${nestaSemana}${plano.aulasPorSemana ? ` de ${plano.aulasPorSemana}` : ""} aula${nestaSemana === 1 ? "" : "s"} do plano · ${usadas} reposiç${usadas === 1 ? "ão usada" : "ões usadas"}. Cada reposição é um crédito para o aluno marcar uma aula a mais.</p>
+    </div>`;
+}
+
+async function salvarPlanoAluno(alunoId, mudancas) {
+  const aluno = alunosCache.find((a) => a.id === alunoId);
+  if (!aluno) return;
+  const atual = planoDoAluno(aluno, professorIdAtual);
+  const plano = { professorId: professorIdAtual, ...atual, ...mudancas };
+  try {
+    await db.collection("usuarios").doc(alunoId).update({ plano });
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível salvar o plano do aluno. Tente novamente.");
+    renderizarListaAlunos();
+  }
+}
+
+function definirAulasPorSemana(alunoId, valor) {
+  salvarPlanoAluno(alunoId, { aulasPorSemana: Math.max(0, Math.min(14, parseInt(valor, 10) || 0)) });
+}
+
+// +1 dá um crédito; −1 tira um crédito ainda não usado. Os créditos concedidos são
+// guardados em total; o saldo é esse total menos as reposições já marcadas/feitas.
+function ajustarReposicoes(alunoId, delta) {
+  const aluno = alunosCache.find((a) => a.id === alunoId);
+  if (!aluno) return;
+  const plano = planoDoAluno(aluno, professorIdAtual);
+  const usadas = reposicoesUsadas(aulasCache.filter((a) => a.alunoId === alunoId), professorIdAtual);
+  const saldo = Math.max(0, plano.reposicoesConcedidas - usadas);
+  const novoSaldo = Math.max(0, saldo + delta);
+  if (novoSaldo === saldo) return;
+  salvarPlanoAluno(alunoId, { reposicoesConcedidas: usadas + novoSaldo });
 }
 
 // Linha de contato do aluno (telefone/e-mail que ele preencheu no perfil)
@@ -1455,7 +1515,7 @@ function mensagemCancelamentoPeloProfessor(aula, nomeAluno) {
 }
 
 async function cancelarAulaComoProfessor(aulaId) {
-  if (!confirm("Cancelar essa aula? O aluno vai poder marcar outro horário nesse mesmo lugar.")) return;
+  if (!confirm("Cancelar essa aula? O horário volta a ficar livre.\n\nPara o aluno repor essa aula, dê 1 crédito de reposição para ele em \"Meus Alunos\".")) return;
 
   // Se o aluno cadastrou telefone no perfil, abre o WhatsApp já com o aviso pronto.
   // A aba é aberta antes do await (senão o celular bloqueia o popup).

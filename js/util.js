@@ -240,6 +240,50 @@ function slotsSemConflito(slots, duracaoMinutos, aulasMarcadas) {
 }
 
 // ============================================================
+// PLANO DO ALUNO — aulas por semana e créditos de reposição
+// ============================================================
+// O professor define, por aluno, quantas aulas ele pode marcar por semana
+// (0 = sem limite) e dá créditos de reposição. O saldo de reposições é calculado
+// a partir das próprias aulas: créditos concedidos menos as aulas de reposição
+// marcadas ou feitas. Uma reposição cancelada devolve o crédito sozinha.
+
+const SEM_PLANO = { aulasPorSemana: 0, reposicoesConcedidas: 0 };
+
+// Plano do aluno com ESTE professor (um plano de professor anterior não vale)
+function planoDoAluno(perfilAluno, professorId) {
+  const p = perfilAluno && perfilAluno.plano;
+  return p && p.professorId === professorId
+    ? { aulasPorSemana: p.aulasPorSemana || 0, reposicoesConcedidas: p.reposicoesConcedidas || 0 }
+    : SEM_PLANO;
+}
+
+function aulaContaNoPlano(a) {
+  return a.status === "agendada" || a.status === "concluida";
+}
+
+// Segunda-feira da semana de uma data "AAAA-MM-DD" (semana de segunda a domingo)
+function inicioDaSemanaISO(dataIso) {
+  const d = new Date(`${dataIso}T12:00:00`);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return chaveDataISO(d);
+}
+
+function reposicoesUsadas(aulas, professorId) {
+  return aulas.filter((a) => a.professorId === professorId && a.reposicao === true && aulaContaNoPlano(a)).length;
+}
+
+function saldoReposicoes(plano, aulas, professorId) {
+  return Math.max(0, plano.reposicoesConcedidas - reposicoesUsadas(aulas, professorId));
+}
+
+// Aulas normais (não reposição) do aluno na semana da data informada
+function aulasNaSemana(aulas, professorId, dataIso) {
+  const semana = inicioDaSemanaISO(dataIso);
+  return aulas.filter((a) => a.professorId === professorId && a.reposicao !== true &&
+    aulaContaNoPlano(a) && inicioDaSemanaISO(a.data) === semana).length;
+}
+
+// ============================================================
 // WHATSAPP — link "wa.me" com mensagem pré-preenchida, sem precisar de
 // nenhuma API paga (o próprio aluno/professor manda a mensagem manualmente
 // depois que o link abre o WhatsApp Web/app já com o texto pronto).

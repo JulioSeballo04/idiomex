@@ -106,6 +106,9 @@ usuarios/{uid}
   codigoProfessor        -> só em professores
   professorId            -> só em alunos, aponta para o uid do professor
   codigoVinculo          -> só em alunos, código usado para o vínculo
+  plano                  -> só em alunos, definido pelo professor:
+                            {professorId, aulasPorSemana (0 = sem limite),
+                             reposicoesConcedidas}
 
 codigosProfessor/{codigo}
   professorId            -> uid do professor dono do código
