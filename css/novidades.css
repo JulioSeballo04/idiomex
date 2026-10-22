@@ -296,6 +296,22 @@
 }
 .detalhe-dia-professor-conteudo h3 { margin: 0 0 0.6rem; }
 
+/* Tela larga: calendário à esquerda e o detalhe do dia escolhido ao lado,
+   em vez de um embaixo do outro (aproveita o espaço da tela) */
+@media (min-width: 1100px) {
+  #calendario-professor {
+    display: grid;
+    grid-template-columns: 420px minmax(0, 1fr);
+    gap: 2rem;
+    align-items: start;
+  }
+  #calendario-professor .detalhe-dia-professor-conteudo {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+}
+
 /* ---------- Perfil do aluno ---------- */
 .dica-perfil { font-size: 0.82rem; color: var(--ink-soft); margin: 0.2rem 0 1rem; }
 .campo-perfil { margin-bottom: 0.9rem; }

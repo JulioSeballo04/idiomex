@@ -524,7 +524,9 @@ html[data-tema="noturno"] .secao-perigo h4 { color: #F08A75; }
 .conteudo {
   flex: 1;
   padding: 2rem 2.4rem 4rem;
-  max-width: 920px;
+  max-width: 1180px;
+  margin: 0 auto; /* centraliza o conteúdo no espaço ao lado da barra lateral */
+  min-width: 0;
 }
 
 .topo-app {
