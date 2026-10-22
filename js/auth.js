@@ -176,6 +176,11 @@ async function salvarPerfilDeProfessor(uid, dadosUsuario) {
       return;
     } catch (e) {
       if (e.code !== "permission-denied") throw e;
+      // Só sorteia outro código se a recusa foi porque esse código já tem dono;
+      // qualquer outra recusa (ex: regras do Firestore desatualizadas) é mostrada
+      const jaExiste = await db.collection("codigosProfessor").doc(codigo).get()
+        .then((d) => d.exists).catch(() => false);
+      if (!jaExiste) throw e;
     }
   }
   throw new Error("Não foi possível gerar seu código de professor. Tente novamente.");
@@ -274,7 +279,7 @@ function traduzErro(erro) {
     "auth/operation-not-allowed": "O login com Google ainda não foi ativado no Firebase (Authentication → Método de login → Google).",
     "auth/account-exists-with-different-credential": "Esse e-mail tinha uma conta antiga com senha no Idiomex. Fale com o suporte para passar a conta para o Google.",
     "auth/user-mismatch": "Escolha a mesma conta Google com que você entrou.",
-    "permission-denied": "Você não tem permissão para fazer isso."
+    "permission-denied": "O servidor recusou a gravação. Se você administra o Idiomex, confira se as regras do Firestore (arquivo firestore.rules) estão publicadas no Firebase."
   };
   return mapa[codigo] || erro.message || "Ocorreu um erro. Tente novamente.";
 }
