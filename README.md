@@ -23,7 +23,7 @@ gratuita, sem cartão).
 5. No menu lateral, vá em **Build > Authentication** → aba "Sign-in method" → ative **Google**
    (o app entra só com o Google) e deixe **E-mail/senha** desativado.
    Ainda em Authentication → **Settings → Authorized domains**, adicione o endereço
-   do site (ex: `idiomex.vercel.app`) — sem isso, a janela do Google não abre.
+   do site (ex: `seu-app.vercel.app`) — sem isso, a janela do Google não abre.
 6. Vá em **Build > Firestore Database** → "Criar banco de dados" → modo produção → escolha uma região (ex: `southamerica-east1`, mais perto do Brasil).
 
 ## Passo 2 — Aplicar as regras de segurança
