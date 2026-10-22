@@ -135,7 +135,21 @@
           <p class="dica-whatsapp-professor">O mês atual está sempre liberado. Marque os próximos meses em que os alunos já podem marcar aula.</p>
           <div id="config-meses-liberados" class="grupo-meses"></div>
         </div>
-        <div id="config-dias-semana"></div>
+        <div class="config-semana">
+          <span class="rotulo-meses-liberados">Dias e horários de trabalho</span>
+          <div class="modo-semana" role="tablist">
+            <button type="button" id="btn-modo-igual" class="ativa" onclick="mudarModoSemana('igual')">Mesmo horário em todos os dias</button>
+            <button type="button" id="btn-modo-dia" onclick="mudarModoSemana('dia')">Ajustar dia por dia</button>
+          </div>
+          <div id="config-semana-igual">
+            <label class="rotulo-config">Dias em que você trabalha</label>
+            <div id="config-dias-trabalho" class="dias-trabalho"></div>
+            <label class="rotulo-config">Períodos de trabalho (valem para todos os dias marcados)</label>
+            <div class="lista-periodos" data-grupo="geral"></div>
+            <button type="button" class="link-trocar" onclick="adicionarPeriodo('geral')">+ Adicionar período</button>
+          </div>
+          <div id="config-dias-semana" hidden></div>
+        </div>
         <button class="btn btn-primario" style="margin-top:1rem;" onclick="salvarConfigAgenda()">Salvar disponibilidade</button>
       </div>
     </div>

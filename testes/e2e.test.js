@@ -485,6 +485,86 @@ function dataDaqui(dias) {
     await ctx.close();
   });
 
+  console.log('\nSemana de trabalho e idioma da aula');
+  const ctxDiego = await h.novoContexto(browser); const diego = await h.novaPagina(ctxDiego);
+  await h.cadastrar(diego, { tipo: 'professor', nome: 'Diego', email: `diego-${id}@t.com` });
+  await diego.waitForURL('**/professor.html', { timeout: 10000 });
+  await diego.waitForFunction(() => /^PROF-/.test(document.getElementById('codigo-professor').textContent), null, { timeout: 10000 });
+  const codigoDiego = await diego.textContent('#codigo-professor');
+  await diego.evaluate(async () => { await db.collection('usuarios').doc(professorIdAtual).update({ idiomas: ['en', 'es'], idioma: 'en' }); });
+  const dispDiego = () => diego.evaluate(async () =>
+    (await db.collection('usuarios').doc(professorIdAtual).collection('configuracaoAgenda').doc('dados').get()).data().disponibilidade);
+  const abrirConfig = async () => {
+    await diego.click('#btn-aba-agenda');
+    await diego.click('button:has-text("Configurar disponibilidade")');
+    await diego.waitForSelector('#modal-config-agenda:not(.modal-oculto) #config-dias-trabalho .dia-trabalho', { state: 'attached', timeout: 5000 });
+  };
+  const salvarConfig = async () => {
+    await diego.click('#modal-config-agenda button:has-text("Salvar disponibilidade")');
+    await diego.waitForSelector('#modal-config-agenda.modal-oculto', { state: 'attached', timeout: 5000 });
+  };
+
+  await caso('professor configura a semana toda de uma vez: marca os dias e cadastra os períodos', async () => {
+    await abrirConfig();
+    esperar(await diego.isVisible('#config-semana-igual'), 'não abriu no modo "mesmo horário em todos os dias"');
+    await diego.click('.dia-trabalho[data-dia="sex"]');          // desmarca sexta
+    await diego.click('#config-semana-igual button:has-text("+ Adicionar período")');
+    await diego.check('#config-modalidade-online');
+    await salvarConfig();
+    const disp = await dispDiego();
+    const esperado = JSON.stringify([{ inicio: '08:00', fim: '12:00' }, { inicio: '14:00', fim: '18:00' }, { inicio: '19:00', fim: '22:00' }]);
+    for (const d of ['seg', 'ter', 'qua', 'qui']) esperar(JSON.stringify(disp[d]) === esperado, `${d}: ${JSON.stringify(disp[d])}`);
+    esperar(!disp.sex && !disp.sab && !disp.dom, 'salvou dia não marcado: ' + Object.keys(disp).join(','));
+  });
+
+  await caso('períodos que se sobrepõem são recusados com explicação', async () => {
+    await abrirConfig();
+    await diego.fill('#config-semana-igual .linha-periodo >> nth=1 >> .periodo-inicio', '11:00');
+    diego.ultimoDialogo = null;
+    await diego.click('#modal-config-agenda button:has-text("Salvar disponibilidade")');
+    await dormir(500);
+    esperar(diego.ultimoDialogo && /sobrepõem/.test(diego.ultimoDialogo), 'aceitou períodos sobrepostos: ' + diego.ultimoDialogo);
+    await diego.click('#modal-config-agenda .btn-fechar-modal');
+  });
+
+  await caso('"Ajustar dia por dia" mantém o que já estava e permite um horário diferente num dia', async () => {
+    await abrirConfig();
+    await diego.click('#btn-modo-dia');
+    esperar(await diego.isChecked('.chk-dia-trabalha[data-dia="seg"]') && !(await diego.isChecked('.chk-dia-trabalha[data-dia="sex"]')), 'não levou os dias marcados');
+    esperar((await diego.$$('.lista-periodos[data-grupo="ter"] .linha-periodo')).length === 3, 'não levou os períodos');
+    await diego.click('.lista-periodos[data-grupo="ter"] .linha-periodo >> nth=2 >> .remover-periodo');
+    await diego.uncheck('.chk-dia-trabalha[data-dia="qua"]');
+    await salvarConfig();
+    const disp = await dispDiego();
+    esperar(disp.ter.length === 2 && disp.seg.length === 3 && !disp.qua, JSON.stringify(disp));
+    await abrirConfig();
+    esperar(await diego.isVisible('#config-dias-semana'), 'com horários diferentes, deveria reabrir no "dia por dia"');
+    await diego.click('#modal-config-agenda .btn-fechar-modal');
+  });
+
+  await caso('ao marcar aula, o aluno escolhe primeiro o idioma (com bandeiras)', async () => {
+    const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
+    await h.cadastrar(p, { tipo: 'aluno', nome: 'Iris', email: `iris-${id}@t.com`, codigo: codigoDiego });
+    await p.waitForURL('**/dicionario.html', { timeout: 10000 }); await p.waitForSelector('#input-palavra-en'); await dormir(1500);
+    await p.click('button:has-text("Agendar aula")');
+    await p.waitForSelector('.opcao-idioma-aula', { timeout: 8000 });
+    esperar((await p.$$('.opcao-idioma-aula')).length === 2, 'não mostrou os 2 idiomas do professor');
+    esperar(!(await p.$('[data-calday]')), 'deixou escolher o dia antes do idioma');
+    await p.click('.opcao-idioma-aula:has-text("Espanhol")');
+    await p.waitForSelector('.resumo-passo:has-text("Espanhol")', { timeout: 3000 });
+    // primeiro dia disponível no calendário (avança de mês se precisar)
+    for (let i = 0; i < 3 && !(await p.$('[data-calday]')); i++) await p.click('#btn-cal-mes-proximo');
+    await p.click('[data-calday] >> nth=0');
+    await p.waitForSelector('.btn-slot-horario', { timeout: 8000 });
+    await p.click('.btn-slot-horario >> nth=0');
+    await p.click('#btn-confirmar-agendamento');
+    await p.waitForSelector('.agendamento-sucesso:has-text("Espanhol")', { timeout: 8000 });
+    const idioma = await p.evaluate(() => aulasFuturasDoAluno()[0] && aulasFuturasDoAluno()[0].idioma);
+    esperar(idioma === 'es', 'aula gravada com idioma ' + idioma);
+    await ctx.close();
+  });
+  await ctxDiego.close();
+
   console.log('\nCelular (375 px)');
   for (const [nome, pg] of [['aluno', aluno], ['professor', prof]]) {
     await caso(`tela do ${nome} cabe na largura do celular, sem rolagem lateral`, async () => {

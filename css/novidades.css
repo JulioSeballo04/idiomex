@@ -774,3 +774,44 @@ html[data-tema="noturno"] .titulo-grupo-dia.atrasadas { color: #F08A75; }
 }
 .aviso-plano { color: #8f2f1f; }
 html[data-tema="noturno"] .aviso-plano { color: #F08A75; }
+
+/* ---------- Semana de trabalho (configurar disponibilidade) ---------- */
+.config-semana { margin-top: 0.4rem; }
+.modo-semana { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0 0.9rem; }
+.modo-semana button {
+  padding: 0.4em 0.9em; border-radius: 999px; border: 1px solid var(--borda);
+  background: var(--bg-cartao); color: var(--ink-soft); font: inherit; font-size: 0.82rem; cursor: pointer;
+}
+.modo-semana button.ativa { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600; }
+.rotulo-config { display: block; margin: 0.6rem 0 0.4rem; font-size: 0.82rem; font-weight: 600; color: var(--ink-soft); }
+.dias-trabalho { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.dia-trabalho {
+  min-width: 52px; padding: 0.5em 0.6em; border-radius: 8px; border: 1px solid var(--borda);
+  background: var(--bg-cartao); color: var(--ink-soft); font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+}
+.dia-trabalho[aria-pressed="true"] { background: var(--acento); border-color: var(--acento); color: #fff; }
+.lista-periodos { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.4rem; }
+.linha-periodo { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+.linha-periodo input[type="time"] {
+  padding: 0.35em 0.5em; border-radius: 8px; border: 1px solid var(--borda); background: var(--bg-cartao); color: var(--ink); font: inherit;
+}
+.linha-periodo .remover-periodo {
+  width: 28px; height: 28px; border-radius: 50%; border: 1px solid transparent;
+  background: none; color: #B3412E; font-size: 0.9rem; cursor: pointer; line-height: 1;
+}
+.linha-periodo .remover-periodo:hover { border-color: rgba(179, 65, 46, 0.4); }
+#config-dias-semana .dia-config-grupo { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: flex-start; }
+#config-dias-semana .dia-config-grupo > .chk-periodo-label { min-width: 120px; }
+#config-dias-semana .periodos-do-dia { flex: 1; min-width: 220px; }
+#config-dias-semana .dia-de-folga .periodos-do-dia { display: none; }
+
+/* ---------- Idioma da aula (aluno, passo 1) ---------- */
+.opcoes-idioma-aula { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.opcao-idioma-aula {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.55em 0.9em; border-radius: 10px; border: 1px solid var(--borda);
+  background: var(--bg-cartao); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer;
+}
+.opcao-idioma-aula:hover { border-color: var(--acento); }
+.opcao-idioma-aula.sugerido { border-color: var(--acento); }
+.idioma-escolhido { display: inline-flex; align-items: center; gap: 0.4rem; }

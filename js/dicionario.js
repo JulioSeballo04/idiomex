@@ -946,13 +946,15 @@ const NOMES_DIAS_CURTOS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 let agendamento = null;
 
 function novoAgendamento() {
+  const idiomas = idiomasParaAula();
   return {
+    // Com um idioma só, já vem escolhido; com mais de um, o aluno escolhe no passo 1
+    idioma: idiomas.length === 1 ? idiomas[0] : null,
     data: null,            // "AAAA-MM-DD"
     hora: null,            // "HH:MM"
     horarios: null,        // horários livres da data escolhida (null = carregando)
     erroHorarios: false,
     modalidade: null,
-    idioma: null,
     reposicao: false,
     confirmada: null,      // dados da aula depois de confirmada (tela de sucesso)
     salvando: false,
@@ -1085,13 +1087,18 @@ function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade, reposicao, idi
 }
 
 // Indicador de progresso 1 → 2 → 3, pra deixar claro em que ponto o aluno está
+function escolheIdiomaNoAgendamento() {
+  return idiomasParaAula().length > 1;
+}
+
 function montarPassosAgendamento() {
   const passos = [
-    { n: 1, rotulo: "Dia", feito: !!agendamento.data },
-    { n: 2, rotulo: "Horário", feito: !!agendamento.hora },
-    { n: 3, rotulo: "Confirmar", feito: false }
-  ];
-  const atual = !agendamento.data ? 1 : (!agendamento.hora ? 2 : 3);
+    ...(escolheIdiomaNoAgendamento() ? [{ rotulo: "Idioma", feito: !!agendamento.idioma }] : []),
+    { rotulo: "Dia", feito: !!agendamento.data },
+    { rotulo: "Horário", feito: !!agendamento.hora },
+    { rotulo: "Confirmar", feito: false }
+  ].map((p, i) => ({ ...p, n: i + 1 }));
+  const atual = (passos.find((p) => !p.feito) || passos[passos.length - 1]).n;
   return `<div class="passos-agendamento">${passos.map((p) => `
     <div class="passo ${p.feito ? "feito" : (p.n === atual ? "atual" : "")}">
       <span class="passo-circulo">${p.feito ? "✓" : p.n}</span><span class="passo-rotulo">${p.rotulo}</span>
@@ -1108,7 +1115,7 @@ function renderizarAgendamento() {
       <div class="agendamento-sucesso">
         <div class="selo-sucesso">✓</div>
         <h3>Aula confirmada</h3>
-        <p>${escapeHtml(rotuloDiaCurto(c.data))} às ${escapeHtml(c.hora)} · ${c.modalidade === "online" ? "Online" : "Presencial"}${c.reposicao ? " · Reposição" : ""}</p>
+        <p>${escapeHtml(rotuloDiaCurto(c.data))} às ${escapeHtml(c.hora)} · ${escolheIdiomaNoAgendamento() ? `${IDIOMAS[c.idioma].nome} · ` : ""}${c.modalidade === "online" ? "Online" : "Presencial"}${c.reposicao ? " · Reposição" : ""}</p>
         ${c.linkWhatsapp ? `<a class="btn btn-secundario" href="${c.linkWhatsapp}" target="_blank" rel="noopener">Não abriu? Confirmar pelo WhatsApp</a>` : ""}
         <div class="acoes-sucesso">
           <button type="button" class="btn btn-primario" onclick="marcarOutraAula()">Marcar outra aula</button>
@@ -1119,25 +1126,42 @@ function renderizarAgendamento() {
   }
 
   const dataHoraEscolhidas = agendamento.data && agendamento.hora;
+  const comIdioma = escolheIdiomaNoAgendamento();
+  const n = (passo) => (comIdioma ? passo + 1 : passo); // numeração dos passos
 
-  // Passos 1 e 2: dia e horário (recolhem num resumo depois de escolhidos)
-  const cartaoDiaHorario = dataHoraEscolhidas ? `
+  // Passo do idioma (só quando o professor ensina mais de um): bandeiras pra escolher
+  const cartaoIdioma = !comIdioma ? "" : agendamento.idioma ? `
+    <div class="cartao-passo resumo-passo">
+      <div><strong>Idioma da aula</strong><span class="idioma-escolhido">${bandeiraSvg(agendamento.idioma, 22)} ${IDIOMAS[agendamento.idioma].nome}</span></div>
+      <button type="button" class="link-trocar" onclick="trocarIdiomaDaAula()">trocar</button>
+    </div>` : `
+    <div class="cartao-passo">
+      <h4>1. Qual idioma você vai fazer nessa aula?</h4>
+      <div class="opcoes-idioma-aula">
+        ${idiomasParaAula().map((id) => `
+          <button type="button" class="opcao-idioma-aula${id === idiomaDoAluno ? " sugerido" : ""}" onclick="escolherIdiomaDaAula('${id}')">
+            ${bandeiraSvg(id, 28)}<span>${IDIOMAS[id].nome}</span>
+          </button>`).join("")}
+      </div>
+    </div>`;
+
+  // Dia e horário (recolhem num resumo depois de escolhidos)
+  const cartaoDiaHorario = comIdioma && !agendamento.idioma ? `
+    <div class="cartao-passo passo-bloqueado"><h4>Dia e horário</h4><p class="vazio">Escolha o idioma primeiro.</p></div>` : dataHoraEscolhidas ? `
     <div class="cartao-passo resumo-passo">
       <div><strong>Dia e horário</strong><span>${escapeHtml(rotuloDiaCurto(agendamento.data))} às ${escapeHtml(agendamento.hora)}</span></div>
       <button type="button" class="link-trocar" onclick="trocarDiaHorario()">trocar</button>
     </div>` : `
     <div class="cartao-passo">
-      <h4>1. Escolha o dia</h4>
+      <h4>${n(1)}. Escolha o dia</h4>
       <div id="calendario-agendamento"></div>
-      <h4>2. Escolha o horário</h4>
+      <h4>${n(2)}. Escolha o horário</h4>
       <div id="slots-agendamento"></div>
     </div>`;
 
   // Passo 3: detalhes da aula e confirmar
   const modalidades = modalidadesDoDia(agendamento.data);
   if (!modalidades.includes(agendamento.modalidade)) agendamento.modalidade = modalidades[0] || null;
-  const idiomas = idiomasParaAula();
-  if (!idiomas.includes(agendamento.idioma)) agendamento.idioma = idiomas.includes(idiomaDoAluno) ? idiomaDoAluno : idiomas[0];
   const plano = situacaoDoPlano(agendamento.data);
   // Reposição só com crédito; com a semana cheia, a aula só pode ser reposição
   if (plano.saldo === 0) agendamento.reposicao = false;
@@ -1152,14 +1176,7 @@ function renderizarAgendamento() {
 
   const cartaoConfirmar = `
     <div class="cartao-passo${dataHoraEscolhidas ? "" : " passo-bloqueado"}">
-      <h4>3. Confirmar</h4>
-      ${idiomas.length > 1 ? `
-        <div class="campo-agendamento">
-          <label for="select-idioma-aula">Idioma da aula</label>
-          <select id="select-idioma-aula" class="seletor-idioma-aluno" onchange="agendamento.idioma = idiomaValido(this.value)">
-            ${idiomas.map((id) => `<option value="${id}" ${id === agendamento.idioma ? "selected" : ""}>${IDIOMAS[id].nome}</option>`).join("")}
-          </select>
-        </div>` : ""}
+      <h4>${n(3)}. Confirmar</h4>
       ${modalidades.length > 1 ? `
         <div class="campo-agendamento">
           <label>Modalidade</label>
@@ -1180,12 +1197,24 @@ function renderizarAgendamento() {
       ${dataHoraEscolhidas ? "" : `<p class="dica-confirmar">Escolha o dia e o horário para confirmar.</p>`}
     </div>`;
 
-  corpo.innerHTML = montarPassosAgendamento() + cartaoDiaHorario + cartaoConfirmar;
+  corpo.innerHTML = montarPassosAgendamento() + cartaoIdioma + cartaoDiaHorario + cartaoConfirmar;
 
-  if (!dataHoraEscolhidas) {
+  if (!dataHoraEscolhidas && (!comIdioma || agendamento.idioma)) {
     montarCalendarioAgendamento();
     renderizarHorariosAgendamento();
   }
+}
+
+function escolherIdiomaDaAula(id) {
+  agendamento.idioma = idiomaValido(id);
+  agendamento.erro = "";
+  renderizarAgendamento();
+}
+
+function trocarIdiomaDaAula() {
+  agendamento.idioma = null;
+  agendamento.erro = "";
+  renderizarAgendamento();
 }
 
 function trocarDiaHorario() {
@@ -1352,6 +1381,11 @@ function renderizarHorariosAgendamento() {
 async function confirmarAgendamento() {
   const user = auth.currentUser;
   if (!user || !agendamento || !agendamento.data || !agendamento.hora || agendamento.salvando) return;
+  if (!agendamento.idioma) {
+    agendamento.erro = "Escolha o idioma da aula.";
+    renderizarAgendamento();
+    return;
+  }
 
   if (aulasFuturasDoAluno().length >= MAX_AULAS_FUTURAS_POR_ALUNO) {
     agendamento.erro = `Você já tem ${MAX_AULAS_FUTURAS_POR_ALUNO} aulas marcadas. Cancele uma para marcar outra.`;
@@ -1408,7 +1442,7 @@ async function confirmarAgendamento() {
 
   if (abaWhatsapp) abaWhatsapp.location = linkConfirmacao;
   agendamento.salvando = false;
-  agendamento.confirmada = { data, hora, modalidade, reposicao, linkWhatsapp: linkConfirmacao };
+  agendamento.confirmada = { data, hora, modalidade, reposicao, idioma, linkWhatsapp: linkConfirmacao };
   renderizarAgendamento();
 }
 
