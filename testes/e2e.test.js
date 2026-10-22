@@ -1,6 +1,8 @@
 // Testes de ponta a ponta: simulam professor e alunos usando o app no navegador.
 // Rodar com: npm run test:e2e (veja testes/README.md)
 const h = require('./harness');
+const fs = require('fs');
+const path = require('path');
 const { SITE, caso, esperar } = h;
 const id = Date.now().toString(36);
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -32,6 +34,26 @@ function dataDaqui(dias) {
     await prof.click('#btn-aba-cadastro');
     esperar(!(await prof.$('#cadEmail')) && !(await prof.$('#cadSenha')), 'ainda tem campos de e-mail/senha no cadastro');
     esperar(await prof.$('#form-cadastro button:has-text("Criar conta com Google")'), 'sem botão "Criar conta com Google"');
+  });
+
+  await caso('regras do Firestore desatualizadas: o cadastro explica o problema (não fala em "gerar código")', async () => {
+    // Simula regras antigas, sem a parte de codigosProfessor, e depois devolve as atuais
+    const atuais = fs.readFileSync(path.join(__dirname, '../firestore.rules'), 'utf8');
+    const antigas = atuais.replace(/match \/codigosProfessor\/\{codigo\} \{[\s\S]*?\n    \}\n/, '');
+    esperar(antigas !== atuais, 'não consegui montar as regras antigas');
+    const publicar = (conteudo) => fetch('http://127.0.0.1:8089/emulator/v1/projects/demo-idiomex:securityRules', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rules: { files: [{ name: 'firestore.rules', content: conteudo }] } })
+    });
+    await publicar(antigas);
+    try {
+      const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
+      await h.cadastrar(p, { tipo: 'professor', nome: 'Prof Velho', email: `velho-${id}@t.com` });
+      await p.waitForFunction(() => /regras do Firestore/.test(document.getElementById('status-cadastro').textContent), null, { timeout: 10000 });
+      await ctx.close();
+    } finally {
+      await publicar(atuais);
+    }
   });
 
   await caso('professor se cadastra com Google; nome em branco usa o nome da conta Google', async () => {
