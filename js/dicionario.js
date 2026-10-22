@@ -1049,11 +1049,7 @@ function blocosDoDia(dataIso) {
 // Modalidades oferecidas num dia: a exceção pontual do professor (se ele
 // especificou online/presencial só pra esse dia), senão a configuração geral.
 function modalidadesDoDia(dataIso) {
-  const override = dataIso ? overridesAgendaProfessor[dataIso] : null;
-  if (override && !override.fechado && override.modalidades && override.modalidades.length) {
-    return override.modalidades;
-  }
-  return configAgendaProfessor.modalidades || [];
+  return modalidadesDaData(configAgendaProfessor, overridesAgendaProfessor, dataIso);
 }
 
 // Um dia tem disponibilidade se sobrar algum bloco de horário depois de

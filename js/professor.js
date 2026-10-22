@@ -997,7 +997,7 @@ function preencherFormularioConfigAgenda() {
       return `<label class="opcao-mes"><input type="checkbox" class="chk-mes-liberado" value="${chave}" ${liberados.includes(chave) ? "checked" : ""}> ${NOMES_MESES[d.getMonth()]}${d.getFullYear() !== hoje.getFullYear() ? ` de ${d.getFullYear()}` : ""}</label>`;
     }).join("");
 
-  preencherSemanaDeTrabalho(configAgendaAtual.disponibilidade || {});
+  preencherSemanaDeTrabalho(configAgendaAtual.disponibilidade || {}, configAgendaAtual.modalidadesPorDia || {});
 }
 
 // -------------------- SEMANA DE TRABALHO (configurar disponibilidade) --------------------
@@ -1077,9 +1077,21 @@ function alternarDiaTrabalho(botao) {
 
 // Abre o formulário no modo que representa a configuração salva: "igual" quando
 // todos os dias de trabalho têm os mesmos períodos, senão "dia por dia"
-function preencherSemanaDeTrabalho(disponibilidade) {
+function modalidadesGeraisDoFormulario() {
+  const m = [];
+  if (document.getElementById("config-modalidade-online").checked) m.push("online");
+  if (document.getElementById("config-modalidade-presencial").checked) m.push("presencial");
+  return m;
+}
+
+function preencherSemanaDeTrabalho(disponibilidade, modalidadesPorDia) {
   const diasComHorario = DIAS_SEMANA.filter((d) => (disponibilidade[d] || []).length);
-  const assinaturas = new Set(diasComHorario.map((d) => JSON.stringify(disponibilidade[d])));
+  // Cada dia "diferente" (períodos ou modalidades) força o modo "dia por dia"
+  const gerais = modalidadesGeraisDoFormulario();
+  const modalidadesDe = (d) => (modalidadesPorDia[d] && modalidadesPorDia[d].length ? modalidadesPorDia[d] : gerais);
+  const assinaturas = new Set(diasComHorario.map((d) =>
+    JSON.stringify([disponibilidade[d], [...modalidadesDe(d)].sort()])));
+  const modalidadesDiferentes = diasComHorario.some((d) => JSON.stringify([...modalidadesDe(d)].sort()) !== JSON.stringify([...gerais].sort()));
   const novo = diasComHorario.length === 0;
   const dias = novo ? DIAS_PADRAO_NOVOS : diasComHorario;
   const periodosGerais = novo ? PERIODOS_PADRAO_NOVOS : disponibilidade[diasComHorario[0]];
@@ -1087,14 +1099,17 @@ function preencherSemanaDeTrabalho(disponibilidade) {
   document.getElementById("config-dias-trabalho").innerHTML = DIAS_SEMANA.map((d) => `
     <button type="button" class="dia-trabalho" data-dia="${d}" aria-pressed="${dias.includes(d)}" onclick="alternarDiaTrabalho(this)">${NOMES_DIAS_SEMANA[d].slice(0, 3)}</button>`).join("");
   preencherListaPeriodos("geral", periodosGerais);
-  preencherDiaPorDia(novo ? {} : disponibilidade, periodosGerais);
-  mudarModoSemana(assinaturas.size > 1 ? "dia" : "igual", true);
+  preencherDiaPorDia(novo ? {} : disponibilidade, periodosGerais, modalidadesPorDia);
+  mudarModoSemana(assinaturas.size > 1 || modalidadesDiferentes ? "dia" : "igual", true);
 }
 
-function preencherDiaPorDia(disponibilidade, periodosSugeridos) {
+function preencherDiaPorDia(disponibilidade, periodosSugeridos, modalidadesPorDia) {
+  const gerais = modalidadesGeraisDoFormulario();
   document.getElementById("config-dias-semana").innerHTML = DIAS_SEMANA.map((dia) => {
     const periodos = disponibilidade[dia] || [];
     const trabalha = periodos.length > 0;
+    const modalidades = (modalidadesPorDia && modalidadesPorDia[dia] && modalidadesPorDia[dia].length)
+      ? modalidadesPorDia[dia] : (gerais.length ? gerais : ["online"]);
     return `
       <div class="dia-config-grupo">
         <label class="chk-periodo-label">
@@ -1104,6 +1119,11 @@ function preencherDiaPorDia(disponibilidade, periodosSugeridos) {
         <div class="periodos-do-dia">
           <div class="lista-periodos" data-grupo="${dia}">${(trabalha ? periodos : periodosSugeridos).map(linhaPeriodoHtml).join("")}</div>
           <button type="button" class="link-trocar" onclick="adicionarPeriodo('${dia}')">+ Adicionar período</button>
+          <div class="modalidades-semana">
+            <span>Atende:</span>
+            <label><input type="checkbox" class="chk-modalidade-semana" data-dia="${dia}" value="online" ${modalidades.includes("online") ? "checked" : ""}> Online</label>
+            <label><input type="checkbox" class="chk-modalidade-semana" data-dia="${dia}" value="presencial" ${modalidades.includes("presencial") ? "checked" : ""}> Presencial</label>
+          </div>
         </div>
       </div>`;
   }).join("");
@@ -1120,7 +1140,7 @@ function mudarModoSemana(modo, inicial) {
       const marcados = diasMarcados();
       const disp = {};
       marcados.forEach((d) => { disp[d] = geral; });
-      preencherDiaPorDia(disp, geral);
+      preencherDiaPorDia(disp, geral, {});
     } else {
       const disp = {};
       DIAS_SEMANA.forEach((d) => {
@@ -1131,6 +1151,12 @@ function mudarModoSemana(modo, inicial) {
       document.querySelectorAll("#config-dias-trabalho .dia-trabalho").forEach((b) => {
         b.setAttribute("aria-pressed", String(!!disp[b.dataset.dia]));
       });
+      // Volta pro horário único: a modalidade geral passa a ser a soma das dos dias
+      const usadas = new Set(modalidadesMarcadasPorDia(Object.keys(disp)).flat());
+      if (usadas.size) {
+        document.getElementById("config-modalidade-online").checked = usadas.has("online");
+        document.getElementById("config-modalidade-presencial").checked = usadas.has("presencial");
+      }
     }
   }
   modoSemana = modo;
@@ -1138,11 +1164,19 @@ function mudarModoSemana(modo, inicial) {
   document.getElementById("config-dias-semana").hidden = modo !== "dia";
   document.getElementById("btn-modo-igual").classList.toggle("ativa", modo === "igual");
   document.getElementById("btn-modo-dia").classList.toggle("ativa", modo === "dia");
+  // No "dia por dia", online/presencial é escolhido em cada dia
+  document.getElementById("config-modalidades-gerais").hidden = modo === "dia";
+  document.getElementById("dica-modalidades-por-dia").hidden = modo !== "dia";
+}
+
+function modalidadesMarcadasPorDia(dias) {
+  return dias.map((d) => Array.from(document.querySelectorAll(`.chk-modalidade-semana[data-dia="${d}"]:checked`)).map((c) => c.value));
 }
 
 // Monta disponibilidade[dia] a partir do formulário, no modo em uso
 function lerSemanaDeTrabalho() {
   const disponibilidade = {};
+  const modalidadesPorDia = {};
   if (modoSemana === "igual") {
     const dias = diasMarcados();
     if (!dias.length) return { erro: "Marque pelo menos um dia em que você trabalha." };
@@ -1156,9 +1190,13 @@ function lerSemanaDeTrabalho() {
       const lidos = lerPeriodos(dia, NOMES_DIAS_SEMANA[dia]);
       if (lidos.erro) return lidos;
       if (!lidos.periodos.length) return { erro: `${NOMES_DIAS_SEMANA[dia]}: adicione um período ou desmarque o dia.` };
+      const [modalidades] = modalidadesMarcadasPorDia([dia]);
+      if (!modalidades.length) return { erro: `${NOMES_DIAS_SEMANA[dia]}: marque se atende online, presencial ou os dois.` };
       disponibilidade[dia] = lidos.periodos;
+      modalidadesPorDia[dia] = modalidades;
     }
     if (!Object.keys(disponibilidade).length) return { erro: "Marque pelo menos um dia em que você trabalha." };
+    return { disponibilidade, modalidadesPorDia };
   }
   return { disponibilidade };
 }
@@ -1174,20 +1212,23 @@ function alternarPeriodoConfig(checkbox) {
 async function salvarConfigAgenda() {
   const duracaoAulaMinutos = Number(document.getElementById("config-duracao-aula").value);
 
-  const modalidades = [];
-  if (document.getElementById("config-modalidade-online").checked) modalidades.push("online");
-  if (document.getElementById("config-modalidade-presencial").checked) modalidades.push("presencial");
-  if (modalidades.length === 0) {
-    alert("Selecione pelo menos uma modalidade de atendimento (online ou presencial).");
-    return;
-  }
-
   const lida = lerSemanaDeTrabalho();
   if (lida.erro) {
     alert(lida.erro);
     return;
   }
   const disponibilidade = lida.disponibilidade;
+
+  // Modo "igual": uma modalidade geral. Modo "dia por dia": cada dia tem a sua, e a
+  // geral vira a soma delas (usada onde não houver nada mais específico).
+  const modalidadesPorDia = lida.modalidadesPorDia || {};
+  const modalidades = lida.modalidadesPorDia
+    ? ["online", "presencial"].filter((m) => Object.values(modalidadesPorDia).some((l) => l.includes(m)))
+    : modalidadesGeraisDoFormulario();
+  if (modalidades.length === 0) {
+    alert("Selecione pelo menos uma modalidade de atendimento (online ou presencial).");
+    return;
+  }
 
   const whatsapp = document.getElementById("config-whatsapp").value.trim();
   const digitos = apenasDigitos(whatsapp);
@@ -1196,7 +1237,7 @@ async function salvarConfigAgenda() {
     return;
   }
   const mesesLiberados = Array.from(document.querySelectorAll(".chk-mes-liberado:checked")).map((c) => c.value);
-  const dados = { duracaoAulaMinutos, modalidades, disponibilidade, whatsapp, mesesLiberados };
+  const dados = { duracaoAulaMinutos, modalidades, modalidadesPorDia, disponibilidade, whatsapp, mesesLiberados };
   try {
     await db.collection("usuarios").doc(professorIdAtual)
       .collection("configuracaoAgenda").doc("dados").set(dados);
@@ -1553,9 +1594,7 @@ function montarEditorDisponibilidadeDia() {
   }).join("");
 
   // Sem exceção salva, sugere as modalidades da configuração geral
-  const modalidadesBase = (override && override.modalidades && override.modalidades.length)
-    ? override.modalidades
-    : (configAgendaAtual.modalidades || []);
+  const modalidadesBase = modalidadesDaData(configAgendaAtual, overridesAgendaCache, dataIso);
   const modalidadesHtml = `
     <div class="modalidades-dia-editor">
       <span class="rotulo-modalidades-dia">Atendimento nesse dia:</span>

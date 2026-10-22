@@ -815,3 +815,6 @@ html[data-tema="noturno"] .aviso-plano { color: #F08A75; }
 .opcao-idioma-aula:hover { border-color: var(--acento); }
 .opcao-idioma-aula.sugerido { border-color: var(--acento); }
 .idioma-escolhido { display: inline-flex; align-items: center; gap: 0.4rem; }
+.modalidades-semana { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.9rem; margin-top: 0.5rem; font-size: 0.85rem; }
+.modalidades-semana span { font-weight: 600; color: var(--ink-soft); font-size: 0.8rem; }
+.modalidades-semana label { display: inline-flex; align-items: center; gap: 0.3rem; }

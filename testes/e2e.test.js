@@ -542,6 +542,43 @@ function dataDaqui(dias) {
     await diego.click('#modal-config-agenda .btn-fechar-modal');
   });
 
+  await caso('"dia por dia": cada dia tem o seu modo (online/presencial) e o aluno só vê o modo daquele dia', async () => {
+    await abrirConfig();
+    esperar(await diego.isHidden('#config-modalidades-gerais'), 'mostrou a modalidade geral no modo "dia por dia"');
+    await diego.check('.chk-modalidade-semana[data-dia="ter"][value="presencial"]');
+    await diego.uncheck('.chk-modalidade-semana[data-dia="ter"][value="online"]');
+    await salvarConfig();
+    const cfg = await diego.evaluate(async () =>
+      (await db.collection('usuarios').doc(professorIdAtual).collection('configuracaoAgenda').doc('dados').get()).data());
+    esperar(JSON.stringify(cfg.modalidadesPorDia.ter) === '["presencial"]' && JSON.stringify(cfg.modalidadesPorDia.seg) === '["online"]',
+      JSON.stringify(cfg.modalidadesPorDia));
+    esperar(cfg.modalidades.includes('online') && cfg.modalidades.includes('presencial'), 'modalidade geral não somou as dos dias');
+    // libera o próximo mês, caso a próxima terça já seja no mês seguinte
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + 1);
+    await diego.evaluate(async (mes) => { await db.collection('usuarios').doc(professorIdAtual).collection('configuracaoAgenda').doc('dados').update({ mesesLiberados: [mes] }); },
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+
+    const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
+    await h.cadastrar(p, { tipo: 'aluno', nome: 'Joana', email: `joana-${id}@t.com`, codigo: codigoDiego });
+    await p.waitForURL('**/dicionario.html', { timeout: 10000 }); await p.waitForSelector('#input-palavra-en'); await dormir(1500);
+    const proxima = (diaSemana) => { const x = new Date(); x.setDate(x.getDate() + 1); while (x.getDay() !== diaSemana) x.setDate(x.getDate() + 1);
+      return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+    for (const [diaSemana, esperado, outro] of [[2, 'Presencial', 'Online'], [1, 'Online', 'Presencial']]) {
+      await p.click('button:has-text("Agendar aula")');
+      await p.click('.opcao-idioma-aula >> nth=0');
+      const data = proxima(diaSemana);
+      for (let i = 0; i < 3 && !(await p.$(`[data-calday="${data}"]`)); i++) await p.click('#btn-cal-mes-proximo');
+      await p.click(`[data-calday="${data}"]`);
+      await p.click('.btn-slot-horario >> nth=0');
+      await p.waitForSelector('#btn-confirmar-agendamento:not([disabled])');
+      esperar(!(await p.$(`input[name="modalidade-agendamento"][value="${outro.toLowerCase()}"]`)), `ofereceu ${outro} num dia só ${esperado}`);
+      await p.click('#btn-confirmar-agendamento');
+      await p.waitForSelector(`.agendamento-sucesso:has-text("${esperado}")`, { timeout: 8000 });
+      await p.keyboard.press('Escape');
+    }
+    await ctx.close();
+  });
+
   await caso('ao marcar aula, o aluno escolhe primeiro o idioma (com bandeiras)', async () => {
     const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
     await h.cadastrar(p, { tipo: 'aluno', nome: 'Iris', email: `iris-${id}@t.com`, codigo: codigoDiego });

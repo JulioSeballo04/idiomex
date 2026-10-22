@@ -198,6 +198,19 @@ function somarMinutos(horaStr, minutos) {
   return `${hh}:${mm}`;
 }
 
+// Modalidades (online/presencial) de uma data: a exceção pontual daquela data, se o
+// professor definiu; senão a do dia da semana (modo "dia por dia"); senão a geral.
+function modalidadesDaData(config, overrides, dataIso) {
+  const override = dataIso && overrides ? overrides[dataIso] : null;
+  if (override && !override.fechado && override.modalidades && override.modalidades.length) {
+    return override.modalidades;
+  }
+  const doDiaDaSemana = dataIso && config && config.modalidadesPorDia
+    ? config.modalidadesPorDia[chaveDiaSemana(dataIso)] : null;
+  if (doDiaDaSemana && doDiaDaSemana.length) return doDiaDaSemana;
+  return (config && config.modalidades) || [];
+}
+
 function minutosDoHorario(horaStr) {
   const [h, m] = String(horaStr).split(":").map(Number);
   return h * 60 + m;

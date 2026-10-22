@@ -72,6 +72,8 @@ html[data-tema="noturno"] {
 
 /* ---------- Reset & base ---------- */
 * { box-sizing: border-box; }
+/* "hidden" sempre esconde, mesmo em elementos com display definido no CSS */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
