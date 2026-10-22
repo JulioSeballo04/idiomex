@@ -771,7 +771,6 @@ function carregarMensagensDoProfessor(uid) {
 
 let configAgendaProfessor = null;
 let minhasAulasCache = [];
-let dataEscolhidaAgendamento = null;
 let mesCalendarioAgendamento = null; // Date do 1º dia do mês exibido no calendário
 let overridesAgendaProfessor = {}; // {"AAAA-MM-DD": {fechado, blocos}} — exceções pontuais do professor
 
@@ -933,6 +932,54 @@ async function trocarDeProfessor() {
   }
 }
 
+// -------------------- AGENDAR AULA (passo a passo) --------------------
+// Igual ao agendamento da barbearia: 1) dia, 2) horário, 3) detalhes e confirmar.
+// Escolher o horário só seleciona; a aula só é marcada no "Confirmar agendamento".
+// Cada passo já escolhido recolhe pra uma linha de resumo com "trocar".
+
+// Trava de UX contra um aluno lotar a agenda sozinho (clique repetido, bug...)
+const MAX_AULAS_FUTURAS_POR_ALUNO = 3;
+
+const NOMES_DIAS_CURTOS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+// Estado do agendamento em andamento (zerado a cada abertura do modal)
+let agendamento = null;
+
+function novoAgendamento() {
+  return {
+    data: null,            // "AAAA-MM-DD"
+    hora: null,            // "HH:MM"
+    horarios: null,        // horários livres da data escolhida (null = carregando)
+    erroHorarios: false,
+    modalidade: null,
+    idioma: null,
+    reposicao: quantidadeAulasParaRepor() > 0,
+    confirmada: null,      // dados da aula depois de confirmada (tela de sucesso)
+    salvando: false,
+    erro: ""
+  };
+}
+
+// "2026-10-23" -> "Qui, 23/10"
+function rotuloDiaCurto(dataIso) {
+  return `${NOMES_DIAS_CURTOS[new Date(`${dataIso}T12:00:00`).getDay()]}, ${formatarDataBR(dataIso).slice(0, 5)}`;
+}
+
+function chaveMes(data) {
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// O mês atual está sempre liberado; os seguintes, só quando o professor libera
+function mesLiberado(data) {
+  const mes = chaveMes(data);
+  return mes === chaveMes(new Date()) || (configAgendaProfessor.mesesLiberados || []).includes(mes);
+}
+
+function aulasFuturasDoAluno() {
+  const hojeIso = dataDeHojeISO();
+  return minhasAulasCache.filter((a) => a.status === "agendada" && a.data >= hojeIso);
+}
+
 // Abre o modal de agendamento, carregando a configuração de agenda do professor vinculado
 async function abrirAgendamento() {
   if (!professorIdDoAluno) {
@@ -956,7 +1003,6 @@ async function abrirAgendamento() {
   }
 
   configAgendaProfessor = snap.data();
-  dataEscolhidaAgendamento = null;
 
   // Não deixa a falta de permissão nessa coleção (ex: regras do Firestore
   // ainda não republicadas) travar o agendamento inteiro — nesse caso só
@@ -972,13 +1018,8 @@ async function abrirAgendamento() {
 
   const hoje = new Date();
   mesCalendarioAgendamento = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-  montarCalendarioAgendamento();
-
-  renderizarModalidadesAgendamento(null);
-  atualizarDicaReposicao();
-  prepararIdiomaDaAula();
-
-  document.getElementById("slots-agendamento").innerHTML = `<p class="vazio">Escolha uma data acima.</p>`;
+  agendamento = novoAgendamento();
+  renderizarAgendamento();
   document.getElementById("modal-agendamento").classList.remove("modal-oculto");
 }
 
@@ -1004,34 +1045,152 @@ function modalidadesDoDia(dataIso) {
   return configAgendaProfessor.modalidades || [];
 }
 
-// Desenha as opções de modalidade do dia (mantém a escolha atual se ela ainda
-// estiver disponível nesse dia)
-function renderizarModalidadesAgendamento(dataIso) {
-  const modalidades = modalidadesDoDia(dataIso);
-  const atual = document.querySelector('input[name="modalidade-agendamento"]:checked');
-  const escolhida = atual && modalidades.includes(atual.value) ? atual.value : modalidades[0];
-  document.getElementById("modalidades-agendamento").innerHTML = modalidades.map((m) => `
-    <label><input type="radio" name="modalidade-agendamento" value="${m}" ${m === escolhida ? "checked" : ""}> ${m === "online" ? "Online" : "Presencial"}</label>
-  `).join("");
-  document.getElementById("campo-modalidades-agendamento").style.display = modalidades.length > 1 ? "block" : "none";
-}
-
 // Um dia tem disponibilidade se sobrar algum bloco de horário depois de
 // aplicar a exceção pontual (se houver) sobre a grade semanal
 function diaTemDisponibilidade(dataIso) {
   return blocosDoDia(dataIso).length > 0;
 }
 
+// Idiomas em que o professor dá aula. A aula é de UM deles; com mais de um, o aluno escolhe.
+function idiomasParaAula() {
+  return idiomasDoProfessorDoAluno.length ? idiomasDoProfessorDoAluno : [IDIOMA_PADRAO];
+}
+
+// Aulas que o aluno ainda tem pra repor: as canceladas pelo professor menos as
+// reposições que ele já marcou (ou fez). Nunca fica negativo.
+function quantidadeAulasParaRepor() {
+  const canceladasPeloProfessor = minhasAulasCache
+    .filter((a) => a.status === "cancelada" && a.canceladoPor === "professor").length;
+  const reposicoes = minhasAulasCache
+    .filter((a) => a.reposicao === true && (a.status === "agendada" || a.status === "concluida")).length;
+  return Math.max(0, canceladasPeloProfessor - reposicoes);
+}
+
+function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade, reposicao, idiomaAula) {
+  return "Olá! Quero confirmar minha aula!\n" +
+    `Aluno: ${nomeDoAlunoAtual}\n` +
+    `Data: ${formatarDataBR(dataIso)}\n` +
+    `Horário: ${horaInicio}\n` +
+    `Modalidade: ${modalidade === "online" ? "Online" : "Presencial"}` +
+    (idiomasParaAula().length > 1 ? `\nIdioma: ${IDIOMAS[idiomaAula].nome}` : "") +
+    (reposicao ? "\nTipo: Reposição" : "");
+}
+
+// Indicador de progresso 1 → 2 → 3, pra deixar claro em que ponto o aluno está
+function montarPassosAgendamento() {
+  const passos = [
+    { n: 1, rotulo: "Dia", feito: !!agendamento.data },
+    { n: 2, rotulo: "Horário", feito: !!agendamento.hora },
+    { n: 3, rotulo: "Confirmar", feito: false }
+  ];
+  const atual = !agendamento.data ? 1 : (!agendamento.hora ? 2 : 3);
+  return `<div class="passos-agendamento">${passos.map((p) => `
+    <div class="passo ${p.feito ? "feito" : (p.n === atual ? "atual" : "")}">
+      <span class="passo-circulo">${p.feito ? "✓" : p.n}</span><span class="passo-rotulo">${p.rotulo}</span>
+    </div>`).join('<div class="passo-linha"></div>')}</div>`;
+}
+
+function renderizarAgendamento() {
+  const corpo = document.getElementById("corpo-agendamento");
+  if (!corpo || !agendamento) return;
+
+  if (agendamento.confirmada) {
+    const c = agendamento.confirmada;
+    corpo.innerHTML = `
+      <div class="agendamento-sucesso">
+        <div class="selo-sucesso">✓</div>
+        <h3>Aula confirmada</h3>
+        <p>${escapeHtml(rotuloDiaCurto(c.data))} às ${escapeHtml(c.hora)} · ${c.modalidade === "online" ? "Online" : "Presencial"}${c.reposicao ? " · Reposição" : ""}</p>
+        ${c.linkWhatsapp ? `<a class="btn btn-secundario" href="${c.linkWhatsapp}" target="_blank" rel="noopener">Não abriu? Confirmar pelo WhatsApp</a>` : ""}
+        <div class="acoes-sucesso">
+          <button type="button" class="btn btn-primario" onclick="marcarOutraAula()">Marcar outra aula</button>
+          <button type="button" class="btn btn-secundario" onclick="fecharAgendamento()">Fechar</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const dataHoraEscolhidas = agendamento.data && agendamento.hora;
+
+  // Passos 1 e 2: dia e horário (recolhem num resumo depois de escolhidos)
+  const cartaoDiaHorario = dataHoraEscolhidas ? `
+    <div class="cartao-passo resumo-passo">
+      <div><strong>Dia e horário</strong><span>${escapeHtml(rotuloDiaCurto(agendamento.data))} às ${escapeHtml(agendamento.hora)}</span></div>
+      <button type="button" class="link-trocar" onclick="trocarDiaHorario()">trocar</button>
+    </div>` : `
+    <div class="cartao-passo">
+      <h4>1. Escolha o dia</h4>
+      <div id="calendario-agendamento"></div>
+      <h4>2. Escolha o horário</h4>
+      <div id="slots-agendamento"></div>
+    </div>`;
+
+  // Passo 3: detalhes da aula e confirmar
+  const modalidades = modalidadesDoDia(agendamento.data);
+  if (!modalidades.includes(agendamento.modalidade)) agendamento.modalidade = modalidades[0] || null;
+  const idiomas = idiomasParaAula();
+  if (!idiomas.includes(agendamento.idioma)) agendamento.idioma = idiomas.includes(idiomaDoAluno) ? idiomaDoAluno : idiomas[0];
+  const qtdRepor = quantidadeAulasParaRepor();
+
+  const cartaoConfirmar = `
+    <div class="cartao-passo${dataHoraEscolhidas ? "" : " passo-bloqueado"}">
+      <h4>3. Confirmar</h4>
+      ${idiomas.length > 1 ? `
+        <div class="campo-agendamento">
+          <label for="select-idioma-aula">Idioma da aula</label>
+          <select id="select-idioma-aula" class="seletor-idioma-aluno" onchange="agendamento.idioma = idiomaValido(this.value)">
+            ${idiomas.map((id) => `<option value="${id}" ${id === agendamento.idioma ? "selected" : ""}>${IDIOMAS[id].nome}</option>`).join("")}
+          </select>
+        </div>` : ""}
+      ${modalidades.length > 1 ? `
+        <div class="campo-agendamento">
+          <label>Modalidade</label>
+          <div class="modalidades-agendamento">
+            ${modalidades.map((m) => `<label><input type="radio" name="modalidade-agendamento" value="${m}" ${m === agendamento.modalidade ? "checked" : ""} onchange="agendamento.modalidade = this.value"> ${m === "online" ? "Online" : "Presencial"}</label>`).join("")}
+          </div>
+        </div>` : ""}
+      <div class="campo-agendamento campo-reposicao">
+        <label class="rotulo-reposicao"><input type="checkbox" id="chk-reposicao" ${agendamento.reposicao ? "checked" : ""} onchange="agendamento.reposicao = this.checked"> Esta é uma aula de reposição</label>
+        ${qtdRepor > 0 ? `<p class="dica-reposicao">Você tem ${qtdRepor} aula${qtdRepor > 1 ? "s" : ""} para repor (cancelada${qtdRepor > 1 ? "s" : ""} pelo professor).</p>` : ""}
+      </div>
+      ${agendamento.erro ? `<p class="erro-agendamento" role="alert">${escapeHtml(agendamento.erro)}</p>` : ""}
+      <button type="button" class="btn btn-primario btn-confirmar-agendamento" id="btn-confirmar-agendamento" onclick="confirmarAgendamento()" ${dataHoraEscolhidas && !agendamento.salvando ? "" : "disabled"}>
+        ${agendamento.salvando ? "Confirmando..." : "Confirmar agendamento"}
+      </button>
+      ${dataHoraEscolhidas ? "" : `<p class="dica-confirmar">Escolha o dia e o horário para confirmar.</p>`}
+    </div>`;
+
+  corpo.innerHTML = montarPassosAgendamento() + cartaoDiaHorario + cartaoConfirmar;
+
+  if (!dataHoraEscolhidas) {
+    montarCalendarioAgendamento();
+    renderizarHorariosAgendamento();
+  }
+}
+
+function trocarDiaHorario() {
+  agendamento.hora = null;
+  agendamento.erro = "";
+  renderizarAgendamento();
+}
+
+function marcarOutraAula() {
+  agendamento = novoAgendamento();
+  renderizarAgendamento();
+}
+
 // Desenha o calendário de mês (navegação + grade de dias), destacando quais
 // dias o professor atende, pra o aluno escolher visualmente em vez de digitar uma data
 function montarCalendarioAgendamento() {
   const container = document.getElementById("calendario-agendamento");
+  if (!container) return;
   const hojeIso = dataDeHojeISO();
   const ano = mesCalendarioAgendamento.getFullYear();
   const mes = mesCalendarioAgendamento.getMonth();
   const primeiroDoMes = new Date(ano, mes, 1);
   const diasNoMes = new Date(ano, mes + 1, 0).getDate();
   const offsetInicio = primeiroDoMes.getDay();
+  const liberado = mesLiberado(primeiroDoMes);
 
   const celulas = [];
   for (let i = 0; i < offsetInicio; i++) celulas.push(`<div class="cal-day cal-empty"></div>`);
@@ -1039,18 +1198,19 @@ function montarCalendarioAgendamento() {
     const dataIso = chaveDataISO(new Date(ano, mes, dia));
     const passou = dataIso < hojeIso;
     const hoje = dataIso === hojeIso;
-    const disponivel = !passou && diaTemDisponibilidade(dataIso);
-    const selecionado = dataIso === dataEscolhidaAgendamento;
+    const disponivel = !passou && liberado && diaTemDisponibilidade(dataIso);
+    const selecionado = dataIso === agendamento.data;
 
     const classes = ["cal-day"];
     if (passou) classes.push("is-past");
+    else if (!liberado) classes.push("is-locked");
     else if (!disponivel) classes.push("is-off");
     if (hoje) classes.push("is-today");
     if (disponivel) classes.push("is-available");
     if (selecionado) classes.push("is-selected");
 
     celulas.push(`
-      <div class="${classes.join(" ")}" ${disponivel ? `data-calday="${dataIso}"` : ""}>
+      <div class="${classes.join(" ")}" ${disponivel ? `data-calday="${dataIso}" role="button" tabindex="0" aria-pressed="${selecionado}"` : 'aria-disabled="true"'}>
         <span class="cal-num">${dia}</span>
       </div>
     `);
@@ -1073,6 +1233,7 @@ function montarCalendarioAgendamento() {
         <span><span class="dot dot-indisponivel"></span> Indisponível</span>
         <span><span class="dot dot-selecionado"></span> Selecionado</span>
       </div>
+      ${liberado ? "" : `<p class="aviso-mes-bloqueado">A agenda de ${NOMES_MESES[mes].toLowerCase()} ainda não foi liberada pelo seu professor.</p>`}
     </div>
   `;
 
@@ -1085,28 +1246,26 @@ function montarCalendarioAgendamento() {
     montarCalendarioAgendamento();
   };
   container.querySelectorAll("[data-calday]").forEach((celula) => {
-    celula.onclick = () => selecionarDataAgendamento(celula.dataset.calday);
+    const escolher = () => selecionarDataAgendamento(celula.dataset.calday);
+    celula.onclick = escolher;
+    celula.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); escolher(); } };
   });
 }
 
 // Ao escolher uma data, busca as aulas já marcadas do professor naquele dia e calcula os horários livres
 async function selecionarDataAgendamento(dataEscolhida) {
-  dataEscolhida = dataEscolhida || dataEscolhidaAgendamento;
-  const container = document.getElementById("slots-agendamento");
-  if (!dataEscolhida) { container.innerHTML = ""; return; }
+  agendamento.data = dataEscolhida;
+  agendamento.hora = null;
+  agendamento.horarios = null;
+  agendamento.erroHorarios = false;
+  agendamento.erro = "";
+  renderizarAgendamento();
+  await carregarHorariosLivres(dataEscolhida);
+  if (agendamento && agendamento.data === dataEscolhida) renderizarAgendamento();
+}
 
-  dataEscolhidaAgendamento = dataEscolhida;
-  montarCalendarioAgendamento(); // reflete o dia selecionado na grade
-  renderizarModalidadesAgendamento(dataEscolhida);
+async function carregarHorariosLivres(dataEscolhida) {
   const blocos = blocosDoDia(dataEscolhida);
-
-  if (blocos.length === 0) {
-    container.innerHTML = `<p class="vazio">Seu professor não atende nesse dia.</p>`;
-    return;
-  }
-
-  container.innerHTML = `<p class="vazio">Carregando horários...</p>`;
-
   let marcadas;
   try {
     const snap = await db.collection("aulas")
@@ -1116,131 +1275,110 @@ async function selecionarDataAgendamento(dataEscolhida) {
     marcadas = snap.docs.map((d) => d.data()).filter((a) => a.status === "agendada");
   } catch (e) {
     console.error(e);
-    container.innerHTML = `<p class="vazio">Não foi possível carregar os horários. Tente de novo.</p>`;
+    if (agendamento.data === dataEscolhida) agendamento.erroHorarios = true;
     return;
   }
   // Outra data pode ter sido escolhida enquanto esta carregava
-  if (dataEscolhida !== dataEscolhidaAgendamento) return;
+  if (!agendamento || agendamento.data !== dataEscolhida) return;
 
   const duracao = configAgendaProfessor.duracaoAulaMinutos || 50;
-  let slots = slotsSemConflito(gerarSlotsDoDia(blocos, duracao), duracao, marcadas);
+  let horarios = slotsSemConflito(gerarSlotsDoDia(blocos, duracao), duracao, marcadas);
 
   // Se a data escolhida for hoje, esconde horários que já passaram
   if (dataEscolhida === dataDeHojeISO()) {
     const agora = new Date();
     const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
-    slots = slots.filter((h) => {
-      const [hh, mm] = h.split(":").map(Number);
-      return hh * 60 + mm > minutosAgora;
-    });
+    horarios = horarios.filter((h) => minutosDoHorario(h) > minutosAgora);
   }
+  agendamento.horarios = horarios;
+}
 
-  if (slots.length === 0) {
-    container.innerHTML = `<p class="vazio">Nenhum horário livre nesse dia. Tente outra data.</p>`;
+function renderizarHorariosAgendamento() {
+  const container = document.getElementById("slots-agendamento");
+  if (!container) return;
+  if (!agendamento.data) {
+    container.innerHTML = `<p class="vazio">Escolha um dia no calendário para ver os horários.</p>`;
     return;
   }
-
+  if (agendamento.erroHorarios) {
+    container.innerHTML = `<p class="vazio">Não foi possível carregar os horários. <button type="button" class="link-trocar" onclick="selecionarDataAgendamento(agendamento.data)">Tentar de novo</button></p>`;
+    return;
+  }
+  if (agendamento.horarios === null) {
+    container.innerHTML = `<p class="vazio">Carregando horários...</p>`;
+    return;
+  }
+  if (agendamento.horarios.length === 0) {
+    container.innerHTML = `<p class="vazio">Nenhum horário livre em ${escapeHtml(rotuloDiaCurto(agendamento.data))}. Tente outro dia.</p>`;
+    return;
+  }
   container.innerHTML = `<div class="slots-grade" id="slots-grade"></div>`;
   const grade = document.getElementById("slots-grade");
-  slots.forEach((horaInicio) => {
+  agendamento.horarios.forEach((horaInicio) => {
     const botao = document.createElement("button");
     botao.type = "button";
     botao.className = "btn-slot-horario";
     botao.textContent = horaInicio; // textContent: seguro, sem risco de injeção
-    botao.onclick = () => confirmarAgendamento(horaInicio, duracao);
+    botao.setAttribute("aria-pressed", "false");
+    botao.onclick = () => {
+      agendamento.hora = horaInicio;
+      agendamento.erro = "";
+      renderizarAgendamento();
+    };
     grade.appendChild(botao);
   });
 }
 
-// Idiomas em que o professor dá aula. A aula é de UM deles; com mais de um, o aluno escolhe.
-function idiomasParaAula() {
-  return idiomasDoProfessorDoAluno.length ? idiomasDoProfessorDoAluno : [IDIOMA_PADRAO];
-}
+async function confirmarAgendamento() {
+  const user = auth.currentUser;
+  if (!user || !agendamento || !agendamento.data || !agendamento.hora || agendamento.salvando) return;
 
-function prepararIdiomaDaAula() {
-  const opcoes = idiomasParaAula();
-  const select = document.getElementById("select-idioma-aula");
-  const escolhido = opcoes.includes(idiomaDoAluno) ? idiomaDoAluno : opcoes[0];
-  select.innerHTML = opcoes
-    .map((id) => `<option value="${id}" ${id === escolhido ? "selected" : ""}>${IDIOMAS[id].nome}</option>`).join("");
-  document.getElementById("campo-idioma-aula").hidden = opcoes.length < 2;
-}
-
-function idiomaEscolhidoParaAula() {
-  const opcoes = idiomasParaAula();
-  return opcoes.length > 1 ? idiomaValido(document.getElementById("select-idioma-aula").value) : opcoes[0];
-}
-
-function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade, reposicao, idiomaAula) {
-  return "Olá! Quero confirmar minha aula!\n" +
-    `Aluno: ${nomeDoAlunoAtual}\n` +
-    `Data: ${formatarDataBR(dataIso)}\n` +
-    `Horário: ${horaInicio}\n` +
-    `Modalidade: ${modalidade === "online" ? "Online" : "Presencial"}` +
-    (idiomasParaAula().length > 1 ? `\nIdioma: ${IDIOMAS[idiomaAula].nome}` : "") +
-    (reposicao ? "\nTipo: Reposição" : "");
-}
-
-// Aulas que o aluno ainda tem pra repor: as canceladas pelo professor menos as
-// reposições que ele já marcou (ou fez). Nunca fica negativo.
-function quantidadeAulasParaRepor() {
-  const canceladasPeloProfessor = minhasAulasCache
-    .filter((a) => a.status === "cancelada" && a.canceladoPor === "professor").length;
-  const reposicoes = minhasAulasCache
-    .filter((a) => a.reposicao === true && (a.status === "agendada" || a.status === "concluida")).length;
-  return Math.max(0, canceladasPeloProfessor - reposicoes);
-}
-
-function atualizarDicaReposicao() {
-  const qtd = quantidadeAulasParaRepor();
-  document.getElementById("chk-reposicao").checked = qtd > 0;
-  document.getElementById("dica-reposicao").textContent = qtd > 0
-    ? `Você tem ${qtd} aula${qtd > 1 ? "s" : ""} para repor (cancelada${qtd > 1 ? "s" : ""} pelo professor).`
-    : "";
-}
-
-async function confirmarAgendamento(horaInicio, duracaoMinutos) {
-  const modalidadeInput = document.querySelector('input[name="modalidade-agendamento"]:checked');
-  if (!modalidadeInput) {
-    alert("Escolha a modalidade da aula.");
+  if (aulasFuturasDoAluno().length >= MAX_AULAS_FUTURAS_POR_ALUNO) {
+    agendamento.erro = `Você já tem ${MAX_AULAS_FUTURAS_POR_ALUNO} aulas marcadas. Cancele uma para marcar outra.`;
+    renderizarAgendamento();
+    return;
+  }
+  if (!agendamento.modalidade) {
+    agendamento.erro = "Seu professor ainda não definiu se atende online ou presencial.";
+    renderizarAgendamento();
     return;
   }
 
-  const user = auth.currentUser;
-  if (!user) return;
-  const reposicao = document.getElementById("chk-reposicao").checked;
-  const idiomaAula = idiomaEscolhidoParaAula();
+  const { data, hora, modalidade, reposicao, idioma } = agendamento;
+  const duracao = configAgendaProfessor.duracaoAulaMinutos || 50;
 
   // A aba do WhatsApp é aberta em branco JÁ AQUI, antes do "await" — celulares
   // (principalmente Safari/iOS) bloqueiam window.open() se ele só acontecer depois de uma
   // pausa assíncrona, porque nesse ponto deixa de contar como resposta direta a um toque
   // do usuário. Preenchendo o destino da aba só depois que a gravação terminar, o popup nunca é bloqueado.
-  const numeroWhatsappProfessor = configAgendaProfessor.whatsapp;
-  const abaWhatsapp = numeroWhatsappProfessor ? window.open("", "_blank") : null;
+  const linkConfirmacao = configAgendaProfessor.whatsapp
+    ? linkWhatsapp(configAgendaProfessor.whatsapp, mensagemConfirmacaoAula(data, hora, modalidade, reposicao, idioma))
+    : null;
+  const abaWhatsapp = linkConfirmacao ? window.open("", "_blank") : null;
 
+  agendamento.salvando = true;
+  agendamento.erro = "";
+  renderizarAgendamento();
   try {
-    await agendarAula(
-      professorIdDoAluno,
-      dataEscolhidaAgendamento,
-      horaInicio,
-      somarMinutos(horaInicio, duracaoMinutos),
-      modalidadeInput.value,
-      user.uid,
-      nomeDoAlunoAtual,
-      reposicao,
-      idiomaAula
-    );
-    fecharAgendamento();
-
-    if (abaWhatsapp) {
-      const link = linkWhatsapp(numeroWhatsappProfessor, mensagemConfirmacaoAula(dataEscolhidaAgendamento, horaInicio, modalidadeInput.value, reposicao, idiomaAula));
-      if (link) abaWhatsapp.location = link; else abaWhatsapp.close();
-    }
+    await agendarAula(professorIdDoAluno, data, hora, somarMinutos(hora, duracao), modalidade,
+      user.uid, nomeDoAlunoAtual, reposicao, idioma);
   } catch (e) {
     if (abaWhatsapp) abaWhatsapp.close();
-    alert(e.message || "Não foi possível agendar esse horário. Tente outro.");
-    selecionarDataAgendamento(); // recarrega a lista de horários livres
+    agendamento.salvando = false;
+    agendamento.erro = e.message || "Não foi possível agendar esse horário. Tente outro.";
+    // o horário pode ter sido ocupado por outro aluno: volta pra lista atualizada
+    agendamento.hora = null;
+    agendamento.horarios = null;
+    renderizarAgendamento();
+    await carregarHorariosLivres(data);
+    renderizarAgendamento();
+    return;
   }
+
+  if (abaWhatsapp) abaWhatsapp.location = linkConfirmacao;
+  agendamento.salvando = false;
+  agendamento.confirmada = { data, hora, modalidade, reposicao, linkWhatsapp: linkConfirmacao };
+  renderizarAgendamento();
 }
 
 // Usa uma transação: o ID do documento é determinístico ("professor_data_hora"), então

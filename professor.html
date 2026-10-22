@@ -71,6 +71,7 @@
       <div class="agenda-topo">
         <button class="btn btn-secundario" onclick="abrirConfigAgenda()">⚙️ Configurar disponibilidade</button>
       </div>
+      <div id="painel-hoje-professor"></div>
       <div id="calendario-professor" style="margin-bottom:2rem;"></div>
     </div>
 
@@ -129,6 +130,11 @@
           <input type="tel" id="config-whatsapp" placeholder="Ex: 11 91234-5678">
         </label>
         <p class="dica-whatsapp-professor">O aluno vai poder enviar uma mensagem de confirmação pra esse número assim que marcar uma aula.</p>
+        <div class="config-meses-liberados">
+          <span class="rotulo-meses-liberados">Meses liberados para agendamento</span>
+          <p class="dica-whatsapp-professor">O mês atual está sempre liberado. Marque os próximos meses em que os alunos já podem marcar aula.</p>
+          <div id="config-meses-liberados" class="grupo-meses"></div>
+        </div>
         <div id="config-dias-semana"></div>
         <button class="btn btn-primario" style="margin-top:1rem;" onclick="salvarConfigAgenda()">Salvar disponibilidade</button>
       </div>

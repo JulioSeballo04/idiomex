@@ -652,3 +652,99 @@
 .badge-status-agendada { background: #fff7e6; color: #916a00; }
 .badge-status-concluida { background: #e3f7e8; color: #1e6b34; }
 .badge-status-cancelada { background: #f2f2f2; color: #777; }
+
+/* ---------- Agendamento passo a passo (aluno) ---------- */
+.passos-agendamento {
+  display: flex;
+  align-items: center;
+  margin: 0.2rem 0 1rem;
+}
+.passo { display: flex; align-items: center; gap: 0.4rem; color: var(--ink-soft); font-size: 0.82rem; }
+.passo-circulo {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  border: 1.5px solid var(--borda); background: var(--bg-cartao);
+  font-weight: 700; font-size: 0.78rem;
+}
+.passo.atual { color: var(--ink); font-weight: 600; }
+.passo.atual .passo-circulo { border-color: var(--acento); color: var(--acento-forte); }
+.passo.feito .passo-circulo { background: var(--acento); border-color: var(--acento); color: #fff; }
+.passo-linha { flex: 1; height: 1.5px; background: var(--borda); margin: 0 0.5rem; min-width: 12px; }
+
+.cartao-passo {
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.8rem;
+  background: var(--bg-cartao);
+}
+.cartao-passo h4 { margin: 0 0 0.6rem; font-size: 0.9rem; }
+.cartao-passo h4 + .cal-wrap, .cartao-passo #calendario-agendamento + h4 { margin-top: 1rem; }
+.resumo-passo { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; }
+.resumo-passo strong { display: block; font-size: 0.9rem; }
+.resumo-passo span { font-size: 0.85rem; color: var(--ink-soft); }
+.passo-bloqueado { opacity: 0.6; }
+.link-trocar {
+  background: none; border: none; padding: 0; font: inherit; font-size: 0.85rem;
+  color: var(--acento-forte); text-decoration: underline; cursor: pointer;
+}
+.btn-confirmar-agendamento { width: 100%; margin-top: 0.4rem; }
+.btn-confirmar-agendamento:disabled { opacity: 0.55; cursor: not-allowed; }
+.dica-confirmar { margin: 0.5rem 0 0; font-size: 0.78rem; color: var(--ink-soft); text-align: center; }
+.erro-agendamento {
+  margin: 0.4rem 0; padding: 0.5rem 0.7rem; border-radius: 8px;
+  background: rgba(179, 65, 46, 0.1); color: #8f2f1f; font-size: 0.85rem;
+}
+html[data-tema="noturno"] .erro-agendamento { color: #F08A75; }
+
+.cal-day.is-locked { background: var(--bg); color: var(--ink-soft); opacity: 0.55; border-style: dashed; }
+.aviso-mes-bloqueado { margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--ink-soft); text-align: center; }
+
+.agendamento-sucesso { text-align: center; padding: 0.8rem 0.4rem 0.4rem; }
+.agendamento-sucesso h3 { margin: 0.6rem 0 0.3rem; }
+.agendamento-sucesso p { margin: 0 0 1rem; color: var(--ink-soft); }
+.selo-sucesso {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--acento); color: #fff; font-size: 1.6rem; font-weight: 700;
+}
+.agendamento-sucesso a.btn { display: inline-block; text-decoration: none; }
+.acoes-sucesso { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; margin-top: 1rem; }
+
+/* ---------- Agenda do professor: próxima aula e próximos dias ---------- */
+.cartao-proxima-aula {
+  border-radius: 10px;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1rem;
+  background: var(--acento);
+  color: #fff;
+}
+.rotulo-proxima-aula { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.85; }
+.corpo-proxima-aula { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0.4rem 1rem; margin-top: 0.3rem; }
+.quando-proxima-aula { font-weight: 700; font-size: 1.05rem; }
+
+.cartao-proximas-aulas {
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 1.4rem;
+  background: var(--bg-cartao);
+}
+.cabecalho-proximas-aulas { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0.3rem 1rem; margin-bottom: 0.4rem; }
+.cabecalho-proximas-aulas h3 { margin: 0; font-size: 0.95rem; }
+.cabecalho-proximas-aulas span { font-size: 0.82rem; color: var(--ink-soft); }
+.grupo-dia-aulas { margin-top: 0.8rem; }
+.titulo-grupo-dia {
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-soft); margin-bottom: 0.4rem;
+}
+.titulo-grupo-dia.atrasadas { color: #B3412E; }
+html[data-tema="noturno"] .titulo-grupo-dia.atrasadas { color: #F08A75; }
+.aula-concluida { opacity: 0.7; }
+.selo-concluida { font-size: 0.8rem; font-weight: 600; color: var(--acento-forte); }
+.btn-mini { padding: 0.35em 0.8em; font-size: 0.8rem; }
+
+.config-meses-liberados { margin: 0.4rem 0 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--borda, #eee); }
+.rotulo-meses-liberados { font-weight: 600; font-size: 0.9rem; }
+.grupo-meses { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; }
+.opcao-mes { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.88rem; }

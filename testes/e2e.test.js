@@ -273,14 +273,15 @@ function dataDaqui(dias) {
 
   console.log('\nAgendamento');
   const dia = dataDaqui(3);
-  await prof.evaluate(async (dia) => {
+  const chaveMes = (n) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+  await prof.evaluate(async ({ dia, proximoMes }) => {
     await db.collection('usuarios').doc(professorIdAtual).collection('configuracaoAgenda').doc('dados').set({
-      duracaoAulaMinutos: 50, modalidades: ['online'], whatsapp: '',
+      duracaoAulaMinutos: 50, modalidades: ['online'], whatsapp: '', mesesLiberados: [proximoMes],
       disponibilidade: { seg: [{ inicio: '08:00', fim: '12:00' }] } });
     // Dia ajustado com períodos que se sobrepõem (manhã 09–12 e "tarde" 11–13)
     await db.collection('usuarios').doc(professorIdAtual).collection('agendaOverrides').doc(dia).set({
       fechado: false, modalidades: ['online'], blocos: [{ inicio: '09:00', fim: '12:00' }, { inicio: '10:40', fim: '13:00' }] });
-  }, dia);
+  }, { dia, proximoMes: chaveMes(1) });
 
   async function horariosDoDia(p, dia) {
     await p.click('button:has-text("Agendar aula")');
@@ -311,6 +312,101 @@ function dataDaqui(dias) {
     esperar(!hs.includes('09:30') && !hs.includes('09:00'), 'ofereceu horário em conflito: ' + hs.join(' '));
     esperar(hs.includes('10:00'), 'sumiu horário livre 10:00: ' + hs.join(' '));
   });
+
+  // Aluna nova só para o fluxo de agendamento (a Bia já tem aula marcada)
+  const ctxGabi = await h.novoContexto(browser); const gabi = await h.novaPagina(ctxGabi);
+  await h.cadastrar(gabi, { tipo: 'aluno', nome: 'Gabi', email: `gabi-${id}@t.com`, codigo });
+  await gabi.waitForURL('**/dicionario.html', { timeout: 10000 }); await gabi.waitForSelector('#input-palavra-en'); await dormir(1500);
+
+  async function abrirAgendamentoNoDia(p, dia) {
+    await p.click('button:has-text("Agendar aula")');
+    await p.waitForSelector('#modal-agendamento:not(.modal-oculto) .passos-agendamento', { timeout: 8000 });
+    for (let i = 0; i < 3 && !(await p.$(`[data-calday="${dia}"]`)); i++) await p.click('#btn-cal-mes-proximo');
+    await p.click(`[data-calday="${dia}"]`);
+    await p.waitForSelector('.btn-slot-horario', { timeout: 8000 });
+  }
+
+  await caso('agendar pelo passo a passo: escolher o horário não marca; só "Confirmar agendamento" marca', async () => {
+    await abrirAgendamentoNoDia(gabi, dia);
+    esperar(await gabi.isDisabled('#btn-confirmar-agendamento'), 'dava pra confirmar sem escolher horário');
+    await gabi.click('.btn-slot-horario:has-text("10:00")');
+    await gabi.waitForSelector('.resumo-passo:has-text("às 10:00")', { timeout: 3000 });
+    await dormir(800);
+    esperar((await gabi.evaluate(() => aulasFuturasDoAluno().length)) === 0, 'marcou a aula só de escolher o horário');
+    await gabi.click('#btn-confirmar-agendamento');
+    await gabi.waitForSelector('.agendamento-sucesso:has-text("Aula confirmada")', { timeout: 8000 });
+    await gabi.waitForFunction(() => aulasFuturasDoAluno().length === 1, null, { timeout: 5000 });
+    await gabi.click('.acoes-sucesso button:has-text("Fechar")');
+    await gabi.waitForSelector('#painel-minhas-aulas:not(.oculto) .cartao-aula:has-text("10:00")', { timeout: 5000 });
+  });
+
+  await caso('"trocar" volta para escolher outro dia e horário', async () => {
+    await abrirAgendamentoNoDia(gabi, dia);
+    await gabi.click('.btn-slot-horario >> nth=0');
+    await gabi.click('.resumo-passo .link-trocar');
+    await gabi.waitForSelector('#calendario-agendamento .cal-grid', { timeout: 3000 });
+    esperar(!(await gabi.$('.resumo-passo')), 'resumo continuou');
+    await gabi.keyboard.press('Escape');
+  });
+
+  await caso('mês que o professor não liberou fica bloqueado; depois de liberar, abre', async () => {
+    const mesBloqueado = chaveMes(2);
+    await gabi.click('button:has-text("Agendar aula")');
+    await gabi.waitForSelector('#modal-agendamento:not(.modal-oculto) .cal-grid', { timeout: 8000 });
+    await gabi.click('#btn-cal-mes-proximo'); await gabi.click('#btn-cal-mes-proximo');
+    await gabi.waitForSelector('.aviso-mes-bloqueado', { timeout: 3000 });
+    esperar(!(await gabi.$('[data-calday]')), 'mês bloqueado tem dia clicável');
+    await gabi.keyboard.press('Escape');
+    // Professor libera o mês pelas configurações da agenda
+    await prof.click('#btn-aba-agenda');
+    await prof.click('button:has-text("Configurar disponibilidade")');
+    await prof.check(`.chk-mes-liberado[value="${mesBloqueado}"]`);
+    await prof.click('#modal-config-agenda button:has-text("Salvar disponibilidade")');
+    await prof.waitForSelector('#modal-config-agenda.modal-oculto', { state: 'attached', timeout: 5000 });
+    await gabi.click('button:has-text("Agendar aula")');
+    await gabi.waitForSelector('#modal-agendamento:not(.modal-oculto) .cal-grid', { timeout: 8000 });
+    await gabi.click('#btn-cal-mes-proximo'); await gabi.click('#btn-cal-mes-proximo');
+    await gabi.waitForSelector('[data-calday]', { timeout: 3000 });
+    esperar(!(await gabi.$('.aviso-mes-bloqueado')), 'continuou bloqueado depois de liberar');
+    await gabi.keyboard.press('Escape');
+  });
+
+  await caso('aluno com 3 aulas futuras não consegue marcar a quarta', async () => {
+    await gabi.evaluate(async (dia) => {
+      for (const h of ['12:00', '12:30']) {
+        await agendarAula(professorIdDoAluno, dia, h, somarMinutos(h, 30), 'online', auth.currentUser.uid, 'Gabi', false, 'en');
+      }
+    }, dia);
+    await gabi.waitForFunction(() => aulasFuturasDoAluno().length === 3, null, { timeout: 5000 });
+    await abrirAgendamentoNoDia(gabi, dia);
+    await gabi.click('.btn-slot-horario >> nth=0');
+    await gabi.click('#btn-confirmar-agendamento');
+    await gabi.waitForSelector('.erro-agendamento:has-text("3 aulas")', { timeout: 3000 });
+    esperar((await gabi.evaluate(() => aulasFuturasDoAluno().length)) === 3, 'marcou a quarta aula');
+    await gabi.keyboard.press('Escape');
+  });
+
+  await caso('professor vê a próxima aula em destaque e as aulas agrupadas por dia', async () => {
+    await prof.click('#btn-aba-agenda');
+    await prof.waitForSelector('.cartao-proxima-aula:has-text("Próxima aula")', { timeout: 8000 });
+    await prof.waitForSelector('.cartao-proximas-aulas .cartao-aula:has-text("Gabi")', { timeout: 8000 });
+    esperar((await prof.$$('.cartao-proximas-aulas .titulo-grupo-dia')).length >= 1, 'sem agrupamento por dia');
+  });
+
+  await caso('aula que já passou aparece em "Pendentes"; Concluir e Desfazer', async () => {
+    await aluno.evaluate(async () => {
+      const hoje = dataDeHojeISO();
+      await agendarAula(professorIdDoAluno, hoje, '00:00', '00:30', 'online', auth.currentUser.uid, 'Bia', false, 'en');
+    });
+    const pendente = '.grupo-dia-aulas:has(.titulo-grupo-dia.atrasadas) .cartao-aula:has-text("00:00")';
+    await prof.waitForSelector(pendente, { timeout: 8000 });
+    await prof.click(`${pendente} button:has-text("Concluir")`);
+    const concluida = '.cartao-proximas-aulas .aula-concluida:has-text("00:00")';
+    await prof.waitForSelector(concluida, { timeout: 5000 });
+    await prof.click(`${concluida} button:has-text("Desfazer")`);
+    await prof.waitForSelector(pendente, { timeout: 5000 });
+  });
+  await ctxGabi.close();
 
   await caso('aluno sem professor recebe aviso ao clicar em "Agendar aula"', async () => {
     const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
