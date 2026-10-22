@@ -997,35 +997,170 @@ function preencherFormularioConfigAgenda() {
       return `<label class="opcao-mes"><input type="checkbox" class="chk-mes-liberado" value="${chave}" ${liberados.includes(chave) ? "checked" : ""}> ${NOMES_MESES[d.getMonth()]}${d.getFullYear() !== hoje.getFullYear() ? ` de ${d.getFullYear()}` : ""}</label>`;
     }).join("");
 
-  const container = document.getElementById("config-dias-semana");
-  container.innerHTML = DIAS_SEMANA.map((dia) => {
-    const blocos = (configAgendaAtual.disponibilidade || {})[dia] || [];
+  preencherSemanaDeTrabalho(configAgendaAtual.disponibilidade || {});
+}
 
-    const periodosHtml = PERIODOS_DIA.map((periodo) => {
-      const bloco = blocos.find((b) => periodoDoHorario(b.inicio) === periodo.chave);
-      const ativo = !!bloco;
-      const inicio = ativo ? bloco.inicio : periodo.padraoInicio;
-      const fim = ativo ? bloco.fim : periodo.padraoFim;
-      return `
-        <div class="linha-periodo-config">
-          <label class="chk-periodo-label">
-            <input type="checkbox" class="chk-periodo-ativo" data-dia="${dia}" data-periodo="${periodo.chave}" ${ativo ? "checked" : ""} onchange="alternarPeriodoConfig(this)">
-            ${periodo.nome}
-          </label>
-          <input type="time" class="input-inicio-periodo" data-dia="${dia}" data-periodo="${periodo.chave}" value="${inicio}" ${ativo ? "" : "disabled"}>
-          <span>até</span>
-          <input type="time" class="input-fim-periodo" data-dia="${dia}" data-periodo="${periodo.chave}" value="${fim}" ${ativo ? "" : "disabled"}>
-        </div>
-      `;
-    }).join("");
+// -------------------- SEMANA DE TRABALHO (configurar disponibilidade) --------------------
+// Dois jeitos de configurar a semana:
+// - "igual": marca os dias em que trabalha e cadastra os períodos uma vez só
+//   (ex: 08:00–12:00 e 14:00–18:00), que valem para todos os dias marcados;
+// - "dia": períodos diferentes em cada dia da semana.
+// Os dois gravam o mesmo formato: disponibilidade[dia] = [{inicio, fim}, ...].
 
+const PERIODOS_PADRAO_NOVOS = [{ inicio: "08:00", fim: "12:00" }, { inicio: "14:00", fim: "18:00" }];
+const DIAS_PADRAO_NOVOS = ["seg", "ter", "qua", "qui", "sex"];
+let modoSemana = "igual";
+
+function linhaPeriodoHtml(periodo) {
+  return `
+    <div class="linha-periodo">
+      <input type="time" class="periodo-inicio" value="${escapeHtml(periodo.inicio)}" aria-label="Início do período">
+      <span>até</span>
+      <input type="time" class="periodo-fim" value="${escapeHtml(periodo.fim)}" aria-label="Fim do período">
+      <button type="button" class="excluir remover-periodo" title="Remover período" aria-label="Remover período" onclick="removerPeriodo(this)">✕</button>
+    </div>`;
+}
+
+function listaPeriodos(grupo) {
+  return document.querySelector(`#modal-config-agenda .lista-periodos[data-grupo="${grupo}"]`);
+}
+
+function preencherListaPeriodos(grupo, periodos) {
+  listaPeriodos(grupo).innerHTML = periodos.map(linhaPeriodoHtml).join("");
+}
+
+function adicionarPeriodo(grupo) {
+  const lista = listaPeriodos(grupo);
+  const atuais = lerPeriodosBrutos(grupo);
+  // Sugere um período 1 h depois do último (ex: depois de 14–18, sugere 19–22)
+  const ultimo = atuais[atuais.length - 1];
+  const inicio = ultimo && ultimo.fim && ultimo.fim <= "20:00" ? somarMinutos(ultimo.fim, 60) : "08:00";
+  const fim = inicio === "08:00" ? "12:00" : (minutosDoHorario(inicio) + 180 >= 24 * 60 ? "23:30" : somarMinutos(inicio, 180));
+  lista.insertAdjacentHTML("beforeend", linhaPeriodoHtml({ inicio, fim }));
+}
+
+function removerPeriodo(botao) {
+  botao.closest(".linha-periodo").remove();
+}
+
+function lerPeriodosBrutos(grupo) {
+  return Array.from(listaPeriodos(grupo).querySelectorAll(".linha-periodo")).map((linha) => ({
+    inicio: linha.querySelector(".periodo-inicio").value,
+    fim: linha.querySelector(".periodo-fim").value
+  }));
+}
+
+// Lê e valida os períodos de um grupo: em ordem, sem horário vazio, início antes do
+// fim e sem um período invadindo o outro
+function lerPeriodos(grupo, nomeDoGrupo) {
+  const periodos = lerPeriodosBrutos(grupo).sort((a, b) => a.inicio.localeCompare(b.inicio));
+  for (const p of periodos) {
+    if (!p.inicio || !p.fim || p.inicio >= p.fim) {
+      return { erro: `${nomeDoGrupo}: cada período precisa de início e fim, com o início antes do fim.` };
+    }
+  }
+  for (let i = 1; i < periodos.length; i++) {
+    if (periodos[i].inicio < periodos[i - 1].fim) {
+      return { erro: `${nomeDoGrupo}: os períodos ${periodos[i - 1].inicio}–${periodos[i - 1].fim} e ${periodos[i].inicio}–${periodos[i].fim} se sobrepõem.` };
+    }
+  }
+  return { periodos };
+}
+
+function diasMarcados() {
+  return Array.from(document.querySelectorAll("#config-dias-trabalho .dia-trabalho[aria-pressed='true']")).map((b) => b.dataset.dia);
+}
+
+function alternarDiaTrabalho(botao) {
+  botao.setAttribute("aria-pressed", String(botao.getAttribute("aria-pressed") !== "true"));
+}
+
+// Abre o formulário no modo que representa a configuração salva: "igual" quando
+// todos os dias de trabalho têm os mesmos períodos, senão "dia por dia"
+function preencherSemanaDeTrabalho(disponibilidade) {
+  const diasComHorario = DIAS_SEMANA.filter((d) => (disponibilidade[d] || []).length);
+  const assinaturas = new Set(diasComHorario.map((d) => JSON.stringify(disponibilidade[d])));
+  const novo = diasComHorario.length === 0;
+  const dias = novo ? DIAS_PADRAO_NOVOS : diasComHorario;
+  const periodosGerais = novo ? PERIODOS_PADRAO_NOVOS : disponibilidade[diasComHorario[0]];
+
+  document.getElementById("config-dias-trabalho").innerHTML = DIAS_SEMANA.map((d) => `
+    <button type="button" class="dia-trabalho" data-dia="${d}" aria-pressed="${dias.includes(d)}" onclick="alternarDiaTrabalho(this)">${NOMES_DIAS_SEMANA[d].slice(0, 3)}</button>`).join("");
+  preencherListaPeriodos("geral", periodosGerais);
+  preencherDiaPorDia(novo ? {} : disponibilidade, periodosGerais);
+  mudarModoSemana(assinaturas.size > 1 ? "dia" : "igual", true);
+}
+
+function preencherDiaPorDia(disponibilidade, periodosSugeridos) {
+  document.getElementById("config-dias-semana").innerHTML = DIAS_SEMANA.map((dia) => {
+    const periodos = disponibilidade[dia] || [];
+    const trabalha = periodos.length > 0;
     return `
       <div class="dia-config-grupo">
-        <div class="dia-config-titulo">${NOMES_DIAS_SEMANA[dia]}</div>
-        <div class="periodos-dia">${periodosHtml}</div>
-      </div>
-    `;
+        <label class="chk-periodo-label">
+          <input type="checkbox" class="chk-dia-trabalha" data-dia="${dia}" ${trabalha ? "checked" : ""} onchange="this.closest('.dia-config-grupo').classList.toggle('dia-de-folga', !this.checked)">
+          <span class="dia-config-titulo">${NOMES_DIAS_SEMANA[dia]}</span>
+        </label>
+        <div class="periodos-do-dia">
+          <div class="lista-periodos" data-grupo="${dia}">${(trabalha ? periodos : periodosSugeridos).map(linhaPeriodoHtml).join("")}</div>
+          <button type="button" class="link-trocar" onclick="adicionarPeriodo('${dia}')">+ Adicionar período</button>
+        </div>
+      </div>`;
   }).join("");
+  document.querySelectorAll("#config-dias-semana .chk-dia-trabalha").forEach((chk) => {
+    chk.closest(".dia-config-grupo").classList.toggle("dia-de-folga", !chk.checked);
+  });
+}
+
+// Troca entre os dois modos levando junto o que já foi preenchido
+function mudarModoSemana(modo, inicial) {
+  if (!inicial && modo !== modoSemana) {
+    if (modo === "dia") {
+      const geral = lerPeriodosBrutos("geral");
+      const marcados = diasMarcados();
+      const disp = {};
+      marcados.forEach((d) => { disp[d] = geral; });
+      preencherDiaPorDia(disp, geral);
+    } else {
+      const disp = {};
+      DIAS_SEMANA.forEach((d) => {
+        if (document.querySelector(`.chk-dia-trabalha[data-dia="${d}"]`).checked) disp[d] = lerPeriodosBrutos(d);
+      });
+      const primeiro = DIAS_SEMANA.find((d) => disp[d]);
+      if (primeiro) preencherListaPeriodos("geral", disp[primeiro]);
+      document.querySelectorAll("#config-dias-trabalho .dia-trabalho").forEach((b) => {
+        b.setAttribute("aria-pressed", String(!!disp[b.dataset.dia]));
+      });
+    }
+  }
+  modoSemana = modo;
+  document.getElementById("config-semana-igual").hidden = modo !== "igual";
+  document.getElementById("config-dias-semana").hidden = modo !== "dia";
+  document.getElementById("btn-modo-igual").classList.toggle("ativa", modo === "igual");
+  document.getElementById("btn-modo-dia").classList.toggle("ativa", modo === "dia");
+}
+
+// Monta disponibilidade[dia] a partir do formulário, no modo em uso
+function lerSemanaDeTrabalho() {
+  const disponibilidade = {};
+  if (modoSemana === "igual") {
+    const dias = diasMarcados();
+    if (!dias.length) return { erro: "Marque pelo menos um dia em que você trabalha." };
+    const lidos = lerPeriodos("geral", "Períodos de trabalho");
+    if (lidos.erro) return lidos;
+    if (!lidos.periodos.length) return { erro: "Adicione pelo menos um período de trabalho." };
+    dias.forEach((d) => { disponibilidade[d] = lidos.periodos; });
+  } else {
+    for (const dia of DIAS_SEMANA) {
+      if (!document.querySelector(`.chk-dia-trabalha[data-dia="${dia}"]`).checked) continue;
+      const lidos = lerPeriodos(dia, NOMES_DIAS_SEMANA[dia]);
+      if (lidos.erro) return lidos;
+      if (!lidos.periodos.length) return { erro: `${NOMES_DIAS_SEMANA[dia]}: adicione um período ou desmarque o dia.` };
+      disponibilidade[dia] = lidos.periodos;
+    }
+    if (!Object.keys(disponibilidade).length) return { erro: "Marque pelo menos um dia em que você trabalha." };
+  }
+  return { disponibilidade };
 }
 
 // Habilita/desabilita os campos de horário do período conforme o checkbox dele
@@ -1047,28 +1182,12 @@ async function salvarConfigAgenda() {
     return;
   }
 
-  const disponibilidade = {};
-  let algumDiaValido = false;
-  DIAS_SEMANA.forEach((dia) => {
-    const blocos = [];
-    PERIODOS_DIA.forEach((periodo) => {
-      const chk = document.querySelector(`.chk-periodo-ativo[data-dia="${dia}"][data-periodo="${periodo.chave}"]`);
-      if (chk && chk.checked) {
-        const inicio = document.querySelector(`.input-inicio-periodo[data-dia="${dia}"][data-periodo="${periodo.chave}"]`).value;
-        const fim = document.querySelector(`.input-fim-periodo[data-dia="${dia}"][data-periodo="${periodo.chave}"]`).value;
-        if (inicio && fim && inicio < fim) blocos.push({ inicio, fim });
-      }
-    });
-    if (blocos.length > 0) {
-      disponibilidade[dia] = blocos;
-      algumDiaValido = true;
-    }
-  });
-
-  if (!algumDiaValido) {
-    alert("Marque pelo menos um período (manhã, tarde ou noite) com um horário válido (início antes do fim).");
+  const lida = lerSemanaDeTrabalho();
+  if (lida.erro) {
+    alert(lida.erro);
     return;
   }
+  const disponibilidade = lida.disponibilidade;
 
   const whatsapp = document.getElementById("config-whatsapp").value.trim();
   const digitos = apenasDigitos(whatsapp);
