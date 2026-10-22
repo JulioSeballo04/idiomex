@@ -767,7 +767,138 @@ function escutarAulasDoProfessor(uid) {
     .onSnapshot((snap) => {
       aulasCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       renderizarListaAlunos();
+      renderizarHojeProfessor();
     });
+  // "em 25 min" e as aulas que já passaram mudam com o relógio, mesmo sem dado novo
+  setInterval(renderizarHojeProfessor, 60 * 1000);
+}
+
+// -------------------- AGENDA: HOJE E PRÓXIMAS AULAS --------------------
+// Igual ao painel da barbearia: a próxima aula em destaque, as aulas dos próximos
+// dias agrupadas por dia e, separadas, as que já passaram sem ninguém marcar
+// como concluída (aluno faltou, ou o professor esqueceu de concluir).
+
+const DIAS_PAINEL_HOJE = 7;
+const NOMES_DIAS_CURTOS_PROF = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+function inicioDaAula(a) {
+  return new Date(`${a.data}T${a.horaInicio}:00`);
+}
+
+function fimDaAula(a) {
+  const fim = a.horaFim || somarMinutos(a.horaInicio, (configAgendaAtual && configAgendaAtual.duracaoAulaMinutos) || DURACAO_PADRAO_MINUTOS);
+  return new Date(`${a.data}T${fim}:00`);
+}
+
+function rotuloDiaPainel(dataIso, hojeIso, amanhaIso) {
+  if (dataIso === hojeIso) return "Hoje";
+  if (dataIso === amanhaIso) return "Amanhã";
+  return `${NOMES_DIAS_CURTOS_PROF[new Date(`${dataIso}T12:00:00`).getDay()]}, ${formatarDataBR(dataIso).slice(0, 5)}`;
+}
+
+// "agora" / "em 25 min" / "em 2h 10min" pra hoje; "Amanhã às 09:00" / "Qua, 29/10 às 14:00" depois
+function rotuloQuandoAula(a, agora, hojeIso, amanhaIso) {
+  if (a.data !== hojeIso) return `${rotuloDiaPainel(a.data, hojeIso, amanhaIso)} às ${a.horaInicio}`;
+  const minutos = Math.round((inicioDaAula(a).getTime() - agora.getTime()) / 60000);
+  if (minutos <= 0) return "agora";
+  if (minutos < 60) return `em ${minutos} min`;
+  const h = Math.floor(minutos / 60), m = minutos % 60;
+  return `em ${h}h${m ? ` ${m}min` : ""}`;
+}
+
+function linhaAulaPainel(a, mostrarData) {
+  const concluida = a.status === "concluida";
+  const acoes = concluida
+    ? `<span class="selo-concluida">✓ Concluída</span><button class="btn btn-secundario btn-mini" onclick="desfazerConclusaoAula('${a.id}')">Desfazer</button>`
+    : `<button class="btn btn-secundario btn-mini" onclick="concluirAula('${a.id}')">Concluir</button><button class="excluir" onclick="cancelarAulaComoProfessor('${a.id}')">Cancelar</button>`;
+  return `
+    <div class="cartao-aula${concluida ? " aula-concluida" : ""}">
+      <div class="aula-info">
+        <strong>${escapeHtml(a.alunoNome)}</strong>
+        <span>${mostrarData ? `${formatarDataBR(a.data).slice(0, 5)} · ` : ""}${escapeHtml(a.horaInicio)}</span>
+        <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
+        ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
+        ${badgeIdiomaAula(a)}
+      </div>
+      <div class="aula-acoes">${acoes}</div>
+    </div>`;
+}
+
+function renderizarHojeProfessor() {
+  const container = document.getElementById("painel-hoje-professor");
+  if (!container) return;
+
+  const agora = new Date();
+  const hojeIso = dataDeHojeISO();
+  const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
+  const amanhaIso = chaveDataISO(amanha);
+  const limite = new Date(); limite.setDate(limite.getDate() + DIAS_PAINEL_HOJE);
+  const limiteIso = chaveDataISO(limite);
+  const ordenar = (lista) => lista.sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio));
+
+  // Já passaram e continuam "agendada": ninguém concluiu nem cancelou
+  const atrasadas = ordenar(aulasCache.filter((a) => a.status === "agendada" && fimDaAula(a) <= agora));
+  // Próximos dias: as que ainda vão acontecer, mais as de hoje já concluídas (com "Desfazer")
+  const proximas = ordenar(aulasCache.filter((a) =>
+    a.data >= hojeIso && a.data <= limiteIso &&
+    ((a.status === "agendada" && fimDaAula(a) > agora) || (a.status === "concluida" && a.data === hojeIso))));
+  const proxima = proximas.find((a) => a.status === "agendada");
+
+  const grupos = [];
+  proximas.forEach((a) => {
+    const ultimo = grupos[grupos.length - 1];
+    if (!ultimo || ultimo.data !== a.data) grupos.push({ data: a.data, aulas: [a] });
+    else ultimo.aulas.push(a);
+  });
+
+  const aulasHoje = proximas.filter((a) => a.data === hojeIso && a.status === "agendada").length;
+  const resumo = [`${aulasHoje} ${aulasHoje === 1 ? "aula hoje" : "aulas hoje"}`];
+  if (atrasadas.length) resumo.push(`${atrasadas.length} ${atrasadas.length === 1 ? "pendente" : "pendentes"}`);
+
+  container.innerHTML = `
+    ${proxima ? `
+      <div class="cartao-proxima-aula">
+        <div class="rotulo-proxima-aula">Próxima aula</div>
+        <div class="corpo-proxima-aula">
+          <div><strong>${escapeHtml(proxima.alunoNome)}</strong> · ${legendaModalidade(proxima.modalidade)}${idiomasAtuaisProfessor.length > 1 ? ` · ${IDIOMAS[idiomaValido(proxima.idioma)].nome}` : ""}</div>
+          <div class="quando-proxima-aula">${rotuloQuandoAula(proxima, agora, hojeIso, amanhaIso)}</div>
+        </div>
+      </div>` : ""}
+    <div class="cartao-proximas-aulas">
+      <div class="cabecalho-proximas-aulas">
+        <h3>Aulas dos próximos ${DIAS_PAINEL_HOJE} dias</h3>
+        <span>${resumo.join(" · ")}</span>
+      </div>
+      ${atrasadas.length ? `
+        <div class="grupo-dia-aulas">
+          <div class="titulo-grupo-dia atrasadas">Pendentes — já passaram e não foram concluídas</div>
+          ${atrasadas.map((a) => linhaAulaPainel(a, true)).join("")}
+        </div>` : ""}
+      ${grupos.length ? grupos.map((g) => `
+        <div class="grupo-dia-aulas">
+          <div class="titulo-grupo-dia">${rotuloDiaPainel(g.data, hojeIso, amanhaIso)}</div>
+          ${g.aulas.map((a) => linhaAulaPainel(a, false)).join("")}
+        </div>`).join("") : `<p class="vazio">Nenhuma aula marcada nos próximos ${DIAS_PAINEL_HOJE} dias.</p>`}
+    </div>`;
+}
+
+async function desfazerConclusaoAula(aulaId) {
+  try {
+    await db.collection("aulas").doc(aulaId).update({ status: "agendada" });
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível desfazer agora. Tente novamente em instantes.");
+  }
+}
+
+// Meses que o professor pode liberar no formulário: o atual (sempre liberado) e os 6 seguintes
+function proximosMesesParaLiberar() {
+  const hoje = new Date();
+  return Array.from({ length: 6 }, (_, i) => new Date(hoje.getFullYear(), hoje.getMonth() + 1 + i, 1));
+}
+
+function chaveMesProfessor(data) {
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`;
 }
 
 async function carregarConfigAgenda() {
@@ -796,6 +927,15 @@ function preencherFormularioConfigAgenda() {
   document.getElementById("config-modalidade-online").checked = (configAgendaAtual.modalidades || []).includes("online");
   document.getElementById("config-modalidade-presencial").checked = (configAgendaAtual.modalidades || []).includes("presencial");
   document.getElementById("config-whatsapp").value = configAgendaAtual.whatsapp || "";
+
+  const liberados = configAgendaAtual.mesesLiberados || [];
+  const hoje = new Date();
+  document.getElementById("config-meses-liberados").innerHTML =
+    `<label class="opcao-mes"><input type="checkbox" checked disabled> ${NOMES_MESES[hoje.getMonth()]} (atual)</label>` +
+    proximosMesesParaLiberar().map((d) => {
+      const chave = chaveMesProfessor(d);
+      return `<label class="opcao-mes"><input type="checkbox" class="chk-mes-liberado" value="${chave}" ${liberados.includes(chave) ? "checked" : ""}> ${NOMES_MESES[d.getMonth()]}${d.getFullYear() !== hoje.getFullYear() ? ` de ${d.getFullYear()}` : ""}</label>`;
+    }).join("");
 
   const container = document.getElementById("config-dias-semana");
   container.innerHTML = DIAS_SEMANA.map((dia) => {
@@ -876,7 +1016,8 @@ async function salvarConfigAgenda() {
     alert("WhatsApp inválido — use DDD + número (ex: 11 91234-5678), ou deixe em branco.");
     return;
   }
-  const dados = { duracaoAulaMinutos, modalidades, disponibilidade, whatsapp };
+  const mesesLiberados = Array.from(document.querySelectorAll(".chk-mes-liberado:checked")).map((c) => c.value);
+  const dados = { duracaoAulaMinutos, modalidades, disponibilidade, whatsapp, mesesLiberados };
   try {
     await db.collection("usuarios").doc(professorIdAtual)
       .collection("configuracaoAgenda").doc("dados").set(dados);
