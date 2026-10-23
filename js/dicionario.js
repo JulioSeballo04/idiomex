@@ -53,8 +53,15 @@ function escutarNotificacoes(uid) {
 const ICONES_NOTIFICACAO = { "credito-reposicao": "🎟️", "reposicao-aprovada": "✅", "reposicao-recusada": "❌",
   "aula-nao-realizada": "🎟️", "aula-marcada": "📅" };
 
+// Cada notificação é de um idioma (as antigas, sem o campo, aparecem em todos):
+// o sino mostra só as do idioma que o aluno está estudando agora
+function notificacoesDoIdioma(idioma) {
+  return notificacoesCache.filter((n) => !n.idioma || n.idioma === idioma);
+}
+
 function renderizarNotificacoes() {
-  const naoLidas = notificacoesCache.filter((n) => !n.lida).length;
+  const doIdioma = notificacoesDoIdioma(idiomaDoAluno);
+  const naoLidas = doIdioma.filter((n) => !n.lida).length;
   const contador = document.getElementById("contador-notificacoes");
   if (contador) {
     contador.textContent = naoLidas > 9 ? "9+" : String(naoLidas);
@@ -62,9 +69,12 @@ function renderizarNotificacoes() {
   }
   const botao = document.getElementById("btn-notificacoes");
   if (botao) botao.setAttribute("aria-label", naoLidas ? `Notificações (${naoLidas} não lidas)` : "Notificações");
+  atualizarSeletorIdioma(); // avisos não lidos dos outros idiomas aparecem no seletor
+  const titulo = document.getElementById("titulo-notificacoes");
+  if (titulo) titulo.textContent = idiomasDisponiveis.length > 1 ? `Notificações — ${IDIOMAS[idiomaDoAluno].nome}` : "Notificações";
   const lista = document.getElementById("lista-notificacoes");
   if (!lista) return;
-  lista.innerHTML = notificacoesCache.length ? notificacoesCache.map((n) => `
+  lista.innerHTML = doIdioma.length ? doIdioma.map((n) => `
     <div class="item-notificacao${n.lida ? "" : " nao-lida"}">
       <span class="icone-notificacao">${ICONES_NOTIFICACAO[n.tipo] || "🔔"}</span>
       <div>
@@ -79,7 +89,7 @@ async function abrirNotificacoes() {
   renderizarNotificacoes();
   document.getElementById("modal-notificacoes").classList.remove("modal-oculto");
   const user = auth.currentUser;
-  const naoLidas = notificacoesCache.filter((n) => !n.lida);
+  const naoLidas = notificacoesDoIdioma(idiomaDoAluno).filter((n) => !n.lida);
   if (!user || !naoLidas.length) return;
   const lote = db.batch();
   naoLidas.forEach((n) => lote.update(db.collection("usuarios").doc(user.uid).collection("notificacoes").doc(n.id), { lida: true }));
@@ -136,9 +146,17 @@ function aplicarIdiomaNaTela() {
   // Só refaz quando o idioma muda, pra não fechar o menu de cores no meio de uma escolha.
   if (idiomaDoTema !== idiomaDoAluno) definirIdiomaDoTema(idiomaDoAluno);
 
+  atualizarSeletorIdioma();
+}
+
+// Seletor de idioma; um idioma que não é o atual mostra quantos avisos não lidos tem
+function atualizarSeletorIdioma() {
   const seletor = document.getElementById("seletor-idioma");
-  seletor.innerHTML = idiomasDisponiveis
-    .map((id) => `<option value="${id}" ${id === idiomaDoAluno ? "selected" : ""}>${IDIOMAS[id].nome}</option>`).join("");
+  if (!seletor) return;
+  seletor.innerHTML = idiomasDisponiveis.map((id) => {
+    const avisos = id === idiomaDoAluno ? 0 : notificacoesCache.filter((n) => n.idioma === id && !n.lida).length;
+    return `<option value="${id}" ${id === idiomaDoAluno ? "selected" : ""}>${IDIOMAS[id].nome}${avisos ? ` (${avisos} aviso${avisos > 1 ? "s" : ""})` : ""}</option>`;
+  }).join("");
   seletor.hidden = idiomasDisponiveis.length < 2; // só aparece quando existe mais de um idioma
 }
 
@@ -149,6 +167,8 @@ async function trocarIdiomaAtivo(novo) {
   aplicarIdiomaNaTela();
   montarIndiceLetras();
   renderizarTela();
+  renderizarNotificacoes();
+  renderizarMinhasAulas();
   const user = auth.currentUser;
   if (user) {
     try { await db.collection("usuarios").doc(user.uid).update({ idiomaAtivo: idiomaDoAluno }); }
@@ -977,8 +997,10 @@ function renderizarMinhasAulas() {
   // Aula de hoje que já terminou não é mais "próxima" (e não faz sentido cancelar)
   const aindaVai = (a) => a.data > hojeIso ||
     (a.data === hojeIso && minutosDoHorario(a.horaFim || a.horaInicio) > minutosAgora);
+  // Com mais de um idioma, mostra só as aulas do idioma que o aluno está estudando agora
+  const doIdioma = (a) => idiomasDisponiveis.length < 2 || aulaDoIdioma(a, idiomaDoAluno);
   const futuras = minhasAulasCache
-    .filter((a) => (a.status === "agendada" || a.status === "pendente") && aindaVai(a))
+    .filter((a) => (a.status === "agendada" || a.status === "pendente") && aindaVai(a) && doIdioma(a))
     .sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio));
 
   if (futuras.length === 0) {
@@ -987,6 +1009,8 @@ function renderizarMinhasAulas() {
   }
 
   painel.classList.remove("oculto");
+  document.getElementById("titulo-minhas-aulas").textContent = idiomasDisponiveis.length > 1
+    ? `Minhas próximas aulas de ${IDIOMAS[idiomaDoAluno].nome}` : "Minhas próximas aulas";
   lista.innerHTML = futuras.map((a) => `
     <div class="cartao-aula">
       <div class="aula-info">
@@ -1162,9 +1186,11 @@ function mesLiberado(data) {
   return mes === chaveMes(new Date()) || (configAgendaProfessor.mesesLiberados || []).includes(mes);
 }
 
-function aulasFuturasDoAluno() {
+// Próximas aulas do aluno (num idioma, se informado — o limite de aulas marcadas vale por idioma)
+function aulasFuturasDoAluno(idioma) {
   const hojeIso = dataDeHojeISO();
-  return minhasAulasCache.filter((a) => (a.status === "agendada" || a.status === "pendente") && a.data >= hojeIso);
+  return minhasAulasCache.filter((a) => (a.status === "agendada" || a.status === "pendente") && a.data >= hojeIso &&
+    (!idioma || aulaDoIdioma(a, idioma)));
 }
 
 // Abre o modal de agendamento, carregando a configuração de agenda do professor vinculado
@@ -1249,11 +1275,17 @@ function idiomasParaAula() {
 }
 
 // Plano do aluno com o professor atual e o que ele permite na semana da data escolhida
+// Plano e créditos são por idioma: os do idioma da aula que está sendo marcada
+function idiomaDoAgendamento() {
+  return idiomaValido((agendamento && agendamento.idioma) || idiomasParaAula()[0]);
+}
+
 function situacaoDoPlano(dataIso) {
-  const plano = planoDoAluno(perfilAlunoAtual, professorIdDoAluno);
-  const saldo = saldoReposicoes(plano, minhasAulasCache, professorIdDoAluno);
+  const idioma = idiomaDoAgendamento();
+  const plano = planoDoAluno(perfilAlunoAtual, professorIdDoAluno, idioma, idiomasParaAula()[0]);
+  const saldo = saldoReposicoes(plano, minhasAulasCache, professorIdDoAluno, idioma);
   const limite = plano.aulasPorSemana;
-  const naSemana = dataIso ? aulasNaSemana(minhasAulasCache, professorIdDoAluno, dataIso) : 0;
+  const naSemana = dataIso ? aulasNaSemana(minhasAulasCache, professorIdDoAluno, dataIso, idioma) : 0;
   return { limite, naSemana, semanaCheia: limite > 0 && naSemana >= limite, saldo };
 }
 
@@ -1355,7 +1387,7 @@ function renderizarAgendamento() {
       ? `Semana de ${escapeHtml(formatarDataBR(inicioDaSemanaISO(agendamento.data)).slice(0, 5))}: <strong>${plano.naSemana} de ${plano.limite}</strong> aula${plano.limite > 1 ? "s" : ""} do seu plano`
       : `Seu plano: <strong>${plano.limite}</strong> aula${plano.limite > 1 ? "s" : ""} por semana`);
   }
-  linhasPlano.push(`Reposições disponíveis: <strong>${plano.saldo}</strong>`);
+  linhasPlano.push(`Reposições${escolheIdiomaNoAgendamento() ? ` de ${IDIOMAS[idiomaDoAgendamento()].nome}` : ""} disponíveis: <strong>${plano.saldo}</strong>`);
 
   const cartaoConfirmar = `
     <div class="cartao-passo${dataHoraEscolhidas ? "" : " passo-bloqueado"}">
@@ -1571,8 +1603,8 @@ async function confirmarAgendamento() {
     return;
   }
 
-  if (aulasFuturasDoAluno().length >= MAX_AULAS_FUTURAS_POR_ALUNO) {
-    agendamento.erro = `Você já tem ${MAX_AULAS_FUTURAS_POR_ALUNO} aulas marcadas. Cancele uma para marcar outra.`;
+  if (aulasFuturasDoAluno(idiomaDoAgendamento()).length >= MAX_AULAS_FUTURAS_POR_ALUNO) {
+    agendamento.erro = `Você já tem ${MAX_AULAS_FUTURAS_POR_ALUNO} aulas de ${IDIOMAS[idiomaDoAgendamento()].nome} marcadas. Cancele uma para marcar outra.`;
     renderizarAgendamento();
     return;
   }

@@ -85,7 +85,7 @@
               </div>
               <div class="campo-perfil">
                 <label for="marcar-aluno">Aluno</label>
-                <select id="marcar-aluno" onchange="atualizarReposicaoMarcarAula()"></select>
+                <select id="marcar-aluno" onchange="trocarAlunoMarcarAula()"></select>
               </div>
               <div class="linha-marcar-aula">
                 <div class="campo-perfil">
@@ -104,7 +104,7 @@
                 </div>
                 <div class="campo-perfil" id="marcar-idioma-wrap">
                   <label for="marcar-idioma">Idioma</label>
-                  <select id="marcar-idioma"></select>
+                  <select id="marcar-idioma" onchange="atualizarReposicaoMarcarAula()"></select>
                 </div>
               </div>
               <label class="opcao-reposicao-marcar" id="marcar-reposicao-wrap" hidden>
@@ -129,6 +129,7 @@
         <form class="linha-sala" onsubmit="event.preventDefault(); adicionarAlunoSemApp();">
           <input type="text" id="input-nome-sem-app" placeholder="Nome do aluno" required>
           <input type="text" id="input-telefone-sem-app" inputmode="tel" placeholder="WhatsApp com DDD (opcional)">
+          <select id="input-idioma-sem-app" title="Idioma que o aluno estuda" hidden></select>
           <button type="submit" class="btn btn-primario">Adicionar aluno</button>
         </form>
         <div id="lista-alunos-sem-app"></div>

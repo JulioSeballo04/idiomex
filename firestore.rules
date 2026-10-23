@@ -56,11 +56,35 @@ service cloud.firestore {
     // "Plano" do aluno, definido pelo professor: quantas aulas por semana ele pode
     // marcar (0 = sem limite) e quantas reposições o professor já concedeu. Guarda o
     // professorId junto: se o aluno trocar de professor, o plano antigo não vale mais.
+    //
+    // O plano é por idioma ("porIdioma": {en: {...}, ja: {...}}); os campos de fora
+    // são do plano antigo, de antes de ser por idioma.
+    function numerosDoPlanoValidos(p) {
+      return p.aulasPorSemana is int && p.aulasPorSemana >= 0 && p.aulasPorSemana <= 14 &&
+        p.reposicoesConcedidas is int && p.reposicoesConcedidas >= 0 && p.reposicoesConcedidas <= 1000;
+    }
+
+    function planoDoIdiomaValido(porIdioma, idioma) {
+      return !(idioma in porIdioma) || (
+        porIdioma[idioma] is map &&
+        porIdioma[idioma].keys().hasOnly(["aulasPorSemana", "reposicoesConcedidas"]) &&
+        numerosDoPlanoValidos(porIdioma[idioma]));
+    }
+
+    function porIdiomaValido(porIdioma) {
+      return porIdioma is map &&
+        porIdioma.keys().hasOnly(["en", "es", "it", "fr", "ja", "zh", "de", "ko"]) &&
+        planoDoIdiomaValido(porIdioma, "en") && planoDoIdiomaValido(porIdioma, "es") &&
+        planoDoIdiomaValido(porIdioma, "it") && planoDoIdiomaValido(porIdioma, "fr") &&
+        planoDoIdiomaValido(porIdioma, "ja") && planoDoIdiomaValido(porIdioma, "zh") &&
+        planoDoIdiomaValido(porIdioma, "de") && planoDoIdiomaValido(porIdioma, "ko");
+    }
+
     function planoValido(plano) {
-      return plano.keys().hasOnly(["professorId", "aulasPorSemana", "reposicoesConcedidas"]) &&
+      return plano.keys().hasOnly(["professorId", "aulasPorSemana", "reposicoesConcedidas", "porIdioma"]) &&
         plano.professorId == request.auth.uid &&
-        plano.aulasPorSemana is int && plano.aulasPorSemana >= 0 && plano.aulasPorSemana <= 14 &&
-        plano.reposicoesConcedidas is int && plano.reposicoesConcedidas >= 0 && plano.reposicoesConcedidas <= 1000;
+        numerosDoPlanoValidos(plano) &&
+        (!("porIdioma" in plano) || porIdiomaValido(plano.porIdioma));
     }
 
     // Links da sala de aula (aula online e documentos): só http(s) — impede um
@@ -246,7 +270,7 @@ service cloud.firestore {
         allow update: if request.auth != null && request.auth.uid == userId &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lida"]);
         allow create: if request.auth != null && ehProfessorDoAluno(userId) &&
-          request.resource.data.keys().hasOnly(["tipo", "texto", "criadoEm", "lida", "professorId"]) &&
+          request.resource.data.keys().hasOnly(["tipo", "texto", "criadoEm", "lida", "professorId", "idioma"]) &&
           request.resource.data.tipo in ["credito-reposicao", "reposicao-aprovada", "reposicao-recusada",
             "aula-nao-realizada", "aula-marcada"] &&
           request.resource.data.texto is string && request.resource.data.texto.size() <= 300 &&
@@ -278,13 +302,13 @@ service cloud.firestore {
         allow write: if request.auth != null && request.auth.uid == userId;
       }
 
-      // Alunos sem app: cadastrados pelo próprio professor (nome, telefone e créditos de
-      // reposição), pra ele marcar as aulas de quem não consegue usar o app. Só o
-      // professor lê e escreve.
+      // Alunos sem app: cadastrados pelo próprio professor (nome, telefone, idioma que
+      // estudam e créditos de reposição nesse idioma), pra ele marcar as aulas de quem
+      // não consegue usar o app. Só o professor lê e escreve.
       match /alunosSemApp/{alunoSemAppId} {
         allow read, delete: if request.auth != null && request.auth.uid == userId;
         allow create, update: if request.auth != null && request.auth.uid == userId &&
-          request.resource.data.keys().hasOnly(["nome", "telefone", "reposicoesConcedidas", "criadoEm"]) &&
+          request.resource.data.keys().hasOnly(["nome", "telefone", "idioma", "reposicoesConcedidas", "criadoEm"]) &&
           request.resource.data.nome is string && request.resource.data.nome.size() > 0 &&
           request.resource.data.nome.size() <= 100 &&
           request.resource.data.reposicoesConcedidas is int &&

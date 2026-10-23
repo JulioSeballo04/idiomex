@@ -463,7 +463,7 @@ function dataDaqui(dias) {
   });
 
   await caso('"Não foi realizada" dá 1 reposição ao aluno e avisa no sino', async () => {
-    const saldo = () => prof.evaluate(() => { const a = aulasCache.find((x) => x.horaInicio === '00:00' && x.data === dataDeHojeISO()); return creditosDoAluno(a.alunoId).saldo; });
+    const saldo = () => prof.evaluate(() => { const a = aulasCache.find((x) => x.horaInicio === '00:00' && x.data === dataDeHojeISO()); return creditosDoAluno(a.alunoId, idiomaValido(a.idioma)).saldo; });
     const antes = await saldo();
     prof.ultimoDialogo = null;
     await prof.click(`${pendente} button:has-text("Não foi realizada")`);
@@ -716,8 +716,9 @@ function dataDaqui(dias) {
     await ctx.close();
   });
 
+  const ctxIris = await h.novoContexto(browser); const iris = await h.novaPagina(ctxIris);
   await caso('ao marcar aula, o aluno escolhe primeiro o idioma (com bandeiras)', async () => {
-    const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
+    const p = iris;
     await h.cadastrar(p, { tipo: 'aluno', nome: 'Iris', email: `iris-${id}@t.com`, codigo: codigoDiego });
     await p.waitForURL('**/dicionario.html', { timeout: 10000 }); await p.waitForSelector('#input-palavra-en'); await dormir(1500);
     await p.click('button:has-text("Agendar aula")');
@@ -733,10 +734,37 @@ function dataDaqui(dias) {
     await p.click('.btn-slot-horario >> nth=0');
     await p.click('#btn-confirmar-agendamento');
     await p.waitForSelector('.agendamento-sucesso:has-text("Espanhol")', { timeout: 8000 });
-    const idioma = await p.evaluate(() => aulasFuturasDoAluno()[0] && aulasFuturasDoAluno()[0].idioma);
+    const idioma = await p.evaluate(() => aulasFuturasDoAluno('es')[0] && aulasFuturasDoAluno('es')[0].idioma);
     esperar(idioma === 'es', 'aula gravada com idioma ' + idioma);
-    await ctx.close();
   });
+
+  await caso('plano, reposições e avisos são separados por idioma', async () => {
+    const blocoIris = '.aluno-bloco:has(.item-aluno:has-text("Iris"))';
+    await diego.reload(); // os idiomas do professor foram trocados direto no banco, no começo
+    await diego.waitForFunction(() => idiomasAtuaisProfessor.length === 2, null, { timeout: 10000 });
+    await diego.click('#btn-aba-alunos');
+    await diego.click(`${blocoIris} .item-aluno`);
+    await diego.waitForSelector(`${blocoIris} .plano-idioma[data-idioma="es"]`, { timeout: 5000 });
+    esperar((await diego.$$(`${blocoIris} .plano-idioma`)).length === 2, 'não mostrou um plano por idioma');
+    await diego.click(`${blocoIris} .plano-idioma[data-idioma="es"] button[aria-label="Dar 1 reposição"]`);
+    await diego.waitForSelector(`${blocoIris} .plano-idioma[data-idioma="es"] .saldo-reposicoes:text-is("1")`, { timeout: 5000 });
+    esperar((await diego.textContent(`${blocoIris} .plano-idioma[data-idioma="en"] .saldo-reposicoes`)) === '0', 'o crédito de espanhol apareceu em inglês');
+
+    // No aluno: o aviso do crédito de espanhol não aparece no sino do inglês
+    await iris.waitForFunction(() => notificacoesCache.some((n) => n.idioma === 'es'), null, { timeout: 5000 });
+    await iris.evaluate(() => trocarIdiomaAtivo('en'));
+    esperar(await iris.isHidden('#contador-notificacoes'), 'aviso de espanhol contou no sino do inglês');
+    esperar(/Espanhol \(1 aviso\)/.test(await iris.textContent('#seletor-idioma')), 'seletor não mostra o aviso do outro idioma');
+    await iris.evaluate(() => trocarIdiomaAtivo('es'));
+    esperar((await iris.textContent('#contador-notificacoes')) === '1', 'aviso não aparece no espanhol');
+    const saldos = await iris.evaluate(async () => {
+      perfilAlunoAtual = (await db.collection('usuarios').doc(auth.currentUser.uid).get()).data(); // como "Agendar aula" faz
+      return ['en', 'es'].map((id) => { agendamento = { idioma: id }; return situacaoDoPlano(null).saldo; });
+    });
+    esperar(saldos[0] === 0 && saldos[1] === 1, 'saldos por idioma: ' + saldos);
+    await iris.evaluate(() => { agendamento = null; });
+  });
+  await ctxIris.close();
   await ctxDiego.close();
 
   console.log('\nCelular (375 px)');
