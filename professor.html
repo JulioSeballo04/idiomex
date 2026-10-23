@@ -57,6 +57,8 @@
       </div>
     </div>
 
+    <div id="seletor-idioma-professor" class="filtro-idioma-agenda" role="tablist" aria-label="Idioma do painel" hidden></div>
+
     <h2 style="font-size:1.1rem;">Visão geral da turma</h2>
     <div id="visao-geral-turma"></div>
 
@@ -106,7 +108,7 @@
                 </div>
                 <div class="campo-perfil" id="marcar-idioma-wrap">
                   <label for="marcar-idioma">Idioma</label>
-                  <select id="marcar-idioma" onchange="atualizarReposicaoMarcarAula()"></select>
+                  <select id="marcar-idioma" onchange="atualizarReposicaoMarcarAula(); selecionarDiaMarcarAula()"></select>
                 </div>
               </div>
               <label class="opcao-reposicao-marcar" id="marcar-reposicao-wrap" hidden>
@@ -170,56 +172,70 @@
           <h3>Configurar disponibilidade</h3>
           <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharConfigAgenda()">✕</button>
         </div>
-        <div class="config-agenda-geral">
-          <label>Duração de cada aula
-            <select id="config-duracao-aula">
-              <option value="30">30 min</option>
-              <option value="45">45 min</option>
-              <option value="50">50 min</option>
-              <option value="60">1 hora</option>
-              <option value="90">1h30</option>
-              <option value="120">2 horas</option>
-            </select>
+        <div class="config-alvo-idioma" id="config-alvo-idioma" hidden>
+          <label>Configurações de
+            <select id="config-idioma-alvo" onchange="trocarIdiomaDaConfig(this.value)"></select>
           </label>
-          <label>Intervalo entre aulas
-            <select id="config-intervalo-aula">
-              <option value="0">Sem intervalo</option>
-              <option value="5">5 min</option>
-              <option value="10">10 min</option>
-              <option value="15">15 min</option>
-              <option value="30">30 min</option>
-            </select>
+          <label class="config-idioma-proprio" id="config-idioma-proprio-wrap" hidden>
+            <input type="checkbox" id="config-idioma-proprio" onchange="alternarConfigPropriaDoIdioma(this.checked)">
+            <span id="config-idioma-proprio-texto">Este idioma tem horários próprios</span>
           </label>
-          <div class="config-modalidades" id="config-modalidades-gerais">
-            <label><input type="checkbox" id="config-modalidade-online"> Atendo online</label>
-            <label><input type="checkbox" id="config-modalidade-presencial"> Atendo presencial</label>
-          </div>
-          <p class="dica-whatsapp-professor" id="dica-modalidades-por-dia" hidden>Online/presencial: escolha em cada dia, logo abaixo.</p>
+          <p class="dica-whatsapp-professor" id="config-usa-padrao" hidden></p>
         </div>
-        <label class="campo-whatsapp-professor">
-          WhatsApp para contato (com DDD)
-          <input type="tel" id="config-whatsapp" placeholder="Ex: 11 91234-5678">
-        </label>
-        <p class="dica-whatsapp-professor">O aluno vai poder enviar uma mensagem de confirmação pra esse número assim que marcar uma aula.</p>
-        <div class="config-meses-liberados">
-          <span class="rotulo-meses-liberados">Meses liberados para agendamento</span>
-          <p class="dica-whatsapp-professor">O mês atual está sempre liberado. Marque os próximos meses em que os alunos já podem marcar aula.</p>
-          <div id="config-meses-liberados" class="grupo-meses"></div>
+        <div id="config-campos-aula">
+          <div class="config-agenda-geral">
+            <label>Duração de cada aula
+              <select id="config-duracao-aula">
+                <option value="30">30 min</option>
+                <option value="45">45 min</option>
+                <option value="50">50 min</option>
+                <option value="60">1 hora</option>
+                <option value="90">1h30</option>
+                <option value="120">2 horas</option>
+              </select>
+            </label>
+            <label>Intervalo entre aulas
+              <select id="config-intervalo-aula">
+                <option value="0">Sem intervalo</option>
+                <option value="5">5 min</option>
+                <option value="10">10 min</option>
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+              </select>
+            </label>
+            <div class="config-modalidades" id="config-modalidades-gerais">
+              <label><input type="checkbox" id="config-modalidade-online"> Atendo online</label>
+              <label><input type="checkbox" id="config-modalidade-presencial"> Atendo presencial</label>
+            </div>
+            <p class="dica-whatsapp-professor" id="dica-modalidades-por-dia" hidden>Online/presencial: escolha em cada dia, logo abaixo.</p>
+          </div>
+          <div class="config-semana">
+            <span class="rotulo-meses-liberados">Dias e horários de trabalho</span>
+            <div class="modo-semana" role="tablist">
+              <button type="button" id="btn-modo-igual" class="ativa" onclick="mudarModoSemana('igual')">Mesmo horário em todos os dias</button>
+              <button type="button" id="btn-modo-dia" onclick="mudarModoSemana('dia')">Ajustar dia por dia</button>
+            </div>
+            <div id="config-semana-igual">
+              <label class="rotulo-config">Dias em que você trabalha</label>
+              <div id="config-dias-trabalho" class="dias-trabalho"></div>
+              <label class="rotulo-config">Períodos de trabalho (valem para todos os dias marcados)</label>
+              <div class="lista-periodos" data-grupo="geral"></div>
+              <button type="button" class="link-trocar" onclick="adicionarPeriodo('geral')">+ Adicionar período</button>
+            </div>
+            <div id="config-dias-semana" hidden></div>
+          </div>
         </div>
-        <div class="config-semana">
-          <span class="rotulo-meses-liberados">Dias e horários de trabalho</span>
-          <div class="modo-semana" role="tablist">
-            <button type="button" id="btn-modo-igual" class="ativa" onclick="mudarModoSemana('igual')">Mesmo horário em todos os dias</button>
-            <button type="button" id="btn-modo-dia" onclick="mudarModoSemana('dia')">Ajustar dia por dia</button>
+        <div id="config-compartilhado">
+          <label class="campo-whatsapp-professor">
+            WhatsApp para contato (com DDD)
+            <input type="tel" id="config-whatsapp" placeholder="Ex: 11 91234-5678">
+          </label>
+          <p class="dica-whatsapp-professor">O aluno vai poder enviar uma mensagem de confirmação pra esse número assim que marcar uma aula.</p>
+          <div class="config-meses-liberados">
+            <span class="rotulo-meses-liberados">Meses liberados para agendamento</span>
+            <p class="dica-whatsapp-professor">O mês atual está sempre liberado. Marque os próximos meses em que os alunos já podem marcar aula.</p>
+            <div id="config-meses-liberados" class="grupo-meses"></div>
           </div>
-          <div id="config-semana-igual">
-            <label class="rotulo-config">Dias em que você trabalha</label>
-            <div id="config-dias-trabalho" class="dias-trabalho"></div>
-            <label class="rotulo-config">Períodos de trabalho (valem para todos os dias marcados)</label>
-            <div class="lista-periodos" data-grupo="geral"></div>
-            <button type="button" class="link-trocar" onclick="adicionarPeriodo('geral')">+ Adicionar período</button>
-          </div>
-          <div id="config-dias-semana" hidden></div>
         </div>
         <button class="btn btn-primario" style="margin-top:1rem;" onclick="salvarConfigAgenda()">Salvar disponibilidade</button>
       </div>

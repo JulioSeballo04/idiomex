@@ -817,6 +817,44 @@ function dataDaqui(dias) {
     await diego.waitForFunction((n) => creditosDoAluno(alunosCache.find((a) => a.nome === 'Iris').id, 'en').saldo === n, antes + 1, { timeout: 5000 });
     await iris.waitForFunction(() => notificacoesCache.some((n) => n.tipo === 'aula-nao-realizada' && n.idioma === 'en'), null, { timeout: 5000 });
   });
+
+  await caso('seletor de idioma no topo vale para o painel; cada idioma pode ter a própria configuração de aulas', async () => {
+    await diego.click('#seletor-idioma-professor .chip-idioma[data-idioma="es"]');
+    await diego.waitForSelector('#visao-geral-turma .metrica-label:has-text("de Espanhol")', { timeout: 3000 });
+
+    // Configurar disponibilidade abre no idioma do topo; Espanhol ganha aulas de 1h30
+    await diego.click('#btn-aba-agenda');
+    await diego.click('button:has-text("Configurar disponibilidade")');
+    await diego.waitForSelector('#modal-config-agenda:not(.modal-oculto)', { timeout: 5000 });
+    esperar((await diego.inputValue('#config-idioma-alvo')) === 'es', 'não abriu no idioma escolhido no topo');
+    esperar(await diego.isHidden('#config-campos-aula'), 'idioma sem configuração própria mostrou os campos');
+    await diego.check('#config-idioma-proprio');
+    await diego.selectOption('#config-duracao-aula', '90');
+    await diego.click('#modal-config-agenda button:has-text("Salvar disponibilidade")');
+    await diego.waitForSelector('#modal-config-agenda.modal-oculto', { state: 'attached', timeout: 5000 });
+    const cfg = await diego.evaluate(() => configAgendaAtual);
+    esperar(cfg.porIdioma && cfg.porIdioma.es && cfg.porIdioma.es.duracaoAulaMinutos === 90, 'não gravou a configuração do espanhol');
+    esperar(cfg.duracaoAulaMinutos !== 90, 'mudou a configuração padrão junto');
+
+    // O aluno, ao escolher Espanhol, vê horários de 1h30; em Inglês, a duração padrão
+    const duracaoDoPrimeiroHorario = async (nomeIdioma) => {
+      await iris.evaluate(() => fecharAgendamento()); // a janela de um agendamento anterior pode ter ficado aberta
+      await iris.click('button:has-text("Agendar aula")');
+      await iris.waitForSelector('.opcao-idioma-aula', { timeout: 8000 });
+      await iris.click(`.opcao-idioma-aula:has-text("${nomeIdioma}")`);
+      for (let i = 0; i < 3 && !(await iris.$('[data-calday]')); i++) await iris.click('#btn-cal-mes-proximo');
+      await iris.click('[data-calday] >> nth=0');
+      await iris.waitForSelector('.btn-slot-horario', { timeout: 8000 });
+      const texto = await iris.textContent('.btn-slot-horario >> nth=0');
+      await iris.evaluate(() => fecharAgendamento());
+      const [ini, fim] = texto.split(' – ').map((h) => minutosDoHorarioTeste(h));
+      return fim - ini;
+    };
+    const minutosDoHorarioTeste = (h) => { const [a, b] = h.trim().split(':').map(Number); return a * 60 + b; };
+    esperar((await duracaoDoPrimeiroHorario('Espanhol')) === 90, 'espanhol não usou 1h30');
+    esperar((await duracaoDoPrimeiroHorario('Inglês')) === cfg.duracaoAulaMinutos, 'inglês não usou a duração padrão');
+    await diego.click('#seletor-idioma-professor .chip-idioma >> nth=0'); // volta para "Todos"
+  });
   await ctxIris.close();
   await ctxDiego.close();
 

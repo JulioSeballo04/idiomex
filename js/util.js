@@ -228,6 +228,17 @@ function minutosDoHorario(horaStr) {
   return h * 60 + m;
 }
 
+// Configuração das aulas de um idioma. O professor pode ter, por idioma, a própria
+// duração, intervalo, modalidades e dias/horários de trabalho
+// (configuracaoAgenda.porIdioma[idioma]); sem isso, o idioma usa a configuração
+// padrão. WhatsApp, meses liberados e os ajustes de um dia valem para todos.
+const CAMPOS_CONFIG_POR_IDIOMA = ["duracaoAulaMinutos", "intervaloMinutos", "modalidades", "modalidadesPorDia", "disponibilidade"];
+
+function configDoIdioma(config, idioma) {
+  const propria = config && config.porIdioma && idioma ? config.porIdioma[idioma] : null;
+  return propria ? { ...config, ...propria } : config;
+}
+
 // Faixa de horário de uma aula, ex: "14:00 – 15:00"
 function faixaHorario(horaInicio, horaFim) {
   return horaFim ? `${horaInicio} – ${horaFim}` : horaInicio;
