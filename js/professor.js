@@ -514,15 +514,17 @@ function montarPlanoAluno(alunoId) {
 
 async function salvarPlanoAluno(alunoId, mudancas) {
   const aluno = alunosCache.find((a) => a.id === alunoId);
-  if (!aluno) return;
+  if (!aluno) return false;
   const atual = planoDoAluno(aluno, professorIdAtual);
   const plano = { professorId: professorIdAtual, ...atual, ...mudancas };
   try {
     await db.collection("usuarios").doc(alunoId).update({ plano });
+    return true;
   } catch (e) {
     console.error(e);
     alert("Não foi possível salvar o plano do aluno. Tente novamente.");
     renderizarListaAlunos();
+    return false;
   }
 }
 
@@ -540,7 +542,13 @@ function ajustarReposicoes(alunoId, delta) {
   const saldo = Math.max(0, plano.reposicoesConcedidas - usadas);
   const novoSaldo = Math.max(0, saldo + delta);
   if (novoSaldo === saldo) return;
-  salvarPlanoAluno(alunoId, { reposicoesConcedidas: usadas + novoSaldo });
+  salvarPlanoAluno(alunoId, { reposicoesConcedidas: usadas + novoSaldo }).then((ok) => {
+    if (ok && delta > 0) {
+      db.collection("usuarios").doc(alunoId).collection("notificacoes")
+        .add(notificacaoParaAluno("credito-reposicao", `Você recebeu 1 crédito de reposição. Agora tem ${novoSaldo} para usar ao marcar aulas.`))
+        .catch((e) => console.warn("Não foi possível avisar o aluno do crédito:", e));
+    }
+  });
 }
 
 // Linha de contato do aluno (telefone/e-mail que ele preencheu no perfil)
@@ -911,11 +919,30 @@ function renderizarHojeProfessor() {
     else ultimo.aulas.push(a);
   });
 
+  const pedidos = ordenar(aulasCache.filter((a) => a.status === "pendente"));
+  atualizarContadorPedidos(pedidos.length);
+
   const aulasHoje = proximas.filter((a) => a.data === hojeIso && a.status === "agendada").length;
   const resumo = [`${aulasHoje} ${aulasHoje === 1 ? "aula hoje" : "aulas hoje"}`];
   if (atrasadas.length) resumo.push(`${atrasadas.length} ${atrasadas.length === 1 ? "pendente" : "pendentes"}`);
 
   container.innerHTML = `
+    ${pedidos.length ? `
+      <div class="cartao-pedidos-reposicao" id="pedidos-reposicao">
+        <h3>🔔 ${pedidos.length === 1 ? "1 pedido de reposição" : `${pedidos.length} pedidos de reposição`} para aprovar</h3>
+        <p>O aluno marcou uma reposição sem ter crédito. O horário fica reservado até você decidir. Aprovar já conta como 1 crédito usado.</p>
+        ${pedidos.map((a) => `
+          <div class="cartao-aula">
+            <div class="aula-info">
+              <strong>${escapeHtml(a.alunoNome)}</strong>
+              <span>${escapeHtml(rotuloDiaPainel(a.data, hojeIso, amanhaIso))} · ${escapeHtml(a.horaInicio)}</span>
+              <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
+              ${badgeIdiomaAula(a)}
+              ${inicioDaAula(a) < agora ? '<span class="badge-status badge-status-recusada">Horário já passou</span>' : ""}
+            </div>
+            ${acoesAulaHtml(a)}
+          </div>`).join("")}
+      </div>` : ""}
     ${proxima ? `
       <div class="cartao-proxima-aula">
         <div class="rotulo-proxima-aula">Próxima aula</div>
@@ -940,6 +967,68 @@ function renderizarHojeProfessor() {
           ${g.aulas.map((a) => linhaAulaPainel(a, false)).join("")}
         </div>`).join("") : `<p class="vazio">Nenhuma aula marcada nos próximos ${DIAS_PAINEL_HOJE} dias.</p>`}
     </div>`;
+}
+
+// Contador de pedidos pendentes na aba "Agenda" e no ícone da barra lateral
+function atualizarContadorPedidos(qtd) {
+  const aba = document.getElementById("btn-aba-agenda");
+  if (aba) aba.innerHTML = `Agenda${qtd ? ` <span class="contador-pedidos" title="Pedidos de reposição">${qtd}</span>` : ""}`;
+  const lateral = document.getElementById("navlat-agenda");
+  if (lateral) {
+    lateral.innerHTML = `📅${qtd ? `<span class="contador-pedidos contador-lateral">${qtd}</span>` : ""}`;
+    lateral.title = qtd ? `Agenda — ${qtd} pedido(s) de reposição` : "Agenda";
+  }
+}
+
+// Cria uma notificação para o aluno (sino na tela dele)
+function notificacaoParaAluno(tipo, texto) {
+  return { tipo, texto, lida: false, professorId: professorIdAtual, criadoEm: firebase.firestore.FieldValue.serverTimestamp() };
+}
+
+function descricaoAula(a) {
+  return `${formatarDataBR(a.data)} às ${a.horaInicio}`;
+}
+
+// Aprovar: a aula vira "agendada" e o professor concede o crédito que ela usa
+// (+1 em reposicoesConcedidas), então o saldo do aluno não muda
+async function aprovarPedidoReposicao(aulaId) {
+  const aula = aulasCache.find((a) => a.id === aulaId);
+  if (!aula) return;
+  const aluno = alunosCache.find((a) => a.id === aula.alunoId);
+  const lote = db.batch();
+  lote.update(db.collection("aulas").doc(aulaId), { status: "agendada" });
+  if (aluno) {
+    const plano = planoDoAluno(aluno, professorIdAtual);
+    lote.update(db.collection("usuarios").doc(aluno.id), {
+      plano: { professorId: professorIdAtual, ...plano, reposicoesConcedidas: plano.reposicoesConcedidas + 1 }
+    });
+    lote.set(db.collection("usuarios").doc(aluno.id).collection("notificacoes").doc(),
+      notificacaoParaAluno("reposicao-aprovada", `Seu pedido de reposição de ${descricaoAula(aula)} foi aprovado. A aula está confirmada.`));
+  }
+  try {
+    await lote.commit();
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível aprovar o pedido agora. Tente novamente.");
+  }
+}
+
+async function recusarPedidoReposicao(aulaId) {
+  const aula = aulasCache.find((a) => a.id === aulaId);
+  if (!aula) return;
+  if (!confirm(`Recusar o pedido de reposição de ${aula.alunoNome} (${descricaoAula(aula)})? O horário volta a ficar livre.`)) return;
+  const lote = db.batch();
+  lote.update(db.collection("aulas").doc(aulaId), { status: "recusada" });
+  if (alunosCache.some((a) => a.id === aula.alunoId)) {
+    lote.set(db.collection("usuarios").doc(aula.alunoId).collection("notificacoes").doc(),
+      notificacaoParaAluno("reposicao-recusada", `Seu pedido de reposição de ${descricaoAula(aula)} foi recusado pelo professor. O horário foi liberado.`));
+  }
+  try {
+    await lote.commit();
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível recusar o pedido agora. Tente novamente.");
+  }
 }
 
 async function desfazerConclusaoAula(aulaId) {
@@ -1261,7 +1350,24 @@ function legendaModalidade(modalidade) {
 function legendaStatusAula(status) {
   if (status === "concluida") return "Concluída";
   if (status === "cancelada") return "Cancelada";
+  if (status === "pendente") return "Aguardando aprovação";
+  if (status === "recusada") return "Reposição recusada";
   return "Agendada";
+}
+
+// Botões de uma aula nas listas: concluir/cancelar, ou aprovar/recusar um pedido
+function acoesAulaHtml(a) {
+  if (a.status === "agendada") return `
+        <div class="aula-acoes">
+          <button class="btn btn-secundario" style="padding:0.35em 0.8em; font-size:0.8rem;" onclick="concluirAula('${a.id}')">Concluir</button>
+          <button class="excluir" onclick="cancelarAulaComoProfessor('${a.id}')">Cancelar</button>
+        </div>`;
+  if (a.status === "pendente") return `
+        <div class="aula-acoes">
+          <button class="btn btn-primario btn-mini" onclick="aprovarPedidoReposicao('${a.id}')">Aprovar</button>
+          <button class="excluir" onclick="recusarPedidoReposicao('${a.id}')">Recusar</button>
+        </div>`;
+  return "";
 }
 
 // Desenha o calendário de mês da agenda do professor: cada dia mostra se é
@@ -1283,7 +1389,7 @@ function montarCalendarioProfessor() {
   const contagemPorDia = {};
   const idiomasPorDia = {}; // {data: [códigos de idioma das aulas agendadas nesse dia]}
   aulasCache.forEach((a) => {
-    if (a.status === "agendada" && a.data.startsWith(prefixoMes)) {
+    if ((a.status === "agendada" || a.status === "pendente") && a.data.startsWith(prefixoMes)) {
       contagemPorDia[a.data] = (contagemPorDia[a.data] || 0) + 1;
       (idiomasPorDia[a.data] = idiomasPorDia[a.data] || new Set()).add(idiomaValido(a.idioma));
     }
@@ -1454,7 +1560,7 @@ function badgeIdiomaAula(aula) {
 
 function aulasAtivasDoDia(dataIso) {
   return aulasCache
-    .filter((a) => a.data === dataIso && a.status !== "cancelada")
+    .filter((a) => a.data === dataIso && a.status !== "cancelada" && a.status !== "recusada")
     .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
 }
 
@@ -1539,7 +1645,7 @@ async function salvarAnotacoesDia() {
 
 function montarListaAulasDia(dataIso) {
   const aulasDoDia = aulasCache
-    .filter((a) => a.data === dataIso && a.status !== "cancelada")
+    .filter((a) => a.data === dataIso && a.status !== "cancelada" && a.status !== "recusada")
     .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
 
   if (aulasDoDia.length === 0) return `<p class="vazio">Nenhuma aula marcada nesse dia.</p>`;
@@ -1554,12 +1660,7 @@ function montarListaAulasDia(dataIso) {
         ${badgeIdiomaAula(a)}
         <span class="badge-status badge-status-${a.status}">${legendaStatusAula(a.status)}</span>
       </div>
-      ${a.status === "agendada" ? `
-        <div class="aula-acoes">
-          <button class="btn btn-secundario" style="padding:0.35em 0.8em; font-size:0.8rem;" onclick="concluirAula('${a.id}')">Concluir</button>
-          <button class="excluir" onclick="cancelarAulaComoProfessor('${a.id}')">Cancelar</button>
-        </div>
-      ` : ""}
+      ${acoesAulaHtml(a)}
     </div>
   `).join("");
 }
@@ -1728,12 +1829,7 @@ function montarAbaAulas(alunoId) {
         ${badgeIdiomaAula(a)}
         <span class="badge-status badge-status-${a.status}">${legendaStatusAula(a.status)}</span>
       </div>
-      ${a.status === "agendada" ? `
-        <div class="aula-acoes">
-          <button class="btn btn-secundario" style="padding:0.35em 0.8em; font-size:0.8rem;" onclick="concluirAula('${a.id}')">Concluir</button>
-          <button class="excluir" onclick="cancelarAulaComoProfessor('${a.id}')">Cancelar</button>
-        </div>
-      ` : ""}
+      ${acoesAulaHtml(a)}
     </div>
   `).join("");
 }
