@@ -70,6 +70,11 @@ await t("unlinked professor cannot set plan", assertFails(updateDoc(doc(db("P0")
 await t("professor cannot set plan for another professor id", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), plano("P0", 2, 1))));
 await t("professor cannot change other student fields with the plan", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), { ...plano("P1", 2, 1), nome: "Hacker" })));
 await t("invalid plan values rejected", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), plano("P1", -1, 1))));
+const planoIdiomas = (porIdioma) => ({ plano: { professorId: "P1", aulasPorSemana: 2, reposicoesConcedidas: 1, porIdioma } });
+await t("professor sets a plan per language", updateDoc(doc(db("P1"), "usuarios/S1"), planoIdiomas({ en: { aulasPorSemana: 2, reposicoesConcedidas: 1 }, ja: { aulasPorSemana: 1, reposicoesConcedidas: 0 } })));
+await t("unknown language in the plan rejected", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), planoIdiomas({ xx: { aulasPorSemana: 1, reposicoesConcedidas: 0 } }))));
+await t("invalid per-language values rejected", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), planoIdiomas({ ja: { aulasPorSemana: 99, reposicoesConcedidas: 0 } }))));
+await t("extra fields in a language plan rejected", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), planoIdiomas({ ja: { aulasPorSemana: 1, reposicoesConcedidas: 0, x: 1 } }))));
 await t("student cannot change own plan", assertFails(updateDoc(doc(db("S1"), "usuarios/S1"), plano("P1", 7, 99))));
 await t("student still edits own contact with a plan set", updateDoc(doc(db("S1"), "usuarios/S1"), { telefone: "11977776666" }));
 await t("student cannot create profile with a plan", assertFails(setDoc(doc(db("S7"), "usuarios/S7"), { tipo: "aluno", nome: "s7", email: "s7@x", professorId: "P1", codigoVinculo: "PROF-BBBB", ...plano("P1", 7, 99) })));
@@ -142,6 +147,8 @@ await t("professor updates credits of a student without the app", updateDoc(doc(
 await t("negative credits rejected", assertFails(updateDoc(doc(db("P1"), "usuarios/P1/alunosSemApp/z1"), { reposicoesConcedidas: -1 })));
 await updateDoc(doc(db("P1"), "aulas/P1_2030-02-01_1100"), { status: "cancelada" });
 await t("professor reuses a cancelled slot for another student", setDoc(doc(db("P1"), "aulas/P1_2030-02-01_1100"), aula({ alunoId: "z1", alunoNome: "Zé", data: "2030-02-01", horaInicio: "11:00" })));
+await t("notification with a language allowed", setDoc(doc(db("P1"), "usuarios/S1/notificacoes/n6"), notif({ idioma: "ja" })));
+await t("student without the app with a language", setDoc(doc(db("P1"), "usuarios/P1/alunosSemApp/z2"), { nome: "Ana", telefone: "", idioma: "ja", reposicoesConcedidas: 0, criadoEm: new Date() }));
 await t("lesson-booked notification allowed", setDoc(doc(db("P1"), "usuarios/S1/notificacoes/n5"), notif({ tipo: "aula-marcada" })));
 // Messages deletion by student
 await setDoc(doc(db("P1"), "usuarios/S1/mensagens/m1"), { texto: "oi" });

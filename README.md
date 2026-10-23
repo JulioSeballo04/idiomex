@@ -109,9 +109,12 @@ usuarios/{uid}
   codigoProfessor        -> só em professores
   professorId            -> só em alunos, aponta para o uid do professor
   codigoVinculo          -> só em alunos, código usado para o vínculo
-  plano                  -> só em alunos, definido pelo professor:
-                            {professorId, aulasPorSemana (0 = sem limite),
-                             reposicoesConcedidas}
+  plano                  -> só em alunos, definido pelo professor, POR IDIOMA:
+                            {professorId, porIdioma: {en: {aulasPorSemana
+                             (0 = sem limite), reposicoesConcedidas}, ...}}
+                            (aulasPorSemana/reposicoesConcedidas fora de
+                             "porIdioma" = plano antigo, vale para o primeiro
+                             idioma do professor)
 
 codigosProfessor/{codigo}
   professorId            -> uid do professor dono do código
@@ -123,7 +126,9 @@ usuarios/{uid}/mensagens/{id}
   texto, criadoEm         -> escrito pelo professor, lido pelo aluno
 
 usuarios/{uid}/notificacoes/{id}
-  tipo, texto, lida, criadoEm, professorId
+  tipo, texto, idioma, lida, criadoEm, professorId
+                          -> o sino do aluno mostra só as do idioma que
+                             ele está estudando
                           -> criadas pelo professor (crédito de reposição,
                              pedido aprovado/recusado), lidas pelo aluno
 
@@ -132,8 +137,11 @@ usuarios/{uid}/salaDeAula/link
                           -> link da aula online, deixado pelo professor
 
 usuarios/{uid}/documentosAula/{id}
-  titulo, url, professorId, criadoEm
-                          -> documentos usados em aula (link), do professor
+  titulo, professorId, criadoEm
+  url                     -> documento por link, ou
+  nomeArquivo, tipoArquivo, tamanho, partes
+                          -> arquivo enviado (até 10 MB), guardado em
+                             documentosAula/{id}/partes/{n} {dados, indice}
   anotacao, anotacaoEm    -> bloco de anotações do aluno sobre o documento
                              (o aluno escreve, o professor lê)
 
@@ -148,7 +156,7 @@ aulas/{professorId_data_hora}
                              alunoId pode ser um aluno sem app (abaixo)
 
 usuarios/{professorId}/alunosSemApp/{id}
-  nome, telefone, reposicoesConcedidas, criadoEm
+  nome, telefone, idioma, reposicoesConcedidas (nesse idioma), criadoEm
                           -> alunos que não usam o app: o professor marca as
                              aulas por eles e recebe um lembrete na agenda
                              enquanto não houver aula marcada

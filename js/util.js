@@ -267,23 +267,55 @@ function slotsSemConflito(slots, duracaoMinutos, aulasMarcadas) {
 // ============================================================
 // PLANO DO ALUNO — aulas por semana e créditos de reposição
 // ============================================================
-// O professor define, por aluno, quantas aulas ele pode marcar por semana
-// (0 = sem limite) e dá créditos de reposição. O saldo de reposições é calculado
-// a partir das próprias aulas: créditos concedidos menos as aulas de reposição
-// marcadas ou feitas. Uma reposição cancelada devolve o crédito sozinha.
+// O professor define, por aluno E POR IDIOMA, quantas aulas ele pode marcar por
+// semana (0 = sem limite) e dá créditos de reposição. O saldo de reposições é
+// calculado a partir das próprias aulas daquele idioma: créditos concedidos menos
+// as aulas de reposição marcadas ou feitas. Uma reposição cancelada devolve o
+// crédito sozinha.
+//
+// No perfil: plano = {professorId, aulasPorSemana, reposicoesConcedidas,
+// porIdioma: {en: {aulasPorSemana, reposicoesConcedidas}, ...}}. Os campos de fora
+// de "porIdioma" são do plano antigo (antes de ser por idioma) e valem para o
+// idioma principal do professor até ele ajustar o plano de novo.
 
 const SEM_PLANO = { aulasPorSemana: 0, reposicoesConcedidas: 0 };
 
-// Plano do aluno com ESTE professor (um plano de professor anterior não vale)
-function planoDoAluno(perfilAluno, professorId) {
+// Plano do aluno com ESTE professor, num idioma (um plano de professor anterior não vale)
+function planoDoAluno(perfilAluno, professorId, idioma, idiomaPrincipal) {
   const p = perfilAluno && perfilAluno.plano;
-  return p && p.professorId === professorId
-    ? { aulasPorSemana: p.aulasPorSemana || 0, reposicoesConcedidas: p.reposicoesConcedidas || 0 }
-    : SEM_PLANO;
+  if (!p || p.professorId !== professorId) return SEM_PLANO;
+  const doIdioma = p.porIdioma && p.porIdioma[idioma];
+  if (doIdioma) return { aulasPorSemana: doIdioma.aulasPorSemana || 0, reposicoesConcedidas: doIdioma.reposicoesConcedidas || 0 };
+  if (!p.porIdioma && idioma === idiomaPrincipal) {
+    return { aulasPorSemana: p.aulasPorSemana || 0, reposicoesConcedidas: p.reposicoesConcedidas || 0 };
+  }
+  return SEM_PLANO;
+}
+
+// Monta o plano inteiro (todos os idiomas) com uma mudança num idioma — já
+// convertendo o plano antigo para "porIdioma"
+function planoComMudanca(perfilAluno, professorId, idiomas, idioma, mudancas) {
+  const p = (perfilAluno && perfilAluno.plano && perfilAluno.plano.professorId === professorId) ? perfilAluno.plano : {};
+  const porIdioma = {};
+  idiomas.forEach((id) => {
+    const atual = planoDoAluno(perfilAluno, professorId, id, idiomas[0]);
+    if (atual !== SEM_PLANO) porIdioma[id] = { ...atual };
+  });
+  porIdioma[idioma] = { ...planoDoAluno(perfilAluno, professorId, idioma, idiomas[0]), ...mudancas };
+  return {
+    professorId,
+    aulasPorSemana: p.aulasPorSemana || 0,
+    reposicoesConcedidas: p.reposicoesConcedidas || 0,
+    porIdioma
+  };
 }
 
 function aulaContaNoPlano(a) {
   return a.status === "agendada" || a.status === "concluida";
+}
+
+function aulaDoIdioma(a, idioma) {
+  return idiomaValido(a.idioma) === idioma;
 }
 
 // Segunda-feira da semana de uma data "AAAA-MM-DD" (semana de segunda a domingo)
@@ -293,19 +325,20 @@ function inicioDaSemanaISO(dataIso) {
   return chaveDataISO(d);
 }
 
-function reposicoesUsadas(aulas, professorId) {
-  return aulas.filter((a) => a.professorId === professorId && a.reposicao === true && aulaContaNoPlano(a)).length;
+function reposicoesUsadas(aulas, professorId, idioma) {
+  return aulas.filter((a) => a.professorId === professorId && a.reposicao === true &&
+    aulaContaNoPlano(a) && aulaDoIdioma(a, idioma)).length;
 }
 
-function saldoReposicoes(plano, aulas, professorId) {
-  return Math.max(0, plano.reposicoesConcedidas - reposicoesUsadas(aulas, professorId));
+function saldoReposicoes(plano, aulas, professorId, idioma) {
+  return Math.max(0, plano.reposicoesConcedidas - reposicoesUsadas(aulas, professorId, idioma));
 }
 
-// Aulas normais (não reposição) do aluno na semana da data informada
-function aulasNaSemana(aulas, professorId, dataIso) {
+// Aulas normais (não reposição) do aluno, num idioma, na semana da data informada
+function aulasNaSemana(aulas, professorId, dataIso, idioma) {
   const semana = inicioDaSemanaISO(dataIso);
   return aulas.filter((a) => a.professorId === professorId && a.reposicao !== true &&
-    aulaContaNoPlano(a) && inicioDaSemanaISO(a.data) === semana).length;
+    aulaContaNoPlano(a) && aulaDoIdioma(a, idioma) && inicioDaSemanaISO(a.data) === semana).length;
 }
 
 // ============================================================

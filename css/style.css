@@ -1503,3 +1503,17 @@ button.link-arquivo {
 }
 .btn-mostrar-mais { width: 100%; margin-top: 0.3rem; }
 .modal-conteudo.modal-sala-aula { max-width: 640px; }
+
+/* Plano do aluno: uma linha por idioma */
+.plano-idioma { flex: 1 1 100%; padding: 0.4rem 0; border-bottom: 1px dashed var(--borda); }
+.plano-aluno > .dica-plano { flex: 1 1 100%; margin: 0; }
+.plano-idioma:last-of-type { border-bottom: none; }
+.plano-idioma > .badge-idioma { display: inline-block; margin-bottom: 0.4rem; }
+.campos-plano-idioma { display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: flex-end; }
+#input-idioma-sem-app {
+  padding: 0.6em 0.7em;
+  border-radius: 6px;
+  border: 1px solid var(--borda);
+  background: var(--bg-cartao);
+  color: inherit;
+}
