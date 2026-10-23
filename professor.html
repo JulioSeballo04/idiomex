@@ -87,14 +87,16 @@
                 <label for="marcar-aluno">Aluno</label>
                 <select id="marcar-aluno" onchange="trocarAlunoMarcarAula()"></select>
               </div>
-              <div class="linha-marcar-aula">
-                <div class="campo-perfil">
-                  <label for="marcar-data">Dia</label>
-                  <input type="date" id="marcar-data">
-                </div>
-                <div class="campo-perfil">
-                  <label for="marcar-hora">Horário</label>
-                  <input type="time" id="marcar-hora">
+              <div class="campo-perfil">
+                <label for="marcar-data">Dia <span class="dica-campo">(ou clique no calendário)</span></label>
+                <input type="date" id="marcar-data" onchange="selecionarDiaMarcarAula()">
+              </div>
+              <div class="campo-perfil">
+                <label>Horário</label>
+                <div id="marcar-slots"></div>
+                <div class="horario-manual">
+                  <button type="button" class="link-trocar" id="btn-outro-horario" onclick="alternarHorarioManual()">Outro horário (fora da sua disponibilidade)</button>
+                  <input type="time" id="marcar-hora" hidden>
                 </div>
               </div>
               <div class="linha-marcar-aula">
@@ -172,8 +174,20 @@
           <label>Duração de cada aula
             <select id="config-duracao-aula">
               <option value="30">30 min</option>
+              <option value="45">45 min</option>
               <option value="50">50 min</option>
-              <option value="60">60 min</option>
+              <option value="60">1 hora</option>
+              <option value="90">1h30</option>
+              <option value="120">2 horas</option>
+            </select>
+          </label>
+          <label>Intervalo entre aulas
+            <select id="config-intervalo-aula">
+              <option value="0">Sem intervalo</option>
+              <option value="5">5 min</option>
+              <option value="10">10 min</option>
+              <option value="15">15 min</option>
+              <option value="30">30 min</option>
             </select>
           </label>
           <div class="config-modalidades" id="config-modalidades-gerais">

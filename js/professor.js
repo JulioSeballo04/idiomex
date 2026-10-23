@@ -1122,6 +1122,7 @@ function escutarAulasDoProfessor(uid) {
       renderizarListaAlunos();
       renderizarHojeProfessor();
       renderizarAlunosSemApp();
+      renderizarHorariosMarcarAula(); // um horário pode ter acabado de ser ocupado
     });
   // "em 25 min" e as aulas que já passaram mudam com o relógio, mesmo sem dado novo
   setInterval(renderizarHojeProfessor, 60 * 1000);
@@ -1169,7 +1170,7 @@ function linhaAulaPainel(a, mostrarData) {
     <div class="cartao-aula${concluida ? " aula-concluida" : ""}">
       <div class="aula-info">
         <strong>${escapeHtml(a.alunoNome)}</strong>
-        <span>${mostrarData ? `${formatarDataBR(a.data).slice(0, 5)} · ` : ""}${escapeHtml(a.horaInicio)}</span>
+        <span>${mostrarData ? `${formatarDataBR(a.data).slice(0, 5)} · ` : ""}${escapeHtml(faixaHorario(a.horaInicio, a.horaFim))}</span>
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
         ${badgeIdiomaAula(a)}
@@ -1222,7 +1223,7 @@ function renderizarHojeProfessor() {
           <div class="cartao-aula">
             <div class="aula-info">
               <strong>${escapeHtml(a.alunoNome)}</strong>
-              <span>${escapeHtml(rotuloDiaPainel(a.data, hojeIso, amanhaIso))} · ${escapeHtml(a.horaInicio)}</span>
+              <span>${escapeHtml(rotuloDiaPainel(a.data, hojeIso, amanhaIso))} · ${escapeHtml(faixaHorario(a.horaInicio, a.horaFim))}</span>
               <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
               ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
               ${badgeIdiomaAula(a)}
@@ -1256,7 +1257,7 @@ function renderizarHojeProfessor() {
           <div class="cartao-aula">
             <div class="aula-info">
               <strong>${escapeHtml(a.alunoNome)}</strong>
-              <span>${escapeHtml(rotuloDiaPainel(a.data, hojeIso, amanhaIso))} · ${escapeHtml(a.horaInicio)}</span>
+              <span>${escapeHtml(rotuloDiaPainel(a.data, hojeIso, amanhaIso))} · ${escapeHtml(faixaHorario(a.horaInicio, a.horaFim))}</span>
               <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
               ${badgeIdiomaAula(a)}
               ${inicioDaAula(a) < agora ? '<span class="badge-status badge-status-recusada">Horário já passou</span>' : ""}
@@ -1471,6 +1472,7 @@ function fecharConfigAgenda() {
 
 function preencherFormularioConfigAgenda() {
   document.getElementById("config-duracao-aula").value = String(configAgendaAtual.duracaoAulaMinutos || DURACAO_PADRAO_MINUTOS);
+  document.getElementById("config-intervalo-aula").value = String(configAgendaAtual.intervaloMinutos || 0);
   document.getElementById("config-modalidade-online").checked = (configAgendaAtual.modalidades || []).includes("online");
   document.getElementById("config-modalidade-presencial").checked = (configAgendaAtual.modalidades || []).includes("presencial");
   document.getElementById("config-whatsapp").value = configAgendaAtual.whatsapp || "";
@@ -1698,6 +1700,7 @@ function alternarPeriodoConfig(checkbox) {
 
 async function salvarConfigAgenda() {
   const duracaoAulaMinutos = Number(document.getElementById("config-duracao-aula").value);
+  const intervaloMinutos = Number(document.getElementById("config-intervalo-aula").value) || 0;
 
   const lida = lerSemanaDeTrabalho();
   if (lida.erro) {
@@ -1724,7 +1727,7 @@ async function salvarConfigAgenda() {
     return;
   }
   const mesesLiberados = Array.from(document.querySelectorAll(".chk-mes-liberado:checked")).map((c) => c.value);
-  const dados = { duracaoAulaMinutos, modalidades, modalidadesPorDia, disponibilidade, whatsapp, mesesLiberados };
+  const dados = { duracaoAulaMinutos, intervaloMinutos, modalidades, modalidadesPorDia, disponibilidade, whatsapp, mesesLiberados };
   try {
     await db.collection("usuarios").doc(professorIdAtual)
       .collection("configuracaoAgenda").doc("dados").set(dados);
@@ -1889,7 +1892,10 @@ function montarCalendarioProfessor() {
       diaSelecionadoProfessor = diaSelecionadoProfessor === dataIso ? null : dataIso;
       // Com o "Marcar aula" aberto ao lado, o dia clicado já vai para o formulário
       const formularioAberto = !document.getElementById("modal-marcar-aula").classList.contains("modal-oculto");
-      if (formularioAberto && dataIso >= dataDeHojeISO()) document.getElementById("marcar-data").value = dataIso;
+      if (formularioAberto && dataIso >= dataDeHojeISO()) {
+        document.getElementById("marcar-data").value = dataIso;
+        selecionarDiaMarcarAula();
+      }
       montarCalendarioProfessor();
     };
   });
@@ -1993,7 +1999,7 @@ function montarAnotacoesDia(dataIso) {
   };
 
   const porAula = aulasAtivasDoDia(dataIso).map((a) =>
-    campo(a.id, `Aula das ${escapeHtml(a.horaInicio)} — ${escapeHtml(a.alunoNome)}`)
+    campo(a.id, `Aula ${escapeHtml(faixaHorario(a.horaInicio, a.horaFim))} — ${escapeHtml(a.alunoNome)}`)
   ).join("");
 
   return `
@@ -2063,7 +2069,7 @@ function montarListaAulasDia(dataIso) {
     <div class="cartao-aula">
       <div class="aula-info">
         <strong>${escapeHtml(a.alunoNome)}</strong>
-        <span>${escapeHtml(a.horaInicio)}</span>
+        <span>${escapeHtml(faixaHorario(a.horaInicio, a.horaFim))}</span>
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
         ${badgeIdiomaAula(a)}
@@ -2232,7 +2238,7 @@ function montarAbaAulas(alunoId) {
   return aulasDoAluno.map((a) => `
     <div class="cartao-aula">
       <div class="aula-info">
-        <span>${formatarDataBR(a.data)} às ${escapeHtml(a.horaInicio)}</span>
+        <span>${formatarDataBR(a.data)} · ${escapeHtml(faixaHorario(a.horaInicio, a.horaFim))}</span>
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
         ${badgeIdiomaAula(a)}
@@ -2297,7 +2303,7 @@ function renderizarAlunosSemApp() {
           <strong>${escapeHtml(aluno.nome)}</strong>
           ${idiomasAtuaisProfessor.length > 1 ? `<span class="badge-idioma" style="background:${IDIOMAS[idioma].cor}">${IDIOMAS[idioma].nome}</span>` : ""}
           ${aluno.telefone ? `<span>${escapeHtml(aluno.telefone)}${link ? ` — <a href="${link}" target="_blank" rel="noopener">WhatsApp</a>` : ""}</span>` : ""}
-          <span class="${proxima ? "" : "aviso-pedido"}">${proxima ? `Próxima aula: ${formatarDataBR(proxima.data)} às ${escapeHtml(proxima.horaInicio)}` : "Nenhuma aula marcada"}</span>
+          <span class="${proxima ? "" : "aviso-pedido"}">${proxima ? `Próxima aula: ${formatarDataBR(proxima.data)} · ${escapeHtml(faixaHorario(proxima.horaInicio, proxima.horaFim))}` : "Nenhuma aula marcada"}</span>
         </div>
         <div class="campo-plano">
           <span>Reposições disponíveis</span>
@@ -2383,7 +2389,9 @@ function abrirMarcarAula(alunoId, dataIso) {
   const campoData = document.getElementById("marcar-data");
   campoData.min = dataDeHojeISO();
   campoData.value = dataIso || dataDeHojeISO();
-  document.getElementById("marcar-hora").value = "";
+  horarioEscolhidoMarcar = null;
+  definirHorarioManual(false);
+  renderizarHorariosMarcarAula();
 
   const modalidades = (configAgendaAtual && configAgendaAtual.modalidades && configAgendaAtual.modalidades.length)
     ? configAgendaAtual.modalidades : ["online", "presencial"];
@@ -2402,6 +2410,84 @@ function abrirMarcarAula(alunoId, dataIso) {
   const painel = document.getElementById("modal-marcar-aula");
   painel.classList.remove("modal-oculto");
   painel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// Horários livres do dia, iguais aos que o aluno vê ao agendar: a disponibilidade do
+// professor (com a exceção do dia, se houver), em aulas da duração configurada, sem
+// os horários já ocupados. "Outro horário" deixa marcar fora disso.
+let horarioEscolhidoMarcar = null;
+let horarioManualMarcar = false;
+
+function formularioMarcarAulaAberto() {
+  const painel = document.getElementById("modal-marcar-aula");
+  return painel && !painel.classList.contains("modal-oculto");
+}
+
+function duracaoDasAulas() {
+  return (configAgendaAtual && configAgendaAtual.duracaoAulaMinutos) || DURACAO_PADRAO_MINUTOS;
+}
+
+function horariosLivresDoDia(dataIso) {
+  const override = overridesAgendaCache[dataIso];
+  const blocos = override
+    ? (override.fechado ? [] : override.blocos || [])
+    : ((configAgendaAtual && configAgendaAtual.disponibilidade) || {})[chaveDiaSemana(dataIso)] || [];
+  const duracao = duracaoDasAulas();
+  const ocupadas = aulasCache.filter((a) => a.data === dataIso && ["agendada", "pendente", "concluida"].includes(a.status));
+  let horarios = slotsSemConflito(gerarSlotsDoDia(blocos, duracao, configAgendaAtual && configAgendaAtual.intervaloMinutos), duracao, ocupadas);
+  if (dataIso === dataDeHojeISO()) {
+    const agora = new Date();
+    horarios = horarios.filter((h) => minutosDoHorario(h) > agora.getHours() * 60 + agora.getMinutes());
+  }
+  return horarios;
+}
+
+function renderizarHorariosMarcarAula() {
+  const container = document.getElementById("marcar-slots");
+  if (!container || !formularioMarcarAulaAberto()) return;
+  const data = document.getElementById("marcar-data").value;
+  if (!data) {
+    container.innerHTML = `<p class="vazio">Escolha o dia para ver os horários.</p>`;
+    return;
+  }
+  const horarios = horariosLivresDoDia(data);
+  if (horarioEscolhidoMarcar && !horarios.includes(horarioEscolhidoMarcar)) horarioEscolhidoMarcar = null;
+  if (horarios.length === 0) {
+    container.innerHTML = `<p class="vazio">Nenhum horário livre na sua disponibilidade nesse dia.</p>`;
+    return;
+  }
+  const duracao = duracaoDasAulas();
+  container.innerHTML = `<div class="slots-grade">${horarios.map((h) => `
+    <button type="button" class="btn-slot-horario${h === horarioEscolhidoMarcar && !horarioManualMarcar ? " escolhido" : ""}"
+      aria-pressed="${h === horarioEscolhidoMarcar && !horarioManualMarcar}" onclick="escolherHorarioMarcarAula('${h}')">${faixaHorario(h, somarMinutos(h, duracao))}</button>`).join("")}
+  </div>`;
+}
+
+function selecionarDiaMarcarAula() {
+  horarioEscolhidoMarcar = null;
+  document.getElementById("status-marcar-aula").textContent = "";
+  renderizarHorariosMarcarAula();
+}
+
+function escolherHorarioMarcarAula(hora) {
+  horarioEscolhidoMarcar = hora;
+  definirHorarioManual(false);
+  renderizarHorariosMarcarAula();
+}
+
+function definirHorarioManual(ligado) {
+  horarioManualMarcar = ligado;
+  const campo = document.getElementById("marcar-hora");
+  campo.hidden = !ligado;
+  if (!ligado) campo.value = "";
+  document.getElementById("btn-outro-horario").textContent = ligado
+    ? "Usar os horários da minha disponibilidade" : "Outro horário (fora da sua disponibilidade)";
+}
+
+function alternarHorarioManual() {
+  definirHorarioManual(!horarioManualMarcar);
+  if (horarioManualMarcar) document.getElementById("marcar-hora").focus();
+  renderizarHorariosMarcarAula();
 }
 
 function fecharMarcarAula() {
@@ -2436,7 +2522,7 @@ async function confirmarMarcarAula() {
   const status = document.getElementById("status-marcar-aula");
   const alunoId = document.getElementById("marcar-aluno").value;
   const data = document.getElementById("marcar-data").value;
-  const hora = document.getElementById("marcar-hora").value;
+  const hora = horarioManualMarcar ? document.getElementById("marcar-hora").value : horarioEscolhidoMarcar;
   const modalidade = document.getElementById("marcar-modalidade").value;
   const idioma = document.getElementById("marcar-idioma").value;
   const reposicao = !document.getElementById("marcar-reposicao-wrap").hidden && document.getElementById("marcar-reposicao").checked;

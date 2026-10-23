@@ -1014,7 +1014,7 @@ function renderizarMinhasAulas() {
   lista.innerHTML = futuras.map((a) => `
     <div class="cartao-aula">
       <div class="aula-info">
-        <span>${formatarDataBR(a.data)} às ${escapeHtml(a.horaInicio)}</span>
+        <span>${formatarDataBR(a.data)} · ${escapeHtml(faixaHorario(a.horaInicio, a.horaFim))}</span>
         <span class="badge-modalidade badge-${a.modalidade}">${a.modalidade === "online" ? "Online" : "Presencial"}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
         ${a.status === "pendente" ? '<span class="badge-status badge-status-pendente">Aguardando aprovação</span>' : ""}
@@ -1547,7 +1547,7 @@ async function carregarHorariosLivres(dataEscolhida) {
   if (!agendamento || agendamento.data !== dataEscolhida) return;
 
   const duracao = configAgendaProfessor.duracaoAulaMinutos || 50;
-  let horarios = slotsSemConflito(gerarSlotsDoDia(blocos, duracao), duracao, marcadas);
+  let horarios = slotsSemConflito(gerarSlotsDoDia(blocos, duracao, configAgendaProfessor.intervaloMinutos), duracao, marcadas);
 
   // Se a data escolhida for hoje, esconde horários que já passaram
   if (dataEscolhida === dataDeHojeISO()) {
@@ -1583,7 +1583,8 @@ function renderizarHorariosAgendamento() {
     const botao = document.createElement("button");
     botao.type = "button";
     botao.className = "btn-slot-horario";
-    botao.textContent = horaInicio; // textContent: seguro, sem risco de injeção
+    // textContent: seguro, sem risco de injeção
+    botao.textContent = faixaHorario(horaInicio, somarMinutos(horaInicio, configAgendaProfessor.duracaoAulaMinutos || 50));
     botao.setAttribute("aria-pressed", "false");
     botao.onclick = () => {
       agendamento.hora = horaInicio;
