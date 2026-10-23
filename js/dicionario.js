@@ -31,7 +31,62 @@ auth.onAuthStateChanged(async (user) => {
   escutarAnotacoes(user.uid);
   escutarPalavras(user.uid);
   escutarMinhasAulas(user.uid);
+  escutarNotificacoes(user.uid);
 });
+
+// -------------------- NOTIFICAÇÕES --------------------
+// Criadas pelo professor: crédito de reposição recebido, pedido de reposição
+// aprovado ou recusado. O sino mostra quantas ainda não foram lidas.
+
+let notificacoesCache = [];
+
+function escutarNotificacoes(uid) {
+  db.collection("usuarios").doc(uid).collection("notificacoes")
+    .orderBy("criadoEm", "desc").limit(30)
+    .onSnapshot((snap) => {
+      notificacoesCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderizarNotificacoes();
+    }, (e) => console.warn("Não foi possível carregar as notificações:", e));
+}
+
+const ICONES_NOTIFICACAO = { "credito-reposicao": "🎟️", "reposicao-aprovada": "✅", "reposicao-recusada": "❌" };
+
+function renderizarNotificacoes() {
+  const naoLidas = notificacoesCache.filter((n) => !n.lida).length;
+  const contador = document.getElementById("contador-notificacoes");
+  if (contador) {
+    contador.textContent = naoLidas > 9 ? "9+" : String(naoLidas);
+    contador.hidden = naoLidas === 0;
+  }
+  const botao = document.getElementById("btn-notificacoes");
+  if (botao) botao.setAttribute("aria-label", naoLidas ? `Notificações (${naoLidas} não lidas)` : "Notificações");
+  const lista = document.getElementById("lista-notificacoes");
+  if (!lista) return;
+  lista.innerHTML = notificacoesCache.length ? notificacoesCache.map((n) => `
+    <div class="item-notificacao${n.lida ? "" : " nao-lida"}">
+      <span class="icone-notificacao">${ICONES_NOTIFICACAO[n.tipo] || "🔔"}</span>
+      <div>
+        <div>${escapeHtml(n.texto)}</div>
+        <span class="data-msg">${n.criadoEm ? escapeHtml(n.criadoEm.toDate().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })) : ""}</span>
+      </div>
+    </div>`).join("") : `<p class="vazio">Nenhuma notificação por enquanto.</p>`;
+}
+
+// Abre a lista e marca as não lidas como lidas
+async function abrirNotificacoes() {
+  renderizarNotificacoes();
+  document.getElementById("modal-notificacoes").classList.remove("modal-oculto");
+  const user = auth.currentUser;
+  const naoLidas = notificacoesCache.filter((n) => !n.lida);
+  if (!user || !naoLidas.length) return;
+  const lote = db.batch();
+  naoLidas.forEach((n) => lote.update(db.collection("usuarios").doc(user.uid).collection("notificacoes").doc(n.id), { lida: true }));
+  try { await lote.commit(); } catch (e) { console.warn("Não foi possível marcar as notificações como lidas:", e); }
+}
+
+function fecharNotificacoes() {
+  document.getElementById("modal-notificacoes").classList.add("modal-oculto");
+}
 
 // Os idiomas que o aluno pode estudar são os que o professor vinculado ensina (mais
 // qualquer idioma em que ele já tenha palavras, pra nada sumir). Se der erro ou o
@@ -794,7 +849,7 @@ function renderizarMinhasAulas() {
   const aindaVai = (a) => a.data > hojeIso ||
     (a.data === hojeIso && minutosDoHorario(a.horaFim || a.horaInicio) > minutosAgora);
   const futuras = minhasAulasCache
-    .filter((a) => a.status === "agendada" && aindaVai(a))
+    .filter((a) => (a.status === "agendada" || a.status === "pendente") && aindaVai(a))
     .sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio));
 
   if (futuras.length === 0) {
@@ -809,9 +864,10 @@ function renderizarMinhasAulas() {
         <span>${formatarDataBR(a.data)} às ${escapeHtml(a.horaInicio)}</span>
         <span class="badge-modalidade badge-${a.modalidade}">${a.modalidade === "online" ? "Online" : "Presencial"}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
+        ${a.status === "pendente" ? '<span class="badge-status badge-status-pendente">Aguardando aprovação</span>' : ""}
         ${idiomasParaAula().length > 1 ? `<span class="badge-idioma" style="background:${IDIOMAS[idiomaValido(a.idioma)].cor}">${IDIOMAS[idiomaValido(a.idioma)].nome}</span>` : ""}
       </div>
-      <button class="excluir" onclick="cancelarMinhaAula('${a.id}')">Cancelar</button>
+      <button class="excluir" onclick="cancelarMinhaAula('${a.id}')">${a.status === "pendente" ? "Cancelar pedido" : "Cancelar"}</button>
     </div>
   `).join("");
 }
@@ -979,7 +1035,7 @@ function mesLiberado(data) {
 
 function aulasFuturasDoAluno() {
   const hojeIso = dataDeHojeISO();
-  return minhasAulasCache.filter((a) => a.status === "agendada" && a.data >= hojeIso);
+  return minhasAulasCache.filter((a) => (a.status === "agendada" || a.status === "pendente") && a.data >= hojeIso);
 }
 
 // Abre o modal de agendamento, carregando a configuração de agenda do professor vinculado
@@ -1072,8 +1128,8 @@ function situacaoDoPlano(dataIso) {
   return { limite, naSemana, semanaCheia: limite > 0 && naSemana >= limite, saldo };
 }
 
-function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade, reposicao, idiomaAula) {
-  return "Olá! Quero confirmar minha aula!\n" +
+function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade, reposicao, idiomaAula, pedido) {
+  return (pedido ? "Olá! Fiz um pedido de aula de reposição no Idiomex, pode aprovar?\n" : "Olá! Quero confirmar minha aula!\n") +
     `Aluno: ${nomeDoAlunoAtual}\n` +
     `Data: ${formatarDataBR(dataIso)}\n` +
     `Horário: ${horaInicio}\n` +
@@ -1109,10 +1165,11 @@ function renderizarAgendamento() {
     const c = agendamento.confirmada;
     corpo.innerHTML = `
       <div class="agendamento-sucesso">
-        <div class="selo-sucesso">✓</div>
-        <h3>Aula confirmada</h3>
+        <div class="selo-sucesso${c.pedido ? " selo-pedido" : ""}">${c.pedido ? "⏳" : "✓"}</div>
+        <h3>${c.pedido ? "Pedido de reposição enviado" : "Aula confirmada"}</h3>
+        ${c.pedido ? `<p class="dica-pedido-enviado">O horário está reservado. Você recebe uma notificação quando o professor aprovar ou recusar.</p>` : ""}
         <p>${escapeHtml(rotuloDiaCurto(c.data))} às ${escapeHtml(c.hora)} · ${escolheIdiomaNoAgendamento() ? `${IDIOMAS[c.idioma].nome} · ` : ""}${c.modalidade === "online" ? "Online" : "Presencial"}${c.reposicao ? " · Reposição" : ""}</p>
-        ${c.linkWhatsapp ? `<a class="btn btn-secundario" href="${c.linkWhatsapp}" target="_blank" rel="noopener">Não abriu? Confirmar pelo WhatsApp</a>` : ""}
+        ${c.linkWhatsapp ? `<a class="btn btn-secundario" href="${c.linkWhatsapp}" target="_blank" rel="noopener">Não abriu? ${c.pedido ? "Avisar" : "Confirmar"} pelo WhatsApp</a>` : ""}
         <div class="acoes-sucesso">
           <button type="button" class="btn btn-primario" onclick="marcarOutraAula()">Marcar outra aula</button>
           <button type="button" class="btn btn-secundario" onclick="fecharAgendamento()">Fechar</button>
@@ -1159,9 +1216,10 @@ function renderizarAgendamento() {
   const modalidades = modalidadesDoDia(agendamento.data);
   if (!modalidades.includes(agendamento.modalidade)) agendamento.modalidade = modalidades[0] || null;
   const plano = situacaoDoPlano(agendamento.data);
-  // Reposição só com crédito; com a semana cheia, a aula só pode ser reposição
-  if (plano.saldo === 0) agendamento.reposicao = false;
-  else if (plano.semanaCheia) agendamento.reposicao = true;
+  // Com a semana cheia, a aula só pode ser reposição: com crédito, usa o crédito;
+  // sem crédito, vira um pedido para o professor aprovar
+  if (plano.semanaCheia) agendamento.reposicao = true;
+  const pedido = agendamento.reposicao && plano.saldo === 0;
   const linhasPlano = [];
   if (plano.limite > 0) {
     linhasPlano.push(agendamento.data
@@ -1182,13 +1240,13 @@ function renderizarAgendamento() {
         </div>` : ""}
       <div class="plano-agendamento">${linhasPlano.map((l) => `<div>${l}</div>`).join("")}</div>
       <div class="campo-agendamento campo-reposicao">
-        <label class="rotulo-reposicao"><input type="checkbox" id="chk-reposicao" ${agendamento.reposicao ? "checked" : ""} ${plano.saldo === 0 || plano.semanaCheia ? "disabled" : ""} onchange="agendamento.reposicao = this.checked; renderizarAgendamento()"> Usar 1 crédito de reposição nesta aula</label>
-        ${plano.semanaCheia && plano.saldo > 0 ? `<p class="dica-reposicao">As aulas do seu plano nessa semana já estão marcadas — esta vai usar 1 reposição.</p>` : ""}
-        ${plano.semanaCheia && plano.saldo === 0 ? `<p class="dica-reposicao aviso-plano">As aulas do seu plano nessa semana já estão marcadas e você não tem reposições. Escolha outra semana ou fale com seu professor.</p>` : ""}
+        <label class="rotulo-reposicao"><input type="checkbox" id="chk-reposicao" ${agendamento.reposicao ? "checked" : ""} ${plano.semanaCheia ? "disabled" : ""} onchange="agendamento.reposicao = this.checked; renderizarAgendamento()"> Esta aula é uma reposição</label>
+        ${agendamento.reposicao && plano.saldo > 0 ? `<p class="dica-reposicao">${plano.semanaCheia ? "As aulas do seu plano nessa semana já estão marcadas — e" : "E"}sta aula vai usar 1 crédito de reposição e já fica confirmada.</p>` : ""}
+        ${pedido ? `<p class="dica-reposicao aviso-pedido">${plano.semanaCheia ? "As aulas do seu plano nessa semana já estão marcadas e v" : "V"}ocê não tem crédito de reposição: esta aula vai como <strong>pedido de reposição</strong>. O horário fica reservado e seu professor precisa aprovar.</p>` : ""}
       </div>
       ${agendamento.erro ? `<p class="erro-agendamento" role="alert">${escapeHtml(agendamento.erro)}</p>` : ""}
       <button type="button" class="btn btn-primario btn-confirmar-agendamento" id="btn-confirmar-agendamento" onclick="confirmarAgendamento()" ${dataHoraEscolhidas && !agendamento.salvando ? "" : "disabled"}>
-        ${agendamento.salvando ? "Confirmando..." : "Confirmar agendamento"}
+        ${agendamento.salvando ? "Enviando..." : (pedido ? "Pedir reposição ao professor" : "Confirmar agendamento")}
       </button>
       ${dataHoraEscolhidas ? "" : `<p class="dica-confirmar">Escolha o dia e o horário para confirmar.</p>`}
     </div>`;
@@ -1317,7 +1375,8 @@ async function carregarHorariosLivres(dataEscolhida) {
       .where("professorId", "==", professorIdDoAluno)
       .where("data", "==", dataEscolhida)
       .get();
-    marcadas = snap.docs.map((d) => d.data()).filter((a) => a.status === "agendada");
+    // Pedido de reposição pendente também segura o horário até o professor decidir
+    marcadas = snap.docs.map((d) => d.data()).filter((a) => a.status === "agendada" || a.status === "pendente");
   } catch (e) {
     console.error(e);
     if (agendamento.data === dataEscolhida) agendamento.erroHorarios = true;
@@ -1394,11 +1453,7 @@ async function confirmarAgendamento() {
     return;
   }
   const plano = situacaoDoPlano(agendamento.data);
-  if (agendamento.reposicao && plano.saldo === 0) {
-    agendamento.erro = "Você não tem créditos de reposição.";
-    renderizarAgendamento();
-    return;
-  }
+  const pedido = agendamento.reposicao && plano.saldo === 0; // reposição sem crédito: espera aprovação
   if (!agendamento.reposicao && plano.semanaCheia) {
     agendamento.erro = `Você já marcou as ${plano.limite} aula${plano.limite > 1 ? "s" : ""} do seu plano nessa semana.`;
     renderizarAgendamento();
@@ -1413,7 +1468,7 @@ async function confirmarAgendamento() {
   // pausa assíncrona, porque nesse ponto deixa de contar como resposta direta a um toque
   // do usuário. Preenchendo o destino da aba só depois que a gravação terminar, o popup nunca é bloqueado.
   const linkConfirmacao = configAgendaProfessor.whatsapp
-    ? linkWhatsapp(configAgendaProfessor.whatsapp, mensagemConfirmacaoAula(data, hora, modalidade, reposicao, idioma))
+    ? linkWhatsapp(configAgendaProfessor.whatsapp, mensagemConfirmacaoAula(data, hora, modalidade, reposicao, idioma, pedido))
     : null;
   const abaWhatsapp = linkConfirmacao ? window.open("", "_blank") : null;
 
@@ -1422,7 +1477,7 @@ async function confirmarAgendamento() {
   renderizarAgendamento();
   try {
     await agendarAula(professorIdDoAluno, data, hora, somarMinutos(hora, duracao), modalidade,
-      user.uid, nomeDoAlunoAtual, reposicao, idioma);
+      user.uid, nomeDoAlunoAtual, reposicao, idioma, pedido ? "pendente" : "agendada");
   } catch (e) {
     if (abaWhatsapp) abaWhatsapp.close();
     agendamento.salvando = false;
@@ -1438,20 +1493,21 @@ async function confirmarAgendamento() {
 
   if (abaWhatsapp) abaWhatsapp.location = linkConfirmacao;
   agendamento.salvando = false;
-  agendamento.confirmada = { data, hora, modalidade, reposicao, idioma, linkWhatsapp: linkConfirmacao };
+  agendamento.confirmada = { data, hora, modalidade, reposicao, idioma, pedido, linkWhatsapp: linkConfirmacao };
   renderizarAgendamento();
 }
 
 // Usa uma transação: o ID do documento é determinístico ("professor_data_hora"), então
 // duas tentativas simultâneas de marcar o MESMO horário disputam o mesmo documento — a
 // segunda falha com um erro claro, em vez de sobrescrever silenciosamente a primeira.
-async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, alunoId, alunoNome, reposicao, idioma) {
+async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, alunoId, alunoNome, reposicao, idioma, status) {
   const aulaId = `${professorId}_${data}_${horaInicio.replace(":", "")}`;
   const ref = db.collection("aulas").doc(aulaId);
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    if (snap.exists && snap.data().status !== "cancelada") {
+    // Horário cancelado ou com pedido de reposição recusado volta a ficar livre
+    if (snap.exists && !["cancelada", "recusada"].includes(snap.data().status)) {
       throw new Error("Esse horário acabou de ser reservado por outro aluno. Escolha outro.");
     }
     tx.set(ref, {
@@ -1459,7 +1515,7 @@ async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, a
       data, horaInicio, horaFim, modalidade,
       reposicao: !!reposicao,
       idioma: idiomaValido(idioma),
-      status: "agendada",
+      status: status === "pendente" ? "pendente" : "agendada",
       criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     });
   });

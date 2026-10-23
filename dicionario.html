@@ -59,6 +59,7 @@
         <select id="seletor-idioma" class="seletor-idioma-aluno" title="Idioma que você está estudando" onchange="trocarIdiomaAtivo(this.value)" hidden></select>
         <button class="btn btn-secundario" onclick="iniciarQuiz()">🎯 Quiz rápido</button>
         <button class="btn btn-secundario" onclick="abrirAgendamento()">📅 Agendar aula</button>
+        <button class="btn btn-secundario btn-notificacoes" id="btn-notificacoes" aria-label="Notificações" title="Notificações" onclick="abrirNotificacoes()">🔔<span class="contador-notificacoes" id="contador-notificacoes" hidden>0</span></button>
         <button class="btn btn-secundario" onclick="abrirPerfil()">👤 Meu perfil</button>
         <div class="seletor-tema" id="seletor-tema">
           <button class="btn-tema" type="button" title="Mudar cores do app" onclick="alternarMenuTema()">
@@ -78,6 +79,16 @@
         </div>
         <p style="color:var(--ink-soft, #666); font-size:0.85rem; margin-top:-0.4rem;">Complete a frase com a palavra certa.</p>
         <div id="corpo-quiz"></div>
+      </div>
+    </div>
+
+    <div id="modal-notificacoes" class="modal-oculto">
+      <div class="modal-conteudo">
+        <div class="modal-cabecalho">
+          <h3>Notificações</h3>
+          <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharNotificacoes()">✕</button>
+        </div>
+        <div id="lista-notificacoes"></div>
       </div>
     </div>
 

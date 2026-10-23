@@ -118,6 +118,17 @@ usuarios/{uid}/palavras/{id}
 
 usuarios/{uid}/mensagens/{id}
   texto, criadoEm         -> escrito pelo professor, lido pelo aluno
+
+usuarios/{uid}/notificacoes/{id}
+  tipo, texto, lida, criadoEm, professorId
+                          -> criadas pelo professor (crédito de reposição,
+                             pedido aprovado/recusado), lidas pelo aluno
+
+aulas/{professorId_data_hora}
+  professorId, alunoId, alunoNome, data, horaInicio, horaFim, modalidade,
+  idioma, reposicao, status ("agendada" | "pendente" | "concluida" |
+  "cancelada" | "recusada")  -> "pendente" = pedido de reposição sem
+                                crédito, esperando o professor aprovar
 ```
 
 ## Por que a IA não fica direto no site?

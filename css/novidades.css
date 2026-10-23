@@ -818,3 +818,40 @@ html[data-tema="noturno"] .aviso-plano { color: #F08A75; }
 .modalidades-semana { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.9rem; margin-top: 0.5rem; font-size: 0.85rem; }
 .modalidades-semana span { font-weight: 600; color: var(--ink-soft); font-size: 0.8rem; }
 .modalidades-semana label { display: inline-flex; align-items: center; gap: 0.3rem; }
+
+/* ---------- Pedidos de reposição e notificações ---------- */
+.cartao-pedidos-reposicao {
+  border: 2px solid var(--acento-secundario, #C98A2C);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--bg-cartao);
+}
+.cartao-pedidos-reposicao h3 { margin: 0 0 0.3rem; font-size: 0.98rem; }
+.cartao-pedidos-reposicao > p { margin: 0 0 0.6rem; font-size: 0.8rem; color: var(--ink-soft); }
+.contador-pedidos {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: #C0392B; color: #fff; font-size: 0.7rem; font-weight: 700; line-height: 1;
+}
+.nav-lateral-item { position: relative; }
+.contador-lateral { position: absolute; top: 2px; right: 2px; }
+.badge-status-pendente { background: rgba(201, 138, 44, 0.18); color: #8a5a12; }
+.badge-status-recusada { background: rgba(179, 65, 46, 0.12); color: #8f2f1f; }
+html[data-tema="noturno"] .badge-status-pendente { color: #E0B24C; }
+html[data-tema="noturno"] .badge-status-recusada { color: #F08A75; }
+.aviso-pedido { color: #8a5a12; }
+html[data-tema="noturno"] .aviso-pedido { color: #E0B24C; }
+.selo-pedido { background: var(--acento-secundario, #C98A2C); }
+.dica-pedido-enviado { font-size: 0.85rem; }
+
+.btn-notificacoes { position: relative; }
+.contador-notificacoes {
+  position: absolute; top: -6px; right: -6px;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: #C0392B; color: #fff; font-size: 0.7rem; font-weight: 700; line-height: 18px; text-align: center;
+}
+.item-notificacao { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid var(--borda); font-size: 0.9rem; }
+.item-notificacao:last-child { border-bottom: none; }
+.item-notificacao.nao-lida { font-weight: 600; }
+.icone-notificacao { font-size: 1.1rem; line-height: 1.3; }

@@ -73,6 +73,26 @@ await t("invalid plan values rejected", assertFails(updateDoc(doc(db("P1"), "usu
 await t("student cannot change own plan", assertFails(updateDoc(doc(db("S1"), "usuarios/S1"), plano("P1", 7, 99))));
 await t("student still edits own contact with a plan set", updateDoc(doc(db("S1"), "usuarios/S1"), { telefone: "11977776666" }));
 await t("student cannot create profile with a plan", assertFails(setDoc(doc(db("S7"), "usuarios/S7"), { tipo: "aluno", nome: "s7", email: "s7@x", professorId: "P1", codigoVinculo: "PROF-BBBB", ...plano("P1", 7, 99) })));
+// Pedido de reposição (aula "pendente") e notificações
+const aula = (extra) => ({ professorId: "P1", alunoId: "S1", alunoNome: "s1", data: "2030-01-10", horaInicio: "10:00", horaFim: "10:50", modalidade: "online", reposicao: false, status: "agendada", ...extra });
+await t("student requests a reposição (pendente)", setDoc(doc(db("S1"), "aulas/P1_2030-01-10_1000"), aula({ reposicao: true, status: "pendente" })));
+await t("normal lesson cannot be created as pendente", assertFails(setDoc(doc(db("S1"), "aulas/P1_2030-01-10_1100"), aula({ horaInicio: "11:00", status: "pendente" }))));
+await t("student cannot approve own request", assertFails(updateDoc(doc(db("S1"), "aulas/P1_2030-01-10_1000"), { status: "agendada" })));
+await t("professor approves the request", updateDoc(doc(db("P1"), "aulas/P1_2030-01-10_1000"), { status: "agendada" }));
+await setDoc(doc(db("S1"), "aulas/P1_2030-01-10_1400"), aula({ horaInicio: "14:00", reposicao: true, status: "pendente" }));
+await t("student cancels a pending request", updateDoc(doc(db("S1"), "aulas/P1_2030-01-10_1400"), { status: "cancelada" }));
+await setDoc(doc(db("S1"), "aulas/P1_2030-01-10_1500"), aula({ horaInicio: "15:00", reposicao: true, status: "pendente" }));
+await t("professor refuses a request", updateDoc(doc(db("P1"), "aulas/P1_2030-01-10_1500"), { status: "recusada" }));
+await t("refused slot can be booked again", setDoc(doc(db("S1"), "aulas/P1_2030-01-10_1500"), aula({ horaInicio: "15:00" })));
+const notif = (extra) => ({ tipo: "credito-reposicao", texto: "Você recebeu 1 crédito de reposição.", criadoEm: new Date(), lida: false, professorId: "P1", ...extra });
+await t("linked professor notifies student", setDoc(doc(db("P1"), "usuarios/S1/notificacoes/n1"), notif()));
+await t("unlinked professor cannot notify", assertFails(setDoc(doc(db("P0"), "usuarios/S1/notificacoes/n2"), notif({ professorId: "P0" }))));
+await t("student cannot create own notification", assertFails(setDoc(doc(db("S1"), "usuarios/S1/notificacoes/n3"), notif())));
+await t("invalid notification type rejected", assertFails(setDoc(doc(db("P1"), "usuarios/S1/notificacoes/n4"), notif({ tipo: "qualquer" }))));
+await t("student reads own notifications", getDocs(collection(db("S1"), "usuarios/S1/notificacoes")));
+await t("other user cannot read notifications", assertFails(getDocs(collection(db("S9"), "usuarios/S1/notificacoes"))));
+await t("student marks notification as read", updateDoc(doc(db("S1"), "usuarios/S1/notificacoes/n1"), { lida: true }));
+await t("student cannot change notification text", assertFails(updateDoc(doc(db("S1"), "usuarios/S1/notificacoes/n1"), { texto: "x" })));
 // Messages deletion by student
 await setDoc(doc(db("P1"), "usuarios/S1/mensagens/m1"), { texto: "oi" });
 await t("student deletes own messages", deleteDoc(doc(db("S1"), "usuarios/S1/mensagens/m1")));

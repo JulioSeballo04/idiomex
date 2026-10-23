@@ -161,6 +161,21 @@ service cloud.firestore {
         allow read, write: if request.auth != null && ehProfessorDoAluno(userId);
       }
 
+      // Notificações do aluno (ex: "você recebeu 1 crédito de reposição", "seu pedido
+      // de reposição foi aprovado"). Só o professor vinculado cria, com tipo e texto
+      // controlados; o aluno lê, marca como lida e apaga as dele.
+      match /notificacoes/{notificacaoId} {
+        allow read, delete: if request.auth != null && request.auth.uid == userId;
+        allow update: if request.auth != null && request.auth.uid == userId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lida"]);
+        allow create: if request.auth != null && ehProfessorDoAluno(userId) &&
+          request.resource.data.keys().hasOnly(["tipo", "texto", "criadoEm", "lida", "professorId"]) &&
+          request.resource.data.tipo in ["credito-reposicao", "reposicao-aprovada", "reposicao-recusada"] &&
+          request.resource.data.texto is string && request.resource.data.texto.size() <= 300 &&
+          request.resource.data.lida == false &&
+          request.resource.data.professorId == request.auth.uid;
+      }
+
       // Controle de "última visualização": usado só pelo próprio professor, para saber
       // quais alunos/letras têm palavras novas desde a última vez que ele abriu o bloco.
       match /visualizacoes/{alunoId} {
@@ -200,6 +215,13 @@ service cloud.firestore {
     // que garante que dois alunos não consigam marcar o mesmo horário ao mesmo tempo — a
     // segunda tentativa de escrita cai como "update" de um doc que já existe com
     // status "agendada", e a regra de update abaixo barra isso.
+    // Status de uma aula ao ser marcada: "agendada" (normal, ou reposição com crédito)
+    // ou "pendente" — pedido de reposição sem crédito, que espera o professor aprovar
+    // (vira "agendada") ou recusar (vira "recusada"). O pedido já reserva o horário.
+    function statusNovoValido(d) {
+      return d.status == "agendada" || (d.status == "pendente" && d.reposicao == true);
+    }
+
     match /aulas/{aulaId} {
       // Leitura: o professor da aula, o aluno da aula, OU qualquer aluno vinculado
       // a esse mesmo professor — esse terceiro caso é o que faltava: na hora de
@@ -230,7 +252,7 @@ service cloud.firestore {
       // professor ao qual ele está vinculado — impede marcar aula com outro professor.
       allow create: if request.auth != null &&
         request.resource.data.alunoId == request.auth.uid &&
-        request.resource.data.status == "agendada" &&
+        statusNovoValido(request.resource.data) &&
         request.resource.data.modalidade in ["online", "presencial"] &&
         souAlunoDesteProfessor(request.resource.data.professorId);
 
@@ -247,15 +269,16 @@ service cloud.firestore {
           request.resource.data.horaInicio == resource.data.horaInicio) ||
 
         (request.auth.uid == resource.data.alunoId &&
-          resource.data.status == "agendada" &&
+          resource.data.status in ["agendada", "pendente"] &&
           request.resource.data.status == "cancelada" &&
           request.resource.data.professorId == resource.data.professorId &&
           request.resource.data.alunoId == resource.data.alunoId &&
           request.resource.data.data == resource.data.data &&
           request.resource.data.horaInicio == resource.data.horaInicio) ||
 
-        (resource.data.status == "cancelada" &&
-          request.resource.data.status == "agendada" &&
+        (resource.data.status in ["cancelada", "recusada"] &&
+          statusNovoValido(request.resource.data) &&
+          request.resource.data.modalidade in ["online", "presencial"] &&
           request.resource.data.alunoId == request.auth.uid &&
           request.resource.data.professorId == resource.data.professorId &&
           request.resource.data.data == resource.data.data &&

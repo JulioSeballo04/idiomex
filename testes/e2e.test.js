@@ -432,43 +432,83 @@ function dataDaqui(dias) {
     esperar((await saldoNoPainel()).trim() === '0', 'saldo inicial diferente de 0');
   });
 
-  await caso('com a semana cheia e sem reposição, o aluno não consegue marcar outra aula', async () => {
+  const contadorSino = async (p) => (await p.isVisible('#contador-notificacoes')) ? (await p.textContent('#contador-notificacoes')).trim() : '0';
+
+  await caso('com a semana cheia e sem crédito, a aula vira pedido de reposição (horário reservado)', async () => {
     await confirmarPrimeiroHorario(hugo);
     await hugo.click('#btn-confirmar-agendamento');
-    await hugo.waitForSelector('.agendamento-sucesso', { timeout: 8000 });
+    await hugo.waitForSelector('.agendamento-sucesso:has-text("Aula confirmada")', { timeout: 8000 });
     await hugo.keyboard.press('Escape');
     await confirmarPrimeiroHorario(hugo);
-    esperar(await hugo.isDisabled('#chk-reposicao'), 'deixou marcar reposição sem crédito');
-    await hugo.waitForSelector('.aviso-plano', { timeout: 3000 });
-    await hugo.click('#btn-confirmar-agendamento');
-    await hugo.waitForSelector('.erro-agendamento:has-text("do seu plano nessa semana")', { timeout: 3000 });
-    esperar((await hugo.evaluate(() => aulasFuturasDoAluno().length)) === 1, 'marcou a segunda aula da semana');
+    esperar(await hugo.isChecked('#chk-reposicao'), 'com a semana cheia, deveria virar reposição');
+    await hugo.waitForSelector('.aviso-pedido', { timeout: 3000 });
+    await hugo.click('#btn-confirmar-agendamento:has-text("Pedir reposição ao professor")');
+    await hugo.waitForSelector('.agendamento-sucesso:has-text("Pedido de reposição enviado")', { timeout: 8000 });
     await hugo.keyboard.press('Escape');
+    await hugo.waitForSelector('#painel-minhas-aulas .cartao-aula:has-text("Aguardando aprovação")', { timeout: 5000 });
+    const pedido = await hugo.evaluate(() => minhasAulasCache.find((a) => a.status === 'pendente'));
+    esperar(pedido && pedido.reposicao === true, 'pedido não gravado como reposição pendente');
+  });
+
+  await caso('professor vê o pedido em destaque (com contador) e aprova; o aluno é notificado', async () => {
+    await prof.click('#btn-aba-agenda');
+    await prof.waitForSelector('#pedidos-reposicao .cartao-aula:has-text("Hugo")', { timeout: 8000 });
+    esperar((await prof.textContent('#btn-aba-agenda .contador-pedidos')).trim() === '1', 'sem contador de pedidos na aba Agenda');
+    await prof.click('#pedidos-reposicao button:has-text("Aprovar")');
+    await prof.waitForSelector('#pedidos-reposicao', { state: 'detached', timeout: 5000 });
+    await hugo.waitForSelector('#painel-minhas-aulas .cartao-aula:has-text("Reposição"):not(:has-text("Aguardando"))', { timeout: 5000 });
+    await hugo.waitForFunction(() => notificacoesCache.some((n) => n.tipo === 'reposicao-aprovada'), null, { timeout: 5000 });
+    esperar((await contadorSino(hugo)) === '1', 'sino sem a notificação');
+    await hugo.click('#btn-notificacoes');
+    await hugo.waitForSelector('.item-notificacao:has-text("foi aprovado")', { timeout: 3000 });
+    await hugo.waitForFunction(() => notificacoesCache.every((n) => n.lida), null, { timeout: 5000 });
+    await hugo.keyboard.press('Escape');
+    esperar((await contadorSino(hugo)) === '0', 'abrir não marcou como lida');
+    // aprovar conta como 1 crédito concedido e usado: o saldo continua 0
+    await prof.click('#btn-aba-alunos');
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("0")`, { timeout: 5000 });
   });
 
   await caso('professor dá 1 reposição (+) e o aluno marca a aula extra usando o crédito', async () => {
     await prof.click(`${blocoHugo} button[aria-label="Dar 1 reposição"]`);
-    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is(\"1\")`, { timeout: 5000 });
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("1")`, { timeout: 5000 });
+    await hugo.waitForFunction(() => notificacoesCache.some((n) => n.tipo === 'credito-reposicao' && !n.lida), null, { timeout: 5000 });
+    esperar((await contadorSino(hugo)) === '1', 'aluno não foi notificado do crédito');
     await confirmarPrimeiroHorario(hugo);
     await hugo.waitForSelector('.plano-agendamento:has-text("Reposições disponíveis: 1")', { timeout: 3000 });
     esperar(await hugo.isChecked('#chk-reposicao'), 'não usou a reposição automaticamente com a semana cheia');
     await hugo.click('#btn-confirmar-agendamento');
     await hugo.waitForSelector('.agendamento-sucesso:has-text("Reposição")', { timeout: 8000 });
     await hugo.keyboard.press('Escape');
-    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is(\"0\")`, { timeout: 5000 });
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("0")`, { timeout: 5000 });
   });
 
   await caso('cancelar a aula de reposição devolve o crédito', async () => {
     const repo = await hugo.evaluate(() => minhasAulasCache.find((a) => a.reposicao && a.status === 'agendada').id);
     await hugo.evaluate((id) => cancelarMinhaAula(id), repo);
     await hugo.waitForFunction(() => situacaoDoPlano(null).saldo === 1, null, { timeout: 5000 });
-    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is(\"1\")`, { timeout: 5000 });
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("1")`, { timeout: 5000 });
   });
 
   await caso('professor tira o crédito (−) e o saldo não fica negativo', async () => {
     await prof.click(`${blocoHugo} button[aria-label="Tirar 1 reposição"]`);
-    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is(\"0\")`, { timeout: 5000 });
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("0")`, { timeout: 5000 });
     esperar(await prof.isDisabled(`${blocoHugo} button[aria-label="Tirar 1 reposição"]`), '"−" continua ativo com saldo 0');
+  });
+  await caso('professor recusa um pedido: o horário é liberado e o aluno é notificado', async () => {
+    await confirmarPrimeiroHorario(hugo);
+    const horario = (await hugo.textContent('.resumo-passo span')).split(' às ')[1].trim();
+    await hugo.click('#btn-confirmar-agendamento:has-text("Pedir reposição ao professor")');
+    await hugo.waitForSelector('.agendamento-sucesso', { timeout: 8000 });
+    await hugo.keyboard.press('Escape');
+    await prof.click('#btn-aba-agenda');
+    await prof.click('#pedidos-reposicao button:has-text("Recusar")');
+    await prof.waitForSelector('#pedidos-reposicao', { state: 'detached', timeout: 5000 });
+    await hugo.waitForFunction(() => notificacoesCache.some((n) => n.tipo === 'reposicao-recusada'), null, { timeout: 5000 });
+    // o horário volta a aparecer como livre
+    await abrirAgendamentoNoDia(hugo, dia);
+    esperar(await hugo.$(`.btn-slot-horario:text-is("${horario}")`), `horário ${horario} não foi liberado`);
+    await hugo.keyboard.press('Escape');
   });
   await ctxHugo.close();
 
