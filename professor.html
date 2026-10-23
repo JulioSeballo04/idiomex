@@ -70,6 +70,7 @@
     <div id="painel-aba-agenda">
       <div class="agenda-topo">
         <button class="btn btn-secundario" onclick="abrirConfigAgenda()">⚙️ Configurar disponibilidade</button>
+        <button class="btn btn-secundario" onclick="abrirMarcarAula()">Marcar aula para um aluno</button>
       </div>
       <div id="painel-hoje-professor"></div>
       <div id="calendario-professor" style="margin-bottom:2rem;"></div>
@@ -78,6 +79,17 @@
     <!-- MEUS ALUNOS -->
     <div id="painel-aba-alunos" class="oculto">
       <div class="lista-alunos" id="lista-alunos"></div>
+
+      <div class="secao-alunos-sem-app">
+        <h3 style="font-size:0.95rem;">Alunos sem app</h3>
+        <p class="dica-plano">Para quem não consegue usar o app: você marca as aulas por ele(a). Enquanto não houver aula marcada (ou houver reposição para usar), a Agenda mostra um lembrete todo dia.</p>
+        <form class="linha-sala" onsubmit="event.preventDefault(); adicionarAlunoSemApp();">
+          <input type="text" id="input-nome-sem-app" placeholder="Nome do aluno" required>
+          <input type="text" id="input-telefone-sem-app" inputmode="tel" placeholder="WhatsApp com DDD (opcional)">
+          <button type="submit" class="btn btn-primario">Adicionar aluno</button>
+        </form>
+        <div id="lista-alunos-sem-app"></div>
+      </div>
     </div>
 
     <!-- CONFIGURAÇÕES -->
@@ -103,6 +115,44 @@
         <p class="dica-perfil">Apaga sua conta, sua agenda e suas anotações, e desvincula seus alunos (eles continuam com as contas e o vocabulário deles). Não pode ser desfeito.</p>
         <button class="btn btn-perigo" onclick="confirmarExclusaoDaConta('status-excluir-professor')">Excluir minha conta</button>
         <p class="status-msg" id="status-excluir-professor"></p>
+      </div>
+    </div>
+
+    <div id="modal-marcar-aula" class="modal-oculto">
+      <div class="modal-conteudo modal-largo">
+        <div class="modal-cabecalho">
+          <h3>Marcar aula</h3>
+          <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharMarcarAula()">✕</button>
+        </div>
+        <div class="campo-perfil">
+          <label for="marcar-aluno">Aluno</label>
+          <select id="marcar-aluno" onchange="atualizarReposicaoMarcarAula()"></select>
+        </div>
+        <div class="linha-marcar-aula">
+          <div class="campo-perfil">
+            <label for="marcar-data">Dia</label>
+            <input type="date" id="marcar-data">
+          </div>
+          <div class="campo-perfil">
+            <label for="marcar-hora">Horário</label>
+            <input type="time" id="marcar-hora">
+          </div>
+        </div>
+        <div class="linha-marcar-aula">
+          <div class="campo-perfil">
+            <label for="marcar-modalidade">Modalidade</label>
+            <select id="marcar-modalidade"></select>
+          </div>
+          <div class="campo-perfil" id="marcar-idioma-wrap">
+            <label for="marcar-idioma">Idioma</label>
+            <select id="marcar-idioma"></select>
+          </div>
+        </div>
+        <label class="opcao-reposicao-marcar" id="marcar-reposicao-wrap" hidden>
+          <input type="checkbox" id="marcar-reposicao"> É reposição (usa 1 crédito — <span id="marcar-reposicao-saldo"></span>)
+        </label>
+        <button class="btn btn-primario" onclick="confirmarMarcarAula()">Marcar aula</button>
+        <p class="status-msg" id="status-marcar-aula"></p>
       </div>
     </div>
 

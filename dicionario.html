@@ -59,6 +59,7 @@
         <select id="seletor-idioma" class="seletor-idioma-aluno" title="Idioma que você está estudando" onchange="trocarIdiomaAtivo(this.value)" hidden></select>
         <button class="btn btn-secundario" onclick="iniciarQuiz()">🎯 Quiz rápido</button>
         <button class="btn btn-secundario" onclick="abrirAgendamento()">📅 Agendar aula</button>
+        <button class="btn btn-secundario" id="btn-sala-aula" onclick="abrirSalaDeAula()">🏫 Sala de aula</button>
         <button class="btn btn-secundario btn-notificacoes" id="btn-notificacoes" aria-label="Notificações" title="Notificações" onclick="abrirNotificacoes()">🔔<span class="contador-notificacoes" id="contador-notificacoes" hidden>0</span></button>
         <button class="btn btn-secundario" onclick="abrirPerfil()">👤 Meu perfil</button>
         <div class="seletor-tema" id="seletor-tema">
@@ -127,7 +128,7 @@
 
         <div class="secao-conta secao-perigo">
           <h4>Excluir minha conta</h4>
-          <p class="dica-perfil">Apaga sua conta, seu vocabulário, suas anotações e os recados recebidos, e cancela suas próximas aulas. Não pode ser desfeito.</p>
+          <p class="dica-perfil">Apaga sua conta, seu vocabulário, suas anotações, os recados recebidos e os documentos da sala de aula, e cancela suas próximas aulas. Não pode ser desfeito.</p>
           <button class="btn btn-perigo" onclick="confirmarExclusaoDaConta('status-excluir-aluno')">Excluir minha conta</button>
           <p class="status-msg" id="status-excluir-aluno"></p>
         </div>
@@ -141,6 +142,16 @@
           <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharAgendamento()">✕</button>
         </div>
         <div id="corpo-agendamento"></div>
+      </div>
+    </div>
+
+    <div id="modal-sala-aula" class="modal-oculto">
+      <div class="modal-conteudo modal-largo">
+        <div class="modal-cabecalho">
+          <h3>Sala de aula</h3>
+          <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharSalaDeAula()">✕</button>
+        </div>
+        <div id="corpo-sala-aula"></div>
       </div>
     </div>
 

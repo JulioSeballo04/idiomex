@@ -2,8 +2,8 @@
 // PAINEL DO PROFESSOR
 // ============================================================
 // Cada aluno é um bloco de "acordeão": clica para abrir/fechar.
-// Dentro do bloco, três abas: Vocabulário (por letra), Recados
-// e Relatório de aulas. O sistema guarda, por aluno e por letra,
+// Dentro do bloco, abas: Vocabulário (por letra), Recados,
+// Relatório de aulas, Aulas marcadas e Sala de aula. O sistema guarda, por aluno e por letra,
 // a última vez que o professor abriu aquela letra — o destaque
 // de "novidade" (bolinha âmbar) some só na letra clicada, não
 // no aluno inteiro.
@@ -13,6 +13,7 @@ let professorIdAtual = null;
 let alunosCache = []; // [{id, nome, ...}]
 const estadoAlunos = {}; // por alunoId: ver garantirEstado()
 let aulasCache = []; // todas as aulas (de todos os alunos) deste professor
+let alunosSemAppCache = []; // alunos cadastrados pelo professor, que não usam o app
 let configAgendaAtual = null; // {duracaoAulaMinutos, modalidades, disponibilidade}
 let mesCalendarioProfessor = null; // Date do 1º dia do mês exibido no calendário da agenda
 let diaSelecionadoProfessor = null; // "AAAA-MM-DD" do dia clicado no calendário, ou null
@@ -58,6 +59,7 @@ auth.onAuthStateChanged(async (user) => {
   await carregarConfigAgenda();
 
   carregarAlunos(user.uid);
+  escutarAlunosSemApp(user.uid);
   escutarAulasDoProfessor(user.uid);
   escutarOverridesAgenda(user.uid);
   escutarAnotacoesAgenda(user.uid);
@@ -150,15 +152,20 @@ function garantirEstado(alunoId) {
   if (!estadoAlunos[alunoId]) {
     estadoAlunos[alunoId] = {
       aberto: false,
-      abaAtiva: "vocabulario",       // vocabulario | recados | relatorio | aulas
+      abaAtiva: "vocabulario",       // vocabulario | recados | relatorio | aulas | sala
       letraSelecionada: "TODAS",
       idiomaFiltro: null,            // idioma do vocabulário em exibição (só importa se o aluno estuda mais de um)
       palavras: [],
       mensagens: [],
       relatorios: [],
+      linkAula: null,                // {url, professorId} do doc salaDeAula/link
+      documentosAula: [],
+      notasDocumentoAbertas: new Set(), // ids dos documentos com o bloco de anotações aberto
       unsubPalavras: null,
       unsubMensagens: null,
       unsubRelatorios: null,
+      unsubLinkAula: null,
+      unsubDocumentosAula: null,
       letrasVistas: null,            // {A: Timestamp, B: Timestamp, ...} última vez que cada letra foi aberta
       temNovidade: false,
       letrasNovas: new Set(),
@@ -448,12 +455,32 @@ function ativarListenersDetalheAluno(alunoId) {
         if (estado.aberto) renderizarListaAlunos();
       });
   }
+
+  const salaRef = db.collection("usuarios").doc(alunoId);
+  if (!estado.unsubLinkAula) {
+    estado.unsubLinkAula = salaRef.collection("salaDeAula").doc("link")
+      .onSnapshot((snap) => {
+        estado.linkAula = snap.exists ? snap.data() : null;
+        if (estado.aberto) renderizarListaAlunos();
+      });
+  }
+
+  if (!estado.unsubDocumentosAula) {
+    estado.unsubDocumentosAula = salaRef.collection("documentosAula")
+      .orderBy("criadoEm", "desc")
+      .onSnapshot((snap) => {
+        estado.documentosAula = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        if (estado.aberto) renderizarListaAlunos();
+      });
+  }
 }
 
 function desativarListenersDetalheAluno(alunoId) {
   const estado = estadoAlunos[alunoId];
   if (estado.unsubMensagens) { estado.unsubMensagens(); estado.unsubMensagens = null; }
   if (estado.unsubRelatorios) { estado.unsubRelatorios(); estado.unsubRelatorios = null; }
+  if (estado.unsubLinkAula) { estado.unsubLinkAula(); estado.unsubLinkAula = null; }
+  if (estado.unsubDocumentosAula) { estado.unsubDocumentosAula(); estado.unsubDocumentosAula = null; }
 }
 
 // -------------------- DETALHE DO ALUNO (ABAS) --------------------
@@ -471,6 +498,8 @@ function montarHtmlDetalheAluno(alunoId) {
         onclick="mudarAbaAluno('${alunoId}','relatorio')">Relatório de aulas</button>
       <button class="aba-detalhe ${estado.abaAtiva === "aulas" ? "ativa" : ""}"
         onclick="mudarAbaAluno('${alunoId}','aulas')">Aulas marcadas</button>
+      <button class="aba-detalhe ${estado.abaAtiva === "sala" ? "ativa" : ""}"
+        onclick="mudarAbaAluno('${alunoId}','sala')">Sala de aula</button>
     </div>
   `;
 
@@ -478,6 +507,7 @@ function montarHtmlDetalheAluno(alunoId) {
   if (estado.abaAtiva === "recados") conteudo = montarAbaRecados(alunoId);
   else if (estado.abaAtiva === "relatorio") conteudo = montarAbaRelatorio(alunoId);
   else if (estado.abaAtiva === "aulas") conteudo = montarAbaAulas(alunoId);
+  else if (estado.abaAtiva === "sala") conteudo = montarAbaSalaDeAula(alunoId);
   else conteudo = montarAbaVocabulario(alunoId);
 
   return montarContatoAluno(alunoId) + montarPlanoAluno(alunoId) + abas + conteudo;
@@ -559,11 +589,11 @@ function montarContatoAluno(alunoId) {
   const partes = [];
   if (aluno.telefone) {
     const link = linkWhatsapp(aluno.telefone, `Olá ${aluno.nome}! Tudo bem?`);
-    partes.push(`<span>📱 ${escapeHtml(aluno.telefone)}${link ? ` — <a href="${link}" target="_blank" rel="noopener">Chamar no WhatsApp</a>` : ""}</span>`);
+    partes.push(`<span>${escapeHtml(aluno.telefone)}${link ? ` — <a href="${link}" target="_blank" rel="noopener">Chamar no WhatsApp</a>` : ""}</span>`);
   } else {
-    partes.push(`<span>📱 Telefone não informado pelo aluno</span>`);
+    partes.push(`<span>Telefone não informado pelo aluno</span>`);
   }
-  if (email) partes.push(`<span>✉️ ${escapeHtml(email)}</span>`);
+  if (email) partes.push(`<span>${escapeHtml(email)}</span>`);
   return `<div class="contato-aluno">${partes.join("")}</div>`;
 }
 
@@ -810,6 +840,139 @@ async function excluirRelatorio(alunoId, relatorioId) {
   }
 }
 
+// -------------------- ABA: SALA DE AULA --------------------
+// O professor deixa o link da aula online e os documentos usados em aula
+// (título + link). Cada documento tem um bloco de anotações que o aluno escreve
+// e o professor acompanha (só leitura), como o vocabulário.
+
+function montarAbaSalaDeAula(alunoId) {
+  const estado = estadoAlunos[alunoId];
+  // Só o que foi deixado por este professor (o aluno pode ter vindo de outro)
+  const link = estado.linkAula && estado.linkAula.professorId === professorIdAtual ? estado.linkAula.url : "";
+  const documentos = estado.documentosAula.filter((d) => d.professorId === professorIdAtual);
+
+  const blocoLink = `
+    <div class="sala-secao">
+      <h4>Link da aula</h4>
+      <p class="dica-plano">Meet, Zoom, Teams... O aluno entra na aula por este link.</p>
+      <div class="linha-sala">
+        <input type="text" inputmode="url" id="input-link-aula-${alunoId}" placeholder="https://meet.google.com/..." value="${escapeHtml(link)}">
+        <button class="btn btn-primario" onclick="salvarLinkAula('${alunoId}')">Salvar link</button>
+      </div>
+      ${link ? `
+        <div class="acoes-link-aula">
+          <a href="${escapeHtml(link)}" target="_blank" rel="noopener">Abrir a aula ↗</a>
+          <button class="excluir" onclick="removerLinkAula('${alunoId}')">Remover link</button>
+        </div>` : ""}
+    </div>`;
+
+  const lista = documentos.length === 0
+    ? `<p class="vazio">Nenhum documento adicionado ainda.</p>`
+    : documentos.map((d) => {
+        const aberto = estado.notasDocumentoAbertas.has(d.id);
+        const data = d.criadoEm ? d.criadoEm.toDate().toLocaleDateString("pt-BR") : "";
+        const nota = aberto ? `
+          <div class="bloco-notas-documento">
+            ${d.anotacao
+              ? `<span class="texto-nota-documento">${escapeHtml(d.anotacao)}</span>${d.anotacaoEm ? `<span class="data-msg">Atualizada em ${escapeHtml(d.anotacaoEm.toDate().toLocaleDateString("pt-BR"))}</span>` : ""}`
+              : `<span class="vazio-inline">O aluno ainda não fez anotações sobre este documento.</span>`}
+          </div>` : "";
+        return `
+          <div class="documento-aula">
+            <div class="acoes-msg">
+              <button class="excluir" onclick="removerDocumentoAula('${alunoId}','${d.id}')">Excluir</button>
+            </div>
+            <a class="titulo-documento" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${escapeHtml(d.titulo)}</a>
+            <span class="data-msg">${escapeHtml(data)}</span>
+            <button class="btn-notas-documento ${d.anotacao ? "tem-nota" : ""}" onclick="alternarNotasDocumentoProfessor('${alunoId}','${d.id}')">
+              ${aberto ? "Fechar anotações" : "Anotações do aluno"}${d.anotacao && !aberto ? " •" : ""}
+            </button>
+            ${nota}
+          </div>`;
+      }).join("");
+
+  const blocoDocumentos = `
+    <div class="sala-secao">
+      <h4>Documentos da aula</h4>
+      <p class="dica-plano">Cole o link do arquivo (Google Drive, Docs, PDF na internet...). Deixe o compartilhamento como "qualquer pessoa com o link".</p>
+      <div class="linha-sala">
+        <input type="text" id="input-titulo-documento-${alunoId}" placeholder="Título (ex: Lesson 3 — Past simple)">
+        <input type="text" inputmode="url" id="input-url-documento-${alunoId}" placeholder="https://drive.google.com/...">
+        <button class="btn btn-primario" onclick="adicionarDocumentoAula('${alunoId}')">Adicionar documento</button>
+      </div>
+      ${lista}
+    </div>`;
+
+  return blocoLink + blocoDocumentos;
+}
+
+async function salvarLinkAula(alunoId) {
+  const campo = document.getElementById(`input-link-aula-${alunoId}`);
+  const url = normalizarLink(campo ? campo.value : "");
+  if (!url) {
+    alert("Cole um link válido, começando com https:// (ex: https://meet.google.com/abc-defg-hij).");
+    return;
+  }
+  try {
+    await db.collection("usuarios").doc(alunoId).collection("salaDeAula").doc("link").set({
+      url, professorId: professorIdAtual, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível salvar o link. Tente novamente.");
+  }
+}
+
+async function removerLinkAula(alunoId) {
+  if (!confirm("Remover o link da aula? O aluno deixa de vê-lo.")) return;
+  try {
+    await db.collection("usuarios").doc(alunoId).collection("salaDeAula").doc("link").delete();
+    const campo = document.getElementById(`input-link-aula-${alunoId}`);
+    if (campo) campo.value = "";
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível remover o link. Tente novamente.");
+  }
+}
+
+async function adicionarDocumentoAula(alunoId) {
+  const campoTitulo = document.getElementById(`input-titulo-documento-${alunoId}`);
+  const campoUrl = document.getElementById(`input-url-documento-${alunoId}`);
+  const titulo = (campoTitulo ? campoTitulo.value : "").trim().slice(0, 200);
+  const url = normalizarLink(campoUrl ? campoUrl.value : "");
+  if (!titulo) { alert("Dê um título ao documento."); return; }
+  if (!url) { alert("Cole um link válido para o documento, começando com https://."); return; }
+  try {
+    await db.collection("usuarios").doc(alunoId).collection("documentosAula").add({
+      titulo, url, professorId: professorIdAtual, criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    // Busca os campos de novo: a tela pode ter sido redesenhada durante o "await"
+    const t = document.getElementById(`input-titulo-documento-${alunoId}`);
+    const u = document.getElementById(`input-url-documento-${alunoId}`);
+    if (t) t.value = "";
+    if (u) u.value = "";
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível adicionar o documento. Tente novamente.");
+  }
+}
+
+async function removerDocumentoAula(alunoId, documentoId) {
+  if (!confirm("Excluir esse documento? O aluno deixa de vê-lo, junto com as anotações dele sobre o documento.")) return;
+  try {
+    await db.collection("usuarios").doc(alunoId).collection("documentosAula").doc(documentoId).delete();
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível excluir o documento. Tente novamente.");
+  }
+}
+
+function alternarNotasDocumentoProfessor(alunoId, documentoId) {
+  const abertas = estadoAlunos[alunoId].notasDocumentoAbertas;
+  if (abertas.has(documentoId)) abertas.delete(documentoId); else abertas.add(documentoId);
+  renderizarListaAlunos();
+}
+
 // -------------------- CÓDIGO DO PROFESSOR --------------------
 
 async function copiarCodigo() {
@@ -836,6 +999,7 @@ function escutarAulasDoProfessor(uid) {
       aulasCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       renderizarListaAlunos();
       renderizarHojeProfessor();
+      renderizarAlunosSemApp();
     });
   // "em 25 min" e as aulas que já passaram mudam com o relógio, mesmo sem dado novo
   setInterval(renderizarHojeProfessor, 60 * 1000);
@@ -920,13 +1084,48 @@ function renderizarHojeProfessor() {
   });
 
   const pedidos = ordenar(aulasCache.filter((a) => a.status === "pendente"));
-  atualizarContadorPedidos(pedidos.length);
+  const lembretes = lembretesAlunosSemApp();
+  atualizarContadorPedidos(pedidos.length + atrasadas.length + lembretes.length);
 
   const aulasHoje = proximas.filter((a) => a.data === hojeIso && a.status === "agendada").length;
   const resumo = [`${aulasHoje} ${aulasHoje === 1 ? "aula hoje" : "aulas hoje"}`];
-  if (atrasadas.length) resumo.push(`${atrasadas.length} ${atrasadas.length === 1 ? "pendente" : "pendentes"}`);
+  if (atrasadas.length) resumo.push(`${atrasadas.length} para confirmar`);
 
   container.innerHTML = `
+    ${atrasadas.length ? `
+      <div class="cartao-pedidos-reposicao" id="confirmar-aulas">
+        <h3>${atrasadas.length === 1 ? "1 aula para confirmar" : `${atrasadas.length} aulas para confirmar`}</h3>
+        <p>A aula aconteceu? Se não foi realizada, o aluno ganha 1 reposição automaticamente.</p>
+        ${atrasadas.map((a) => `
+          <div class="cartao-aula">
+            <div class="aula-info">
+              <strong>${escapeHtml(a.alunoNome)}</strong>
+              <span>${escapeHtml(rotuloDiaPainel(a.data, hojeIso, amanhaIso))} · ${escapeHtml(a.horaInicio)}</span>
+              <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
+              ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
+              ${badgeIdiomaAula(a)}
+            </div>
+            <div class="aula-acoes">
+              <button class="btn btn-primario btn-mini" onclick="concluirAula('${a.id}')">Foi realizada</button>
+              <button class="btn btn-secundario btn-mini" onclick="marcarAulaNaoRealizada('${a.id}')">Não foi realizada</button>
+            </div>
+          </div>`).join("")}
+      </div>` : ""}
+    ${lembretes.length ? `
+      <div class="cartao-pedidos-reposicao" id="lembretes-sem-app">
+        <h3>Marque as aulas dos alunos sem app</h3>
+        <p>Esse aviso aparece todo dia até a aula ser marcada.</p>
+        ${lembretes.map((l) => `
+          <div class="cartao-aula">
+            <div class="aula-info">
+              <strong>${escapeHtml(l.aluno.nome)}</strong>
+              <span>${escapeHtml(l.motivo)}</span>
+            </div>
+            <div class="aula-acoes">
+              <button class="btn btn-primario btn-mini" onclick="abrirMarcarAula('${l.aluno.id}')">Marcar aula</button>
+            </div>
+          </div>`).join("")}
+      </div>` : ""}
     ${pedidos.length ? `
       <div class="cartao-pedidos-reposicao" id="pedidos-reposicao">
         <h3>🔔 ${pedidos.length === 1 ? "1 pedido de reposição" : `${pedidos.length} pedidos de reposição`} para aprovar</h3>
@@ -956,11 +1155,6 @@ function renderizarHojeProfessor() {
         <h3>Aulas dos próximos ${DIAS_PAINEL_HOJE} dias</h3>
         <span>${resumo.join(" · ")}</span>
       </div>
-      ${atrasadas.length ? `
-        <div class="grupo-dia-aulas">
-          <div class="titulo-grupo-dia atrasadas">Pendentes — já passaram e não foram concluídas</div>
-          ${atrasadas.map((a) => linhaAulaPainel(a, true)).join("")}
-        </div>` : ""}
       ${grupos.length ? grupos.map((g) => `
         <div class="grupo-dia-aulas">
           <div class="titulo-grupo-dia">${rotuloDiaPainel(g.data, hojeIso, amanhaIso)}</div>
@@ -969,14 +1163,15 @@ function renderizarHojeProfessor() {
     </div>`;
 }
 
-// Contador de pedidos pendentes na aba "Agenda" e no ícone da barra lateral
+// Contador de avisos na aba "Agenda" e no ícone da barra lateral: pedidos de
+// reposição, aulas para confirmar e alunos sem app esperando aula
 function atualizarContadorPedidos(qtd) {
   const aba = document.getElementById("btn-aba-agenda");
-  if (aba) aba.innerHTML = `Agenda${qtd ? ` <span class="contador-pedidos" title="Pedidos de reposição">${qtd}</span>` : ""}`;
+  if (aba) aba.innerHTML = `Agenda${qtd ? ` <span class="contador-pedidos" title="Avisos da agenda">${qtd}</span>` : ""}`;
   const lateral = document.getElementById("navlat-agenda");
   if (lateral) {
     lateral.innerHTML = `📅${qtd ? `<span class="contador-pedidos contador-lateral">${qtd}</span>` : ""}`;
-    lateral.title = qtd ? `Agenda — ${qtd} pedido(s) de reposição` : "Agenda";
+    lateral.title = qtd ? `Agenda — ${qtd} aviso(s)` : "Agenda";
   }
 }
 
@@ -1028,6 +1223,78 @@ async function recusarPedidoReposicao(aulaId) {
   } catch (e) {
     console.error(e);
     alert("Não foi possível recusar o pedido agora. Tente novamente.");
+  }
+}
+
+// -------------------- AULA NÃO REALIZADA --------------------
+// A aula passou e não aconteceu: vira "nao-realizada" (não conta no plano) e o
+// aluno ganha 1 reposição. Se ela já era uma reposição, o crédito usado volta
+// sozinho (aula não realizada não conta como reposição usada); senão, o
+// professor concede +1. O aluno do app é avisado no sino.
+
+// Créditos de reposição de um aluno do app ou sem app: {concedidas, saldo}
+function creditosDoAluno(alunoId) {
+  const aulas = aulasCache.filter((a) => a.alunoId === alunoId);
+  const usadas = reposicoesUsadas(aulas, professorIdAtual);
+  const semApp = alunosSemAppCache.find((a) => a.id === alunoId);
+  const aluno = alunosCache.find((a) => a.id === alunoId);
+  const concedidas = semApp ? (semApp.reposicoesConcedidas || 0)
+    : aluno ? planoDoAluno(aluno, professorIdAtual).reposicoesConcedidas : 0;
+  return { concedidas, usadas, saldo: Math.max(0, concedidas - usadas) };
+}
+
+// Grava um novo total de reposições concedidas no lote (perfil do aluno ou cadastro sem app)
+function gravarReposicoesConcedidas(lote, alunoId, total) {
+  const semApp = alunosSemAppCache.find((a) => a.id === alunoId);
+  if (semApp) {
+    lote.update(db.collection("usuarios").doc(professorIdAtual).collection("alunosSemApp").doc(alunoId),
+      { reposicoesConcedidas: Math.max(0, total) });
+    return;
+  }
+  const aluno = alunosCache.find((a) => a.id === alunoId);
+  if (!aluno) return;
+  const plano = planoDoAluno(aluno, professorIdAtual);
+  lote.update(db.collection("usuarios").doc(alunoId), {
+    plano: { professorId: professorIdAtual, ...plano, reposicoesConcedidas: Math.max(0, total) }
+  });
+}
+
+async function marcarAulaNaoRealizada(aulaId) {
+  const aula = aulasCache.find((a) => a.id === aulaId);
+  if (!aula) return;
+  if (!confirm(`A aula de ${aula.alunoNome} (${descricaoAula(aula)}) não foi realizada?\n\nO aluno ganha 1 reposição para marcar outra aula.`)) return;
+  const lote = db.batch();
+  const gerarCredito = !aula.reposicao;
+  lote.update(db.collection("aulas").doc(aulaId), { status: "nao-realizada", reposicaoGerada: gerarCredito });
+  if (gerarCredito) gravarReposicoesConcedidas(lote, aula.alunoId, creditosDoAluno(aula.alunoId).concedidas + 1);
+  if (alunosCache.some((a) => a.id === aula.alunoId)) {
+    lote.set(db.collection("usuarios").doc(aula.alunoId).collection("notificacoes").doc(),
+      notificacaoParaAluno("aula-nao-realizada", `A aula de ${descricaoAula(aula)} não foi realizada. Você ganhou 1 reposição para marcar outra aula.`));
+  }
+  try {
+    await lote.commit();
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível registrar agora. Tente novamente.");
+  }
+}
+
+// Volta a aula para "agendada" (de novo em "aulas para confirmar") e tira o
+// crédito que ela tinha gerado, se ainda não foi usado
+async function desfazerAulaNaoRealizada(aulaId) {
+  const aula = aulasCache.find((a) => a.id === aulaId);
+  if (!aula) return;
+  const lote = db.batch();
+  lote.update(db.collection("aulas").doc(aulaId), { status: "agendada", reposicaoGerada: firebase.firestore.FieldValue.delete() });
+  if (aula.reposicaoGerada) {
+    const { concedidas, usadas } = creditosDoAluno(aula.alunoId);
+    gravarReposicoesConcedidas(lote, aula.alunoId, Math.max(usadas, concedidas - 1));
+  }
+  try {
+    await lote.commit();
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível desfazer agora. Tente novamente em instantes.");
   }
 }
 
@@ -1352,6 +1619,7 @@ function legendaStatusAula(status) {
   if (status === "cancelada") return "Cancelada";
   if (status === "pendente") return "Aguardando aprovação";
   if (status === "recusada") return "Reposição recusada";
+  if (status === "nao-realizada") return "Não realizada";
   return "Agendada";
 }
 
@@ -1366,6 +1634,10 @@ function acoesAulaHtml(a) {
         <div class="aula-acoes">
           <button class="btn btn-primario btn-mini" onclick="aprovarPedidoReposicao('${a.id}')">Aprovar</button>
           <button class="excluir" onclick="recusarPedidoReposicao('${a.id}')">Recusar</button>
+        </div>`;
+  if (a.status === "nao-realizada") return `
+        <div class="aula-acoes">
+          <button class="btn btn-secundario btn-mini" onclick="desfazerAulaNaoRealizada('${a.id}')">Desfazer</button>
         </div>`;
   return "";
 }
@@ -1517,7 +1789,10 @@ function renderizarDetalheDiaProfessor() {
   if (mudouDeDia) {
     container.innerHTML = `
       <div class="detalhe-dia-professor-conteudo">
-        <h3 id="titulo-dia-professor" style="font-size:0.95rem;"></h3>
+        <div class="cabecalho-dia-professor">
+          <h3 id="titulo-dia-professor" style="font-size:0.95rem;"></h3>
+          <button class="btn btn-secundario btn-mini" onclick="abrirMarcarAula('', diaSelecionadoProfessor)">Marcar aula neste dia</button>
+        </div>
         <div id="lista-aulas-dia-professor"></div>
         <div id="anotacoes-dia-wrap"></div>
         <div id="editor-dia-professor-wrap"></div>
@@ -1832,4 +2107,205 @@ function montarAbaAulas(alunoId) {
       ${acoesAulaHtml(a)}
     </div>
   `).join("");
+}
+
+// -------------------- ALUNOS SEM APP --------------------
+// Para quem não consegue usar o app: o professor cadastra o aluno (nome e
+// WhatsApp) e marca as aulas por ele. Enquanto o aluno estiver sem aula marcada
+// (ou com reposição para usar), a agenda mostra um lembrete — todo dia, até a
+// aula ser marcada.
+
+function escutarAlunosSemApp(uid) {
+  db.collection("usuarios").doc(uid).collection("alunosSemApp").orderBy("nome")
+    .onSnapshot((snap) => {
+      alunosSemAppCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderizarAlunosSemApp();
+      renderizarHojeProfessor();
+    }, (erro) => console.warn("Não foi possível carregar os alunos sem app:", erro));
+}
+
+// Próxima aula marcada (ainda por acontecer) de um aluno, ou null
+function proximaAulaDoAluno(alunoId) {
+  const agora = new Date();
+  return aulasCache
+    .filter((a) => a.alunoId === alunoId && a.status === "agendada" && fimDaAula(a) > agora)
+    .sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio))[0] || null;
+}
+
+function lembretesAlunosSemApp() {
+  return alunosSemAppCache.map((aluno) => {
+    const { saldo } = creditosDoAluno(aluno.id);
+    const motivos = [];
+    if (!proximaAulaDoAluno(aluno.id)) motivos.push("nenhuma aula marcada");
+    if (saldo > 0) motivos.push(saldo === 1 ? "1 reposição para marcar" : `${saldo} reposições para marcar`);
+    return motivos.length ? { aluno, motivo: motivos.join(" · ") } : null;
+  }).filter(Boolean);
+}
+
+function renderizarAlunosSemApp() {
+  const lista = document.getElementById("lista-alunos-sem-app");
+  if (!lista) return;
+  if (alunosSemAppCache.length === 0) {
+    lista.innerHTML = `<p class="vazio">Nenhum aluno sem app cadastrado.</p>`;
+    return;
+  }
+  lista.innerHTML = alunosSemAppCache.map((aluno) => {
+    const proxima = proximaAulaDoAluno(aluno.id);
+    const { saldo } = creditosDoAluno(aluno.id);
+    const link = aluno.telefone ? linkWhatsapp(aluno.telefone, `Olá ${aluno.nome}! Tudo bem?`) : "";
+    return `
+      <div class="cartao-aluno-sem-app">
+        <div class="aula-info">
+          <strong>${escapeHtml(aluno.nome)}</strong>
+          ${aluno.telefone ? `<span>${escapeHtml(aluno.telefone)}${link ? ` — <a href="${link}" target="_blank" rel="noopener">WhatsApp</a>` : ""}</span>` : ""}
+          <span class="${proxima ? "" : "aviso-pedido"}">${proxima ? `Próxima aula: ${formatarDataBR(proxima.data)} às ${escapeHtml(proxima.horaInicio)}` : "Nenhuma aula marcada"}</span>
+        </div>
+        <div class="campo-plano">
+          <span>Reposições disponíveis</span>
+          <div class="contador-reposicoes">
+            <button type="button" class="btn-contador" aria-label="Tirar 1 reposição" onclick="ajustarReposicoesSemApp('${aluno.id}', -1)" ${saldo === 0 ? "disabled" : ""}>−</button>
+            <strong class="saldo-reposicoes">${saldo}</strong>
+            <button type="button" class="btn-contador" aria-label="Dar 1 reposição" onclick="ajustarReposicoesSemApp('${aluno.id}', 1)">+</button>
+          </div>
+        </div>
+        <div class="aula-acoes">
+          <button class="btn btn-primario btn-mini" onclick="abrirMarcarAula('${aluno.id}')">Marcar aula</button>
+          <button class="excluir" onclick="removerAlunoSemApp('${aluno.id}')">Remover</button>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+async function adicionarAlunoSemApp() {
+  const nome = document.getElementById("input-nome-sem-app").value.trim().slice(0, 100);
+  const telefone = document.getElementById("input-telefone-sem-app").value.trim().slice(0, 30);
+  if (!nome) { alert("Digite o nome do aluno."); return; }
+  try {
+    await db.collection("usuarios").doc(professorIdAtual).collection("alunosSemApp").add({
+      nome, telefone, reposicoesConcedidas: 0, criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    document.getElementById("input-nome-sem-app").value = "";
+    document.getElementById("input-telefone-sem-app").value = "";
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível cadastrar o aluno. Tente novamente.");
+  }
+}
+
+async function ajustarReposicoesSemApp(alunoId, delta) {
+  const { usadas, saldo } = creditosDoAluno(alunoId);
+  const novoSaldo = Math.max(0, saldo + delta);
+  if (novoSaldo === saldo) return;
+  const lote = db.batch();
+  gravarReposicoesConcedidas(lote, alunoId, usadas + novoSaldo);
+  try {
+    await lote.commit();
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível salvar as reposições. Tente novamente.");
+  }
+}
+
+// Remove o cadastro e cancela as próximas aulas dele (o horário volta a ficar livre)
+async function removerAlunoSemApp(alunoId) {
+  const aluno = alunosSemAppCache.find((a) => a.id === alunoId);
+  if (!aluno) return;
+  if (!confirm(`Remover ${aluno.nome}? As próximas aulas marcadas para ele(a) são canceladas.`)) return;
+  const agora = new Date();
+  const lote = db.batch();
+  aulasCache
+    .filter((a) => a.alunoId === alunoId && a.status === "agendada" && fimDaAula(a) > agora)
+    .forEach((a) => lote.update(db.collection("aulas").doc(a.id), { status: "cancelada", canceladoPor: "professor" }));
+  lote.delete(db.collection("usuarios").doc(professorIdAtual).collection("alunosSemApp").doc(alunoId));
+  try {
+    await lote.commit();
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível remover o aluno. Tente novamente.");
+  }
+}
+
+// -------------------- MARCAR AULA PELO PROFESSOR --------------------
+// Para qualquer aluno: os do app e os sem app. O professor escolhe dia, horário e
+// modalidade livremente (pode até ser fora da disponibilidade configurada); só não
+// deixa encavalar com outra aula já marcada.
+
+function abrirMarcarAula(alunoId, dataIso) {
+  const seletor = document.getElementById("marcar-aluno");
+  const opcao = (a) => `<option value="${a.id}" ${a.id === alunoId ? "selected" : ""}>${escapeHtml(a.nome)}</option>`;
+  seletor.innerHTML = `<option value="">Escolha o aluno</option>` +
+    (alunosCache.length ? `<optgroup label="Alunos do app">${alunosCache.map(opcao).join("")}</optgroup>` : "") +
+    (alunosSemAppCache.length ? `<optgroup label="Alunos sem app">${alunosSemAppCache.map(opcao).join("")}</optgroup>` : "");
+
+  const campoData = document.getElementById("marcar-data");
+  campoData.min = dataDeHojeISO();
+  campoData.value = dataIso || dataDeHojeISO();
+  document.getElementById("marcar-hora").value = "";
+
+  const modalidades = (configAgendaAtual && configAgendaAtual.modalidades && configAgendaAtual.modalidades.length)
+    ? configAgendaAtual.modalidades : ["online", "presencial"];
+  document.getElementById("marcar-modalidade").innerHTML = ["online", "presencial"]
+    .map((m) => `<option value="${m}" ${m === modalidades[0] ? "selected" : ""}>${legendaModalidade(m)}</option>`).join("");
+
+  const campoIdioma = document.getElementById("marcar-idioma");
+  campoIdioma.innerHTML = idiomasAtuaisProfessor.map((id) => `<option value="${id}">${IDIOMAS[id].nome}</option>`).join("");
+  document.getElementById("marcar-idioma-wrap").hidden = idiomasAtuaisProfessor.length < 2;
+
+  document.getElementById("status-marcar-aula").textContent = "";
+  atualizarReposicaoMarcarAula();
+  document.getElementById("modal-marcar-aula").classList.remove("modal-oculto");
+}
+
+function fecharMarcarAula() {
+  document.getElementById("modal-marcar-aula").classList.add("modal-oculto");
+}
+
+// A opção "reposição" só aparece se o aluno escolhido tem crédito
+function atualizarReposicaoMarcarAula() {
+  const alunoId = document.getElementById("marcar-aluno").value;
+  const { saldo } = alunoId ? creditosDoAluno(alunoId) : { saldo: 0 };
+  const wrap = document.getElementById("marcar-reposicao-wrap");
+  const chk = document.getElementById("marcar-reposicao");
+  wrap.hidden = saldo === 0;
+  chk.checked = saldo > 0 && alunosSemAppCache.some((a) => a.id === alunoId) && !proximaAulaDoAluno(alunoId);
+  document.getElementById("marcar-reposicao-saldo").textContent = saldo === 1 ? "1 disponível" : `${saldo} disponíveis`;
+}
+
+async function confirmarMarcarAula() {
+  const status = document.getElementById("status-marcar-aula");
+  const alunoId = document.getElementById("marcar-aluno").value;
+  const data = document.getElementById("marcar-data").value;
+  const hora = document.getElementById("marcar-hora").value;
+  const modalidade = document.getElementById("marcar-modalidade").value;
+  const idioma = document.getElementById("marcar-idioma").value;
+  const reposicao = !document.getElementById("marcar-reposicao-wrap").hidden && document.getElementById("marcar-reposicao").checked;
+  const aluno = alunosCache.find((a) => a.id === alunoId) || alunosSemAppCache.find((a) => a.id === alunoId);
+
+  if (!aluno) { status.textContent = "Escolha o aluno."; return; }
+  if (!data || !hora) { status.textContent = "Escolha o dia e o horário."; return; }
+  const duracao = (configAgendaAtual && configAgendaAtual.duracaoAulaMinutos) || DURACAO_PADRAO_MINUTOS;
+  const horaFim = somarMinutos(hora, duracao);
+  if (new Date(`${data}T${hora}:00`) < new Date()) { status.textContent = "Esse horário já passou."; return; }
+
+  const inicio = minutosDoHorario(hora), fim = inicio + duracao;
+  const choque = aulasCache.find((a) => a.data === data && ["agendada", "pendente", "concluida"].includes(a.status) &&
+    minutosDoHorario(a.horaInicio) < fim && minutosDoHorario(a.horaFim || somarMinutos(a.horaInicio, duracao)) > inicio);
+  if (choque) {
+    status.textContent = `Esse horário bate com a aula de ${choque.alunoNome} às ${choque.horaInicio}.`;
+    return;
+  }
+
+  status.textContent = "Marcando...";
+  try {
+    await agendarAula(professorIdAtual, data, hora, horaFim, modalidade, aluno.id, aluno.nome, reposicao, idioma, "agendada");
+    if (alunosCache.some((a) => a.id === aluno.id)) {
+      db.collection("usuarios").doc(aluno.id).collection("notificacoes")
+        .add(notificacaoParaAluno("aula-marcada", `Seu professor marcou ${reposicao ? "uma reposição" : "uma aula"} para você: ${formatarDataBR(data)} às ${hora}.`))
+        .catch((e) => console.warn("Não foi possível avisar o aluno da aula marcada:", e));
+    }
+    fecharMarcarAula();
+  } catch (e) {
+    console.error(e);
+    status.textContent = e.message && /reservado/.test(e.message) ? e.message : "Não foi possível marcar a aula. Tente novamente.";
+  }
 }

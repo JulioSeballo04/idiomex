@@ -32,6 +32,7 @@ auth.onAuthStateChanged(async (user) => {
   escutarPalavras(user.uid);
   escutarMinhasAulas(user.uid);
   escutarNotificacoes(user.uid);
+  escutarSalaDeAula(user.uid);
 });
 
 // -------------------- NOTIFICAÇÕES --------------------
@@ -49,7 +50,8 @@ function escutarNotificacoes(uid) {
     }, (e) => console.warn("Não foi possível carregar as notificações:", e));
 }
 
-const ICONES_NOTIFICACAO = { "credito-reposicao": "🎟️", "reposicao-aprovada": "✅", "reposicao-recusada": "❌" };
+const ICONES_NOTIFICACAO = { "credito-reposicao": "🎟️", "reposicao-aprovada": "✅", "reposicao-recusada": "❌",
+  "aula-nao-realizada": "🎟️", "aula-marcada": "📅" };
 
 function renderizarNotificacoes() {
   const naoLidas = notificacoesCache.filter((n) => !n.lida).length;
@@ -822,6 +824,110 @@ function carregarMensagensDoProfessor(uid) {
     });
 }
 
+// -------------------- SALA DE AULA --------------------
+// O professor deixa o link da aula online e os documentos usados em aula. Cada
+// documento tem um bloco de anotações do aluno, que o professor também vê.
+
+let linkAulaCache = null; // {url, professorId} ou null
+let documentosAulaCache = [];
+let notasDocumentoAbertas = new Set(); // ids dos documentos com o bloco de anotações aberto
+const statusNotasDocumento = {}; // {id: "Anotações salvas."} — sobrevive aos re-renders em tempo real
+
+function escutarSalaDeAula(uid) {
+  const ref = db.collection("usuarios").doc(uid);
+  ref.collection("salaDeAula").doc("link").onSnapshot((snap) => {
+    linkAulaCache = snap.exists ? snap.data() : null;
+    renderizarSalaDeAula();
+  });
+  ref.collection("documentosAula").orderBy("criadoEm", "desc").onSnapshot((snap) => {
+    documentosAulaCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderizarSalaDeAula();
+  });
+}
+
+// Só o que foi deixado pelo professor atual (o aluno pode ter trocado de professor)
+function documentosDaSala() {
+  return documentosAulaCache.filter((d) => d.professorId === professorIdDoAluno);
+}
+
+function abrirSalaDeAula() {
+  document.getElementById("modal-sala-aula").classList.remove("modal-oculto");
+  renderizarSalaDeAula();
+}
+
+function fecharSalaDeAula() {
+  document.getElementById("modal-sala-aula").classList.add("modal-oculto");
+}
+
+function renderizarSalaDeAula() {
+  const corpo = document.getElementById("corpo-sala-aula");
+  if (!corpo) return;
+  redesenharPreservandoCampos(corpo, () => desenharSalaDeAula(corpo));
+}
+
+function desenharSalaDeAula(corpo) {
+  const link = linkAulaCache && linkAulaCache.professorId === professorIdDoAluno ? linkAulaCache.url : "";
+  const blocoLink = link
+    ? `<a class="btn btn-primario btn-entrar-aula" href="${escapeHtml(link)}" target="_blank" rel="noopener">Entrar na aula</a>`
+    : `<p class="vazio">Seu professor ainda não deixou o link da aula.</p>`;
+
+  const documentos = documentosDaSala();
+  const lista = documentos.length === 0
+    ? `<p class="vazio">Nenhum documento ainda. Os materiais que o professor usar em aula aparecem aqui.</p>`
+    : documentos.map((d) => {
+        const aberto = notasDocumentoAbertas.has(d.id);
+        const nota = aberto ? `
+          <div class="bloco-notas-documento">
+            <textarea id="nota-documento-${d.id}" placeholder="Suas anotações sobre este documento — o professor também vê.">${escapeHtml(d.anotacao || "")}</textarea>
+            <div class="acoes-edicao-nota">
+              <button class="btn btn-primario" onclick="salvarNotaDocumento('${d.id}')">Salvar anotações</button>
+            </div>
+            <p class="status-msg" id="status-nota-documento-${d.id}">${escapeHtml(statusNotasDocumento[d.id] || "")}</p>
+          </div>` : "";
+        return `
+          <div class="documento-aula">
+            <a class="titulo-documento" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${escapeHtml(d.titulo)}</a>
+            <button class="btn-notas-documento ${d.anotacao ? "tem-nota" : ""}" onclick="alternarNotasDocumento('${d.id}')">
+              ${aberto ? "Fechar anotações" : d.anotacao ? "Ver anotações" : "Fazer anotações"}
+            </button>
+            ${nota}
+          </div>`;
+      }).join("");
+
+  corpo.innerHTML = `
+    <div class="sala-secao">
+      <h4>Aula online</h4>
+      ${blocoLink}
+    </div>
+    <div class="sala-secao">
+      <h4>Documentos da aula</h4>
+      ${lista}
+    </div>`;
+}
+
+function alternarNotasDocumento(id) {
+  if (notasDocumentoAbertas.has(id)) notasDocumentoAbertas.delete(id); else notasDocumentoAbertas.add(id);
+  delete statusNotasDocumento[id];
+  renderizarSalaDeAula();
+}
+
+async function salvarNotaDocumento(id) {
+  const user = auth.currentUser;
+  const campo = document.getElementById(`nota-documento-${id}`);
+  if (!user || !campo) return;
+  const texto = campo.value.trim().slice(0, 5000);
+  const avisar = (msg) => { statusNotasDocumento[id] = msg; renderizarSalaDeAula(); };
+  try {
+    await db.collection("usuarios").doc(user.uid).collection("documentosAula").doc(id).update(texto
+      ? { anotacao: texto, anotacaoEm: firebase.firestore.FieldValue.serverTimestamp() }
+      : { anotacao: firebase.firestore.FieldValue.delete(), anotacaoEm: firebase.firestore.FieldValue.delete() });
+    avisar("Anotações salvas.");
+  } catch (e) {
+    console.error(e);
+    avisar("Não foi possível salvar. Tente novamente — o texto continua no campo.");
+  }
+}
+
 // -------------------- AGENDAMENTO DE AULAS --------------------
 
 let configAgendaProfessor = null;
@@ -1495,28 +1601,4 @@ async function confirmarAgendamento() {
   agendamento.salvando = false;
   agendamento.confirmada = { data, hora, modalidade, reposicao, idioma, pedido, linkWhatsapp: linkConfirmacao };
   renderizarAgendamento();
-}
-
-// Usa uma transação: o ID do documento é determinístico ("professor_data_hora"), então
-// duas tentativas simultâneas de marcar o MESMO horário disputam o mesmo documento — a
-// segunda falha com um erro claro, em vez de sobrescrever silenciosamente a primeira.
-async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, alunoId, alunoNome, reposicao, idioma, status) {
-  const aulaId = `${professorId}_${data}_${horaInicio.replace(":", "")}`;
-  const ref = db.collection("aulas").doc(aulaId);
-
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    // Horário cancelado ou com pedido de reposição recusado volta a ficar livre
-    if (snap.exists && !["cancelada", "recusada"].includes(snap.data().status)) {
-      throw new Error("Esse horário acabou de ser reservado por outro aluno. Escolha outro.");
-    }
-    tx.set(ref, {
-      professorId, alunoId, alunoNome,
-      data, horaInicio, horaFim, modalidade,
-      reposicao: !!reposicao,
-      idioma: idiomaValido(idioma),
-      status: status === "pendente" ? "pendente" : "agendada",
-      criadoEm: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  });
 }

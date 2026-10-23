@@ -63,6 +63,16 @@ service cloud.firestore {
         plano.reposicoesConcedidas is int && plano.reposicoesConcedidas >= 0 && plano.reposicoesConcedidas <= 1000;
     }
 
+    // Links da sala de aula (aula online e documentos): só http(s) — impede um
+    // "javascript:..." que rodaria código ao ser clicado.
+    function linkValido(url) {
+      return url is string && url.size() <= 2000 && url.matches('https?://[^\\s]+');
+    }
+
+    function tituloDocumentoValido(titulo) {
+      return titulo is string && titulo.size() > 0 && titulo.size() <= 200;
+    }
+
     match /usuarios/{userId} {
       // Leitura: o próprio dono, o professor vinculado a esse aluno, ou o aluno
       // vinculado a esse professor (o aluno lê o perfil do professor pra saber quais
@@ -155,6 +165,48 @@ service cloud.firestore {
         allow write: if request.auth != null && request.auth.uid == userId;
       }
 
+      // Sala de aula: o link da aula online (doc "link"), deixado pelo professor
+      // vinculado. O aluno só lê (e apaga, ao excluir a própria conta).
+      match /salaDeAula/{docId} {
+        allow read: if request.auth != null &&
+          (request.auth.uid == userId || ehProfessorDoAluno(userId));
+        allow create, update: if request.auth != null && docId == "link" &&
+          ehProfessorDoAluno(userId) &&
+          request.resource.data.keys().hasOnly(["url", "professorId", "atualizadoEm"]) &&
+          linkValido(request.resource.data.url) &&
+          request.resource.data.professorId == request.auth.uid;
+        allow delete: if request.auth != null &&
+          (request.auth.uid == userId || ehProfessorDoAluno(userId));
+      }
+
+      // Documentos usados em aula (título + link), adicionados pelo professor
+      // vinculado. Cada documento tem um bloco de anotações do aluno sobre ele
+      // ("anotacao"): o aluno escreve, o professor só lê — como o vocabulário.
+      // O professor não mexe na anotação; o aluno não mexe no documento.
+      match /documentosAula/{documentoId} {
+        allow read: if request.auth != null &&
+          (request.auth.uid == userId || ehProfessorDoAluno(userId));
+        allow create: if request.auth != null && ehProfessorDoAluno(userId) &&
+          request.resource.data.keys().hasOnly(["titulo", "url", "professorId", "criadoEm"]) &&
+          tituloDocumentoValido(request.resource.data.titulo) &&
+          linkValido(request.resource.data.url) &&
+          request.resource.data.professorId == request.auth.uid;
+        allow update: if request.auth != null && (
+          (ehProfessorDoAluno(userId) &&
+            resource.data.professorId == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["titulo", "url"]) &&
+            tituloDocumentoValido(request.resource.data.titulo) &&
+            linkValido(request.resource.data.url)) ||
+
+          (request.auth.uid == userId &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["anotacao", "anotacaoEm"]) &&
+            request.resource.data.get('anotacao', '') is string &&
+            request.resource.data.get('anotacao', '').size() <= 5000)
+        );
+        allow delete: if request.auth != null &&
+          (request.auth.uid == userId || ehProfessorDoAluno(userId));
+      }
+
       // Relatório de aulas: o "diário de bordo" do professor sobre o que foi trabalhado
       // em cada aula. É registro do professor, não do aluno — só ele lê e escreve.
       match /relatorios/{relatorioId} {
@@ -170,7 +222,8 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lida"]);
         allow create: if request.auth != null && ehProfessorDoAluno(userId) &&
           request.resource.data.keys().hasOnly(["tipo", "texto", "criadoEm", "lida", "professorId"]) &&
-          request.resource.data.tipo in ["credito-reposicao", "reposicao-aprovada", "reposicao-recusada"] &&
+          request.resource.data.tipo in ["credito-reposicao", "reposicao-aprovada", "reposicao-recusada",
+            "aula-nao-realizada", "aula-marcada"] &&
           request.resource.data.texto is string && request.resource.data.texto.size() <= 300 &&
           request.resource.data.lida == false &&
           request.resource.data.professorId == request.auth.uid;
@@ -200,6 +253,19 @@ service cloud.firestore {
         allow write: if request.auth != null && request.auth.uid == userId;
       }
 
+      // Alunos sem app: cadastrados pelo próprio professor (nome, telefone e créditos de
+      // reposição), pra ele marcar as aulas de quem não consegue usar o app. Só o
+      // professor lê e escreve.
+      match /alunosSemApp/{alunoSemAppId} {
+        allow read, delete: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null && request.auth.uid == userId &&
+          request.resource.data.keys().hasOnly(["nome", "telefone", "reposicoesConcedidas", "criadoEm"]) &&
+          request.resource.data.nome is string && request.resource.data.nome.size() > 0 &&
+          request.resource.data.nome.size() <= 100 &&
+          request.resource.data.reposicoesConcedidas is int &&
+          request.resource.data.reposicoesConcedidas >= 0 && request.resource.data.reposicoesConcedidas <= 1000;
+      }
+
       // Anotações privadas do professor sobre dias e aulas da agenda (calendário
       // de anotações). Só o próprio professor lê e escreve — nem o aluno vê.
       match /anotacoesAgenda/{notaId} {
@@ -220,6 +286,16 @@ service cloud.firestore {
     // (vira "agendada") ou recusar (vira "recusada"). O pedido já reserva o horário.
     function statusNovoValido(d) {
       return d.status == "agendada" || (d.status == "pendente" && d.reposicao == true);
+    }
+
+    // Aula marcada pelo próprio professor: pra um aluno vinculado a ele ou pra um
+    // aluno sem app cadastrado por ele.
+    function aulaMarcadaPeloProfessorValida(d) {
+      return d.professorId == request.auth.uid &&
+        d.status == "agendada" &&
+        d.modalidade in ["online", "presencial"] &&
+        (ehProfessorDoAluno(d.alunoId) ||
+          exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)/alunosSemApp/$(d.alunoId)));
     }
 
     match /aulas/{aulaId} {
@@ -250,17 +326,21 @@ service cloud.firestore {
 
       // Criação (primeira marcação daquele horário): só o próprio aluno, e só com o
       // professor ao qual ele está vinculado — impede marcar aula com outro professor.
-      allow create: if request.auth != null &&
-        request.resource.data.alunoId == request.auth.uid &&
-        statusNovoValido(request.resource.data) &&
-        request.resource.data.modalidade in ["online", "presencial"] &&
-        souAlunoDesteProfessor(request.resource.data.professorId);
+      // O professor também cria aulas, pros alunos dele (inclusive os sem app).
+      allow create: if request.auth != null && (
+        (request.resource.data.alunoId == request.auth.uid &&
+          statusNovoValido(request.resource.data) &&
+          request.resource.data.modalidade in ["online", "presencial"] &&
+          souAlunoDesteProfessor(request.resource.data.professorId)) ||
+        aulaMarcadaPeloProfessorValida(request.resource.data)
+      );
 
-      // Atualização — três situações permitidas:
-      // 1) o professor muda o status (cancelar/concluir), sem alterar quem/quando é a aula;
+      // Atualização — quatro situações permitidas:
+      // 1) o professor muda o status (cancelar/concluir/não realizada), sem alterar quem/quando é a aula;
       // 2) o próprio aluno cancela a aula que é dele, sem mudar mais nada;
       // 3) reaproveitar um horário cancelado: outro aluno vinculado ao MESMO professor pode
-      //    "reocupar" aquele exato horário, virando o novo dono da aula.
+      //    "reocupar" aquele exato horário, virando o novo dono da aula;
+      // 4) o professor reaproveita um horário cancelado dele, marcando ali a aula de um aluno.
       allow update: if request.auth != null && (
         (request.auth.uid == resource.data.professorId &&
           request.resource.data.professorId == resource.data.professorId &&
@@ -283,7 +363,13 @@ service cloud.firestore {
           request.resource.data.professorId == resource.data.professorId &&
           request.resource.data.data == resource.data.data &&
           request.resource.data.horaInicio == resource.data.horaInicio &&
-          souAlunoDesteProfessor(resource.data.professorId))
+          souAlunoDesteProfessor(resource.data.professorId)) ||
+
+        (resource.data.status in ["cancelada", "recusada"] &&
+          resource.data.professorId == request.auth.uid &&
+          aulaMarcadaPeloProfessorValida(request.resource.data) &&
+          request.resource.data.data == resource.data.data &&
+          request.resource.data.horaInicio == resource.data.horaInicio)
       );
 
       // Sem "delete": cancelamento é só uma troca de status, mantendo o histórico da aula.

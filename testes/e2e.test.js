@@ -271,6 +271,37 @@ function dataDaqui(dias) {
     esperar(prof.ultimoDialogo, 'excluiu sem perguntar');
   });
 
+  console.log('\nSala de aula');
+  await caso('professor deixa link e documento; aluno anota e o professor lê a anotação', async () => {
+    await prof.click('.aba-detalhe:has-text("Sala de aula")');
+    await prof.fill('input[id^="input-link-aula-"]', 'meet.google.com/abc-defg-hij');
+    await prof.click('button:has-text("Salvar link")');
+    await prof.waitForSelector('.acoes-link-aula a[href="https://meet.google.com/abc-defg-hij"]', { timeout: 5000 });
+    await prof.fill('input[id^="input-titulo-documento-"]', 'Lesson 1');
+    await prof.fill('input[id^="input-url-documento-"]', 'https://drive.google.com/file/d/abc');
+    await prof.click('button:has-text("Adicionar documento")');
+    await prof.waitForSelector('.documento-aula:has-text("Lesson 1")', { timeout: 5000 });
+
+    await aluno.click('#btn-sala-aula');
+    await aluno.waitForSelector('#corpo-sala-aula a[href="https://meet.google.com/abc-defg-hij"]', { timeout: 5000 });
+    await aluno.click('#corpo-sala-aula .btn-notas-documento');
+    await aluno.fill('textarea[id^="nota-documento-"]', 'Past simple: verbo + ed');
+    await aluno.click('button:has-text("Salvar anotações")');
+    await aluno.waitForFunction(() => /salvas/.test((document.querySelector('[id^="status-nota-documento-"]') || {}).textContent), null, { timeout: 5000 });
+    await aluno.click('#modal-sala-aula .btn-fechar-modal');
+
+    await prof.click('.documento-aula .btn-notas-documento');
+    await prof.waitForSelector('.bloco-notas-documento:has-text("Past simple: verbo + ed")', { timeout: 5000 });
+  });
+
+  await caso('link que não é http(s) é recusado', async () => {
+    prof.ultimoDialogo = null;
+    await prof.fill('input[id^="input-link-aula-"]', 'javascript:alert(1)');
+    await prof.click('button:has-text("Salvar link")');
+    await dormir(500);
+    esperar(prof.ultimoDialogo && /link válido/.test(prof.ultimoDialogo), 'aceitou link javascript:');
+  });
+
   console.log('\nAgendamento');
   const dia = dataDaqui(3);
   const chaveMes = (n) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
@@ -393,20 +424,62 @@ function dataDaqui(dias) {
     esperar((await prof.$$('.cartao-proximas-aulas .titulo-grupo-dia')).length >= 1, 'sem agrupamento por dia');
   });
 
-  await caso('aula que já passou aparece em "Pendentes"; Concluir e Desfazer', async () => {
+  const pendente = '#confirmar-aulas .cartao-aula:has-text("00:00")';
+  await caso('aula que já passou pede confirmação ("Foi realizada"); Desfazer volta a pedir', async () => {
     await aluno.evaluate(async () => {
       const hoje = dataDeHojeISO();
       await agendarAula(professorIdDoAluno, hoje, '00:00', '00:30', 'online', auth.currentUser.uid, 'Bia', false, 'en');
     });
-    const pendente = '.grupo-dia-aulas:has(.titulo-grupo-dia.atrasadas) .cartao-aula:has-text("00:00")';
     await prof.waitForSelector(pendente, { timeout: 8000 });
-    await prof.click(`${pendente} button:has-text("Concluir")`);
+    await prof.click(`${pendente} button:has-text("Foi realizada")`);
     const concluida = '.cartao-proximas-aulas .aula-concluida:has-text("00:00")';
     await prof.waitForSelector(concluida, { timeout: 5000 });
     await prof.click(`${concluida} button:has-text("Desfazer")`);
     await prof.waitForSelector(pendente, { timeout: 5000 });
   });
+
+  await caso('"Não foi realizada" dá 1 reposição ao aluno e avisa no sino', async () => {
+    const saldo = () => prof.evaluate(() => { const a = aulasCache.find((x) => x.horaInicio === '00:00' && x.data === dataDeHojeISO()); return creditosDoAluno(a.alunoId).saldo; });
+    const antes = await saldo();
+    prof.ultimoDialogo = null;
+    await prof.click(`${pendente} button:has-text("Não foi realizada")`);
+    await prof.waitForSelector(pendente, { state: 'detached', timeout: 5000 });
+    esperar(prof.ultimoDialogo && /reposição/.test(prof.ultimoDialogo), 'não pediu confirmação');
+    await dormir(800);
+    esperar((await saldo()) === antes + 1, `saldo não aumentou (${antes} -> ${await saldo()})`);
+    await aluno.waitForFunction(() => notificacoesCache.some((n) => n.tipo === 'aula-nao-realizada'), null, { timeout: 5000 });
+  });
   await ctxGabi.close();
+
+  console.log('\nAlunos sem app (aulas marcadas pelo professor)');
+  await caso('aluno sem app gera lembrete até o professor marcar a aula', async () => {
+    await prof.click('#btn-aba-alunos');
+    await prof.fill('#input-nome-sem-app', 'Seu Zé');
+    await prof.fill('#input-telefone-sem-app', '11 98888-7777');
+    await prof.click('.secao-alunos-sem-app button:has-text("Adicionar aluno")');
+    await prof.waitForSelector('.cartao-aluno-sem-app:has-text("Seu Zé"):has-text("Nenhuma aula marcada")', { timeout: 5000 });
+    await prof.click('#btn-aba-agenda');
+    const lembrete = '#lembretes-sem-app .cartao-aula:has-text("Seu Zé")';
+    await prof.waitForSelector(lembrete, { timeout: 5000 });
+    await prof.click(`${lembrete} button:has-text("Marcar aula")`);
+    esperar((await prof.$eval('#marcar-aluno', (e) => e.options[e.selectedIndex].text)) === 'Seu Zé', 'aluno não veio escolhido');
+    await prof.fill('#marcar-data', dataDaqui(5));
+    await prof.fill('#marcar-hora', '15:00');
+    await prof.click('#modal-marcar-aula button:has-text("Marcar aula")');
+    await prof.waitForSelector('#modal-marcar-aula.modal-oculto', { state: 'attached', timeout: 5000 });
+    await prof.waitForSelector(lembrete, { state: 'detached', timeout: 5000 });
+    const aula = await prof.evaluate(() => aulasCache.find((a) => a.alunoNome === 'Seu Zé'));
+    esperar(aula && aula.status === 'agendada' && aula.horaInicio === '15:00', 'aula não foi criada');
+  });
+
+  await caso('professor não marca aula por cima de outra', async () => {
+    await prof.evaluate(() => abrirMarcarAula(alunosSemAppCache[0].id));
+    await prof.fill('#marcar-data', dataDaqui(5));
+    await prof.fill('#marcar-hora', '15:20');
+    await prof.click('#modal-marcar-aula button:has-text("Marcar aula")');
+    await prof.waitForFunction(() => /bate com a aula/.test(document.getElementById('status-marcar-aula').textContent), null, { timeout: 3000 });
+    await prof.click('#modal-marcar-aula .btn-fechar-modal');
+  });
 
   console.log('\nPlano do aluno (aulas por semana e reposições)');
   const ctxHugo = await h.novoContexto(browser); const hugo = await h.novaPagina(ctxHugo);

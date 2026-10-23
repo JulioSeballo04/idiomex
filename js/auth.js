@@ -214,7 +214,7 @@ async function excluirMinhaConta() {
     for (const aluno of alunos.docs) {
       await aluno.ref.update({ professorId: firebase.firestore.FieldValue.delete() });
     }
-    for (const sub of ["anotacoesAgenda", "agendaOverrides", "configuracaoAgenda", "visualizacoes"]) {
+    for (const sub of ["anotacoesAgenda", "agendaOverrides", "configuracaoAgenda", "visualizacoes", "alunosSemApp"]) {
       await apagarSubcolecao(perfilRef.collection(sub));
     }
     if (perfil.codigoProfessor) {
@@ -230,7 +230,7 @@ async function excluirMinhaConta() {
         await aula.ref.update({ status: "cancelada", canceladoPor: "aluno" });
       }
     }
-    for (const sub of ["palavras", "anotacoes", "mensagens", "notificacoes"]) {
+    for (const sub of ["palavras", "anotacoes", "mensagens", "notificacoes", "documentosAula", "salaDeAula"]) {
       await apagarSubcolecao(perfilRef.collection(sub));
     }
   }

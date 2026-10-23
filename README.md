@@ -5,8 +5,11 @@ italiano, francês, japonês, mandarim, alemão e coreano), com contas de **prof
 **aluno**. O professor escolhe o idioma que ensina; os alunos vinculados
 pelo código adicionam palavras nesse idioma, recebem a tradução e frases
 de exemplo geradas por IA. O professor acompanha o vocabulário de cada
-aluno, deixa recados, registra anotações no calendário e gerencia a
-agenda de aulas (com confirmação e cancelamento por WhatsApp).
+aluno, deixa recados, registra anotações no calendário, monta a sala de
+aula (link da aula online e documentos, com anotações do aluno em cada
+um) e gerencia a agenda de aulas — confirma se cada aula foi realizada (se
+não foi, o aluno ganha uma reposição) e marca aulas para alunos, inclusive
+os que não usam o app (com confirmação e cancelamento por WhatsApp).
 
 **Custo: R$ 0,00.** Firebase no plano Spark (grátis, sem cartão) +
 Vercel no plano Hobby (grátis, sem cartão) + Gemini API (camada
@@ -124,11 +127,31 @@ usuarios/{uid}/notificacoes/{id}
                           -> criadas pelo professor (crédito de reposição,
                              pedido aprovado/recusado), lidas pelo aluno
 
+usuarios/{uid}/salaDeAula/link
+  url, professorId, atualizadoEm
+                          -> link da aula online, deixado pelo professor
+
+usuarios/{uid}/documentosAula/{id}
+  titulo, url, professorId, criadoEm
+                          -> documentos usados em aula (link), do professor
+  anotacao, anotacaoEm    -> bloco de anotações do aluno sobre o documento
+                             (o aluno escreve, o professor lê)
+
 aulas/{professorId_data_hora}
   professorId, alunoId, alunoNome, data, horaInicio, horaFim, modalidade,
   idioma, reposicao, status ("agendada" | "pendente" | "concluida" |
-  "cancelada" | "recusada")  -> "pendente" = pedido de reposição sem
-                                crédito, esperando o professor aprovar
+  "cancelada" | "recusada" | "nao-realizada")
+                             -> "pendente" = pedido de reposição sem
+                                crédito, esperando o professor aprovar;
+                                "nao-realizada" = o professor confirmou que
+                                a aula não aconteceu (o aluno ganha 1 reposição)
+                             alunoId pode ser um aluno sem app (abaixo)
+
+usuarios/{professorId}/alunosSemApp/{id}
+  nome, telefone, reposicoesConcedidas, criadoEm
+                          -> alunos que não usam o app: o professor marca as
+                             aulas por eles e recebe um lembrete na agenda
+                             enquanto não houver aula marcada
 ```
 
 ## Por que a IA não fica direto no site?
