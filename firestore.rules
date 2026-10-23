@@ -73,6 +73,20 @@ service cloud.firestore {
       return titulo is string && titulo.size() > 0 && titulo.size() <= 200;
     }
 
+    // Documento da aula: um link, ou um arquivo enviado pelo professor. O arquivo
+    // fica guardado no próprio Firestore, em pedaços ("partes", até 10 MB no total) —
+    // o Firebase Storage exigiria o plano pago (com cartão).
+    function documentoAulaValido(d) {
+      return tituloDocumentoValido(d.titulo) && (
+        (d.keys().hasOnly(["titulo", "url", "professorId", "criadoEm"]) && linkValido(d.url)) ||
+        (d.keys().hasOnly(["titulo", "professorId", "criadoEm", "nomeArquivo", "tipoArquivo", "tamanho", "partes"]) &&
+          d.nomeArquivo is string && d.nomeArquivo.size() > 0 && d.nomeArquivo.size() <= 200 &&
+          d.tipoArquivo is string && d.tipoArquivo.size() <= 200 &&
+          d.tamanho is int && d.tamanho > 0 && d.tamanho <= 10485760 &&
+          d.partes is int && d.partes >= 1 && d.partes <= 12)
+      );
+    }
+
     match /usuarios/{userId} {
       // Leitura: o próprio dono, o professor vinculado a esse aluno, ou o aluno
       // vinculado a esse professor (o aluno lê o perfil do professor pra saber quais
@@ -179,7 +193,7 @@ service cloud.firestore {
           (request.auth.uid == userId || ehProfessorDoAluno(userId));
       }
 
-      // Documentos usados em aula (título + link), adicionados pelo professor
+      // Documentos usados em aula (título + link ou arquivo), adicionados pelo professor
       // vinculado. Cada documento tem um bloco de anotações do aluno sobre ele
       // ("anotacao"): o aluno escreve, o professor só lê — como o vocabulário.
       // O professor não mexe na anotação; o aluno não mexe no documento.
@@ -187,16 +201,14 @@ service cloud.firestore {
         allow read: if request.auth != null &&
           (request.auth.uid == userId || ehProfessorDoAluno(userId));
         allow create: if request.auth != null && ehProfessorDoAluno(userId) &&
-          request.resource.data.keys().hasOnly(["titulo", "url", "professorId", "criadoEm"]) &&
-          tituloDocumentoValido(request.resource.data.titulo) &&
-          linkValido(request.resource.data.url) &&
+          documentoAulaValido(request.resource.data) &&
           request.resource.data.professorId == request.auth.uid;
         allow update: if request.auth != null && (
           (ehProfessorDoAluno(userId) &&
             resource.data.professorId == request.auth.uid &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(["titulo", "url"]) &&
             tituloDocumentoValido(request.resource.data.titulo) &&
-            linkValido(request.resource.data.url)) ||
+            (!("url" in request.resource.data) || linkValido(request.resource.data.url))) ||
 
           (request.auth.uid == userId &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(["anotacao", "anotacaoEm"]) &&
@@ -205,6 +217,19 @@ service cloud.firestore {
         );
         allow delete: if request.auth != null &&
           (request.auth.uid == userId || ehProfessorDoAluno(userId));
+
+        // Pedaços (até ~900 KB cada) do arquivo enviado. São gravados antes do
+        // documento, que só aparece pro aluno depois do arquivo inteiro enviado.
+        match /partes/{parteId} {
+          allow read: if request.auth != null &&
+            (request.auth.uid == userId || ehProfessorDoAluno(userId));
+          allow create: if request.auth != null && ehProfessorDoAluno(userId) &&
+            request.resource.data.keys().hasOnly(["dados", "indice"]) &&
+            request.resource.data.dados is bytes && request.resource.data.dados.size() <= 950000 &&
+            request.resource.data.indice is int && request.resource.data.indice >= 0 && request.resource.data.indice < 12;
+          allow delete: if request.auth != null &&
+            (request.auth.uid == userId || ehProfessorDoAluno(userId));
+        }
       }
 
       // Relatório de aulas: o "diário de bordo" do professor sobre o que foi trabalhado

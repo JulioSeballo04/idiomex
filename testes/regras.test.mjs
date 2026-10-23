@@ -1,6 +1,6 @@
 import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
 import { readFileSync } from "fs";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, collection, getDocs, query, where, deleteField } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, collection, getDocs, query, where, deleteField, Bytes } from "firebase/firestore";
 
 const env = await initializeTestEnvironment({ projectId: "demo-idiomex",
   firestore: { rules: readFileSync(new URL("../firestore.rules", import.meta.url), "utf8"), host: "127.0.0.1", port: 8089 } });
@@ -115,6 +115,19 @@ await t("professor cannot edit the student's notes", assertFails(updateDoc(doc(d
 await t("professor renames the document", updateDoc(doc(db("P1"), "usuarios/S1/documentosAula/d1"), { titulo: "Lesson 1 — Past simple" }));
 await t("stranger cannot read documents", assertFails(getDocs(collection(db("S9"), "usuarios/S1/documentosAula"))));
 await t("professor deletes a document", deleteDoc(doc(db("P1"), "usuarios/S1/documentosAula/d1")));
+const arquivo = (extra) => ({ titulo: "Lesson 2", professorId: "P1", criadoEm: new Date(), nomeArquivo: "lesson2.pdf", tipoArquivo: "application/pdf", tamanho: 1200, partes: 1, ...extra });
+const parte = (extra) => ({ dados: Bytes.fromUint8Array(new Uint8Array([37, 80, 68, 70])), indice: 0, ...extra });
+await t("professor uploads a file part", setDoc(doc(db("P1"), "usuarios/S1/documentosAula/f1/partes/0"), parte()));
+await t("professor adds an uploaded-file document", setDoc(doc(db("P1"), "usuarios/S1/documentosAula/f1"), arquivo()));
+await t("student reads the file parts", getDocs(collection(db("S1"), "usuarios/S1/documentosAula/f1/partes")));
+await t("stranger cannot read the file parts", assertFails(getDocs(collection(db("S9"), "usuarios/S1/documentosAula/f1/partes"))));
+await t("student cannot upload file parts", assertFails(setDoc(doc(db("S1"), "usuarios/S1/documentosAula/f1/partes/1"), parte({ indice: 1 }))));
+await t("file part must be bytes", assertFails(setDoc(doc(db("P1"), "usuarios/S1/documentosAula/f1/partes/2"), parte({ dados: "texto", indice: 2 }))));
+await t("file over 10 MB rejected", assertFails(setDoc(doc(db("P1"), "usuarios/S1/documentosAula/f2"), arquivo({ tamanho: 20000000 }))));
+await t("document with both file and link rejected", assertFails(setDoc(doc(db("P1"), "usuarios/S1/documentosAula/f3"), arquivo({ url: "https://x.example" }))));
+await t("student writes notes on an uploaded file", updateDoc(doc(db("S1"), "usuarios/S1/documentosAula/f1"), { anotacao: "ok" }));
+await t("professor renames an uploaded file", updateDoc(doc(db("P1"), "usuarios/S1/documentosAula/f1"), { titulo: "Lesson 2b" }));
+await t("student deletes file parts (account deletion)", deleteDoc(doc(db("S1"), "usuarios/S1/documentosAula/f1/partes/0")));
 await t("student deletes lesson link (account deletion)", deleteDoc(doc(db("S1"), "usuarios/S1/salaDeAula/link")));
 // Aulas marcadas pelo professor (alunos do app e alunos sem app)
 await t("professor registers a student without the app", setDoc(doc(db("P1"), "usuarios/P1/alunosSemApp/z1"), { nome: "Zé", telefone: "", reposicoesConcedidas: 0, criadoEm: new Date() }));
