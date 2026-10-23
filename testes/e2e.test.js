@@ -785,6 +785,16 @@ function dataDaqui(dias) {
     esperar(/Espanhol \(1 aviso\)/.test(await iris.textContent('#seletor-idioma')), 'seletor não mostra o aviso do outro idioma');
     await iris.evaluate(() => trocarIdiomaAtivo('es'));
     esperar((await iris.textContent('#contador-notificacoes')) === '1', 'aviso não aparece no espanhol');
+    // Notificação antiga (sem idioma): conta como do primeiro idioma do professor (inglês), não aparece no espanhol
+    await diego.evaluate(async () => {
+      const iris = alunosCache.find((a) => a.nome === 'Iris');
+      await db.collection('usuarios').doc(iris.id).collection('notificacoes').add({
+        tipo: 'credito-reposicao', texto: 'Você recebeu 1 crédito de reposição (aviso antigo).', lida: false,
+        professorId: professorIdAtual, criadoEm: firebase.firestore.FieldValue.serverTimestamp() });
+    });
+    await iris.waitForFunction(() => notificacoesCache.some((n) => !n.idioma), null, { timeout: 5000 });
+    esperar((await iris.textContent('#contador-notificacoes')) === '1', 'aviso antigo apareceu no espanhol');
+    esperar(/Inglês \(1 aviso\)/.test(await iris.textContent('#seletor-idioma')), 'aviso antigo não foi para o inglês');
     const saldos = await iris.evaluate(async () => {
       perfilAlunoAtual = (await db.collection('usuarios').doc(auth.currentUser.uid).get()).data(); // como "Agendar aula" faz
       return ['en', 'es'].map((id) => { agendamento = { idioma: id }; return situacaoDoPlano(null).saldo; });
