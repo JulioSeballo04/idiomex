@@ -344,7 +344,8 @@ function dataDaqui(dias) {
     for (let i = 0; i < 3 && !(await p.$(`[data-calday="${dia}"]`)); i++) await p.click('#btn-cal-mes-proximo');
     await p.click(`[data-calday="${dia}"]`);
     await p.waitForFunction(() => !/Carregando/.test(document.getElementById('slots-agendamento').textContent), null, { timeout: 8000 });
-    const hs = await p.$$eval('.btn-slot-horario', (bs) => bs.map((b) => b.textContent));
+    // Cada botão mostra a faixa "10:00 – 10:30"; aqui interessa o horário de início
+    const hs = await p.$$eval('.btn-slot-horario', (bs) => bs.map((b) => b.textContent.split(' – ')[0].trim()));
     await p.keyboard.press('Escape'); await p.evaluate(() => fecharAgendamento());
     return hs;
   }
@@ -488,6 +489,7 @@ function dataDaqui(dias) {
     await prof.click(`${lembrete} button:has-text("Marcar aula")`);
     esperar((await prof.$eval('#marcar-aluno', (e) => e.options[e.selectedIndex].text)) === 'Seu Zé', 'aluno não veio escolhido');
     await prof.fill('#marcar-data', dataDaqui(5));
+    await prof.click('#btn-outro-horario');
     await prof.fill('#marcar-hora', '15:00');
     await prof.click('#modal-marcar-aula button:has-text("Marcar aula")');
     await prof.waitForSelector('#modal-marcar-aula.modal-oculto', { state: 'attached', timeout: 5000 });
@@ -499,10 +501,36 @@ function dataDaqui(dias) {
   await caso('professor não marca aula por cima de outra', async () => {
     await prof.evaluate(() => abrirMarcarAula(alunosSemAppCache[0].id));
     await prof.fill('#marcar-data', dataDaqui(5));
+    await prof.click('#btn-outro-horario');
     await prof.fill('#marcar-hora', '15:20');
     await prof.click('#modal-marcar-aula button:has-text("Marcar aula")');
     await prof.waitForFunction(() => /bate com a aula/.test(document.getElementById('status-marcar-aula').textContent), null, { timeout: 3000 });
     await prof.click('#modal-marcar-aula .btn-fechar-modal');
+  });
+
+  await caso('professor marca pelos horários livres, iguais aos do aluno (em faixa "início – fim")', async () => {
+    await prof.evaluate(() => abrirMarcarAula(alunosSemAppCache[0].id));
+    // Um dia de atendimento mais adiante, longe dos dias usados pelos outros testes
+    const diaLivre = await prof.evaluate(() => {
+      for (let i = 20; i < 60; i++) {
+        const d = new Date(); d.setDate(d.getDate() + i);
+        const iso = chaveDataISO(d);
+        if (horariosLivresDoDia(iso).length) return iso;
+      }
+    });
+    esperar(diaLivre, 'nenhum dia de atendimento nos próximos 2 meses');
+    await prof.fill('#marcar-data', diaLivre);
+    await prof.dispatchEvent('#marcar-data', 'change');
+    const esperados = await prof.evaluate((d) => horariosLivresDoDia(d), diaLivre);
+    esperar(esperados.length > 0, 'nenhum horário livre no dia de teste');
+    await prof.waitForSelector('#marcar-slots .btn-slot-horario', { timeout: 3000 });
+    const botoes = await prof.$$eval('#marcar-slots .btn-slot-horario', (bs) => bs.map((b) => b.textContent.trim()));
+    esperar(botoes.length === esperados.length && / – /.test(botoes[0]), 'horários: ' + botoes.join(', '));
+    await prof.click('#marcar-slots .btn-slot-horario >> nth=0');
+    await prof.click('#modal-marcar-aula button:has-text("Marcar aula")');
+    await prof.waitForSelector('#modal-marcar-aula.modal-oculto', { state: 'attached', timeout: 5000 });
+    const criada = await prof.evaluate(({ d, h }) => aulasCache.find((a) => a.alunoNome === 'Seu Zé' && a.data === d && a.horaInicio === h), { d: diaLivre, h: esperados[0] });
+    esperar(criada && criada.horaFim, 'aula não foi criada no horário escolhido');
   });
 
   console.log('\nPlano do aluno (aulas por semana e reposições)');
@@ -604,7 +632,7 @@ function dataDaqui(dias) {
     await hugo.waitForFunction(() => notificacoesCache.some((n) => n.tipo === 'reposicao-recusada'), null, { timeout: 5000 });
     // o horário volta a aparecer como livre
     await abrirAgendamentoNoDia(hugo, dia);
-    esperar(await hugo.$(`.btn-slot-horario:text-is("${horario}")`), `horário ${horario} não foi liberado`);
+    esperar(await hugo.$(`.btn-slot-horario:text-matches("^${horario} – ")`), `horário ${horario} não foi liberado`);
     await hugo.keyboard.press('Escape');
   });
   await ctxHugo.close();

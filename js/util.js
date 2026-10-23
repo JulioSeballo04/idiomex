@@ -228,10 +228,17 @@ function minutosDoHorario(horaStr) {
   return h * 60 + m;
 }
 
+// Faixa de horário de uma aula, ex: "14:00 – 15:00"
+function faixaHorario(horaInicio, horaFim) {
+  return horaFim ? `${horaInicio} – ${horaFim}` : horaInicio;
+}
+
 // A partir dos blocos de disponibilidade de um dia (ex: [{inicio:"08:00", fim:"12:00"}]),
-// gera a lista de horários de início possíveis para aulas de "duracaoMinutos".
+// gera a lista de horários de início possíveis para aulas de "duracaoMinutos", com
+// "intervaloMinutos" de descanso entre uma aula e a próxima (ex: aula de 50 min +
+// 10 min de intervalo = aulas começando sempre na hora cheia).
 // Sem repetidos e em ordem, mesmo que o professor configure períodos que se sobrepõem.
-function gerarSlotsDoDia(blocos, duracaoMinutos) {
+function gerarSlotsDoDia(blocos, duracaoMinutos, intervaloMinutos) {
   const slots = [];
   (blocos || []).forEach((bloco) => {
     const [hIni, mIni] = bloco.inicio.split(":").map(Number);
@@ -242,7 +249,7 @@ function gerarSlotsDoDia(blocos, duracaoMinutos) {
       const h = String(Math.floor(minutoAtual / 60)).padStart(2, "0");
       const m = String(minutoAtual % 60).padStart(2, "0");
       slots.push(`${h}:${m}`);
-      minutoAtual += duracaoMinutos;
+      minutoAtual += duracaoMinutos + (intervaloMinutos || 0);
     }
   });
   return [...new Set(slots)].sort();

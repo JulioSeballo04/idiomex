@@ -855,3 +855,9 @@ html[data-tema="noturno"] .aviso-pedido { color: #E0B24C; }
 .item-notificacao:last-child { border-bottom: none; }
 .item-notificacao.nao-lida { font-weight: 600; }
 .icone-notificacao { font-size: 1.1rem; line-height: 1.3; }
+
+/* Horários como faixa ("14:00 – 15:00"): botões mais largos */
+.slots-grade { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); }
+.btn-slot-horario.escolhido { background: var(--acento); color: #fff; }
+.horario-manual { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-top: 0.5rem; }
+.dica-campo { font-weight: 400; }
