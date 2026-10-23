@@ -1457,3 +1457,49 @@ html[data-tema="noturno"] .secao-perigo h4 { color: #F08A75; }
 .cabecalho-dia-professor { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
 .badge-status-nao-realizada { background: rgba(179, 65, 46, 0.12); color: #8f2f1f; }
 html[data-tema="noturno"] .badge-status-nao-realizada { color: #F08A75; }
+
+/* Documento enviado como arquivo: o título é um botão que abre/baixa o arquivo */
+button.link-arquivo {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.btn-escolher-arquivo { cursor: pointer; white-space: nowrap; }
+.arquivo-escolhido {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 180px;
+  padding: 0.5em 0.7em;
+  border: 1px dashed var(--acento);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+.arquivo-escolhido button { background: none; border: none; color: var(--ink-soft); cursor: pointer; padding: 0; }
+
+/* Muitos documentos: busca, grupos por mês e "Mostrar mais" */
+.busca-documentos { display: flex; align-items: center; gap: 0.6rem; margin: 0.4rem 0 0.8rem; }
+.busca-documentos input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5em 0.7em;
+  border-radius: 6px;
+  border: 1px solid var(--borda);
+  background: var(--bg-cartao);
+}
+.titulo-grupo-documentos {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  margin: 0.8rem 0 0.4rem;
+}
+.btn-mostrar-mais { width: 100%; margin-top: 0.3rem; }
+.modal-conteudo.modal-sala-aula { max-width: 640px; }

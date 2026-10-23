@@ -355,3 +355,113 @@ async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, a
     });
   });
 }
+
+// ============================================================
+// ARQUIVOS DA SALA DE AULA — guardados no Firestore em pedaços
+// ============================================================
+// O Firebase Storage exigiria o plano pago (com cartão). Então o arquivo vai
+// para usuarios/{aluno}/documentosAula/{id}/partes/{n}, em pedaços de até
+// 900 KB (um documento do Firestore guarda no máximo 1 MB).
+
+const TAMANHO_MAXIMO_ARQUIVO = 10 * 1024 * 1024; // 10 MB
+const TAMANHO_PARTE_ARQUIVO = 900 * 1024;
+
+function formatarTamanhoArquivo(bytes) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
+}
+
+// Tipos que o navegador mostra numa aba nova; os outros (Word, PowerPoint...) são baixados
+function arquivoAbreNoNavegador(tipo) {
+  return /^(application\/pdf|image\/|text\/plain|audio\/|video\/)/.test(tipo || "");
+}
+
+// Junta os pedaços de volta num arquivo (Blob)
+async function baixarArquivoDaAula(alunoId, documento) {
+  const snap = await db.collection("usuarios").doc(alunoId).collection("documentosAula").doc(documento.id)
+    .collection("partes").orderBy("indice").get();
+  if (snap.size !== documento.partes) throw new Error("arquivo incompleto");
+  return new Blob(snap.docs.map((d) => d.data().dados.toUint8Array()),
+    { type: documento.tipoArquivo || "application/octet-stream" });
+}
+
+// Abre (PDF, imagem...) ou baixa o arquivo. A aba nova é aberta ANTES do "await"
+// — senão o navegador do celular bloqueia como popup.
+async function abrirArquivoDaAula(alunoId, documento) {
+  const abreAqui = arquivoAbreNoNavegador(documento.tipoArquivo);
+  const aba = abreAqui ? window.open("", "_blank") : null;
+  if (aba) aba.document.title = documento.titulo || documento.nomeArquivo;
+  try {
+    const url = URL.createObjectURL(await baixarArquivoDaAula(alunoId, documento));
+    if (aba) {
+      aba.location = url;
+    } else {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = documento.nomeArquivo || "arquivo";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
+  } catch (e) {
+    console.error(e);
+    if (aba) aba.close();
+    alert("Não foi possível abrir o arquivo agora. Tente novamente.");
+  }
+}
+
+// Apaga os pedaços do arquivo de um documento (antes de apagar o documento)
+async function apagarPartesDoDocumento(documentoRef) {
+  const partes = await documentoRef.collection("partes").get();
+  await Promise.all(partes.docs.map((d) => d.ref.delete()));
+}
+
+// Lista de documentos da sala de aula, pensada para muitos arquivos (aluno e
+// professor): busca por título/nome do arquivo, agrupamento por mês e só os
+// mais recentes de início, com "Mostrar mais".
+const DOCUMENTOS_POR_PAGINA = 10;
+
+function semAcentos(texto) {
+  return String(texto || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+// opcoes: busca, limite, idBusca, aoBuscar / aoMostrarMais (código do onclick/oninput),
+// item(documento) -> html, vazio (texto quando não há documento nenhum)
+function montarListaDocumentosAula(documentos, opcoes) {
+  if (documentos.length === 0) return `<p class="vazio">${opcoes.vazio}</p>`;
+
+  const termo = semAcentos(opcoes.busca).trim();
+  const encontrados = termo
+    ? documentos.filter((d) => semAcentos(`${d.titulo} ${d.nomeArquivo || ""}`).includes(termo))
+    : documentos;
+  const visiveis = encontrados.slice(0, opcoes.limite);
+
+  const grupos = [];
+  visiveis.forEach((d) => {
+    const data = d.criadoEm ? d.criadoEm.toDate() : new Date(); // recém-criado: data do servidor ainda não chegou
+    const rotulo = data.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.rotulo === rotulo) ultimo.itens.push(d);
+    else grupos.push({ rotulo, itens: [d] });
+  });
+
+  const busca = documentos.length > 5 || termo ? `
+    <div class="busca-documentos">
+      <input type="text" id="${opcoes.idBusca}" placeholder="Buscar documento..." value="${escapeHtml(opcoes.busca || "")}" oninput="${opcoes.aoBuscar}">
+      <span class="data-msg">${termo ? `${encontrados.length} de ${documentos.length}` : `${documentos.length} documentos`}</span>
+    </div>` : "";
+
+  const lista = grupos.map((g) => `
+    <div class="grupo-documentos">
+      <div class="titulo-grupo-documentos">${escapeHtml(g.rotulo.charAt(0).toUpperCase() + g.rotulo.slice(1))}</div>
+      ${g.itens.map(opcoes.item).join("")}
+    </div>`).join("");
+
+  const restantes = encontrados.length - visiveis.length;
+  const mais = restantes > 0
+    ? `<button class="btn btn-secundario btn-mostrar-mais" onclick="${opcoes.aoMostrarMais}">Mostrar mais (${restantes})</button>`
+    : "";
+
+  return busca + (encontrados.length ? lista : `<p class="vazio">Nenhum documento encontrado.</p>`) + mais;
+}

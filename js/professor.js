@@ -161,6 +161,8 @@ function garantirEstado(alunoId) {
       linkAula: null,                // {url, professorId} do doc salaDeAula/link
       documentosAula: [],
       notasDocumentoAbertas: new Set(), // ids dos documentos com o bloco de anotações aberto
+      buscaDocumentos: "",
+      limiteDocumentos: DOCUMENTOS_POR_PAGINA,
       unsubPalavras: null,
       unsubMensagens: null,
       unsubRelatorios: null,
@@ -850,6 +852,7 @@ function montarAbaSalaDeAula(alunoId) {
   // Só o que foi deixado por este professor (o aluno pode ter vindo de outro)
   const link = estado.linkAula && estado.linkAula.professorId === professorIdAtual ? estado.linkAula.url : "";
   const documentos = estado.documentosAula.filter((d) => d.professorId === professorIdAtual);
+  const arquivo = arquivosEscolhidos[alunoId];
 
   const blocoLink = `
     <div class="sala-secao">
@@ -866,9 +869,11 @@ function montarAbaSalaDeAula(alunoId) {
         </div>` : ""}
     </div>`;
 
-  const lista = documentos.length === 0
-    ? `<p class="vazio">Nenhum documento adicionado ainda.</p>`
-    : documentos.map((d) => {
+  const lista = montarListaDocumentosAula(documentos, {
+    busca: estado.buscaDocumentos, limite: estado.limiteDocumentos, idBusca: `busca-documentos-${alunoId}`,
+    aoBuscar: `buscarDocumentosAluno('${alunoId}', this.value)`, aoMostrarMais: `mostrarMaisDocumentosAluno('${alunoId}')`,
+    vazio: "Nenhum documento adicionado ainda.",
+    item: (d) => {
         const aberto = estado.notasDocumentoAbertas.has(d.id);
         const data = d.criadoEm ? d.criadoEm.toDate().toLocaleDateString("pt-BR") : "";
         const nota = aberto ? `
@@ -882,23 +887,37 @@ function montarAbaSalaDeAula(alunoId) {
             <div class="acoes-msg">
               <button class="excluir" onclick="removerDocumentoAula('${alunoId}','${d.id}')">Excluir</button>
             </div>
-            <a class="titulo-documento" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${escapeHtml(d.titulo)}</a>
+            ${d.url
+              ? `<a class="titulo-documento" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${escapeHtml(d.titulo)}</a>`
+              : `<button class="titulo-documento link-arquivo" onclick="abrirArquivoDocumentoProfessor('${alunoId}','${d.id}')">${escapeHtml(d.titulo)}</button>
+                 <span class="data-msg">${escapeHtml(d.nomeArquivo)} · ${formatarTamanhoArquivo(d.tamanho)}</span>`}
             <span class="data-msg">${escapeHtml(data)}</span>
             <button class="btn-notas-documento ${d.anotacao ? "tem-nota" : ""}" onclick="alternarNotasDocumentoProfessor('${alunoId}','${d.id}')">
               ${aberto ? "Fechar anotações" : "Anotações do aluno"}${d.anotacao && !aberto ? " •" : ""}
             </button>
             ${nota}
           </div>`;
-      }).join("");
+      }
+  });
 
   const blocoDocumentos = `
     <div class="sala-secao">
       <h4>Documentos da aula</h4>
-      <p class="dica-plano">Cole o link do arquivo (Google Drive, Docs, PDF na internet...). Deixe o compartilhamento como "qualquer pessoa com o link".</p>
+      <p class="dica-plano">Envie um arquivo (PDF, Word, imagem, áudio... até 10 MB) ou cole um link (Google Drive, YouTube...).</p>
       <div class="linha-sala">
         <input type="text" id="input-titulo-documento-${alunoId}" placeholder="Título (ex: Lesson 3 — Past simple)">
-        <input type="text" inputmode="url" id="input-url-documento-${alunoId}" placeholder="https://drive.google.com/...">
-        <button class="btn btn-primario" onclick="adicionarDocumentoAula('${alunoId}')">Adicionar documento</button>
+      </div>
+      <div class="linha-sala">
+        ${arquivo
+          ? `<span class="arquivo-escolhido">${escapeHtml(arquivo.name)} (${formatarTamanhoArquivo(arquivo.size)})
+               <button type="button" title="Tirar arquivo" onclick="escolherArquivoDocumento('${alunoId}', null)">✕</button></span>`
+          : `<label class="btn btn-secundario btn-escolher-arquivo">Escolher arquivo
+               <input type="file" id="input-arquivo-documento-${alunoId}" hidden onchange="escolherArquivoDocumento('${alunoId}', this.files[0])">
+             </label>
+             <input type="text" inputmode="url" id="input-url-documento-${alunoId}" placeholder="ou cole um link: https://drive.google.com/...">`}
+        <button class="btn btn-primario" id="btn-adicionar-documento-${alunoId}" onclick="adicionarDocumentoAula('${alunoId}')" ${envioEmAndamento[alunoId] ? "disabled" : ""}>
+          ${envioEmAndamento[alunoId] ? escapeHtml(envioEmAndamento[alunoId]) : "Adicionar documento"}
+        </button>
       </div>
       ${lista}
     </div>`;
@@ -935,17 +954,72 @@ async function removerLinkAula(alunoId) {
   }
 }
 
+// Arquivo escolhido (ainda não enviado), por aluno. Fica guardado aqui porque a
+// tela é redesenhada a cada atualização em tempo real — e um <input type=file>
+// redesenhado perde o arquivo escolhido.
+const arquivosEscolhidos = {};
+const envioEmAndamento = {}; // {alunoId: "Enviando 40%..."} enquanto um arquivo sobe
+
+function escolherArquivoDocumento(alunoId, arquivo) {
+  if (arquivo && arquivo.size > TAMANHO_MAXIMO_ARQUIVO) {
+    alert(`Esse arquivo tem ${formatarTamanhoArquivo(arquivo.size)}. O limite é 10 MB — para arquivos maiores, use um link (ex: Google Drive).`);
+    arquivo = null;
+  }
+  if (arquivo) {
+    arquivosEscolhidos[alunoId] = arquivo;
+    // Sem título digitado, usa o nome do arquivo (sem a extensão)
+    const campoTitulo = document.getElementById(`input-titulo-documento-${alunoId}`);
+    if (campoTitulo && !campoTitulo.value.trim()) campoTitulo.value = arquivo.name.replace(/\.[^.]+$/, "").slice(0, 200);
+  } else {
+    delete arquivosEscolhidos[alunoId];
+  }
+  renderizarListaAlunos();
+}
+
+// Envia o arquivo em pedaços e só então cria o documento — o aluno nunca vê
+// um documento com o arquivo pela metade
+async function enviarArquivoDocumento(alunoId, titulo, arquivo) {
+  const docRef = db.collection("usuarios").doc(alunoId).collection("documentosAula").doc();
+  const bytes = new Uint8Array(await arquivo.arrayBuffer());
+  const partes = Math.max(1, Math.ceil(bytes.length / TAMANHO_PARTE_ARQUIVO));
+  try {
+    for (let i = 0; i < partes; i++) {
+      envioEmAndamento[alunoId] = `Enviando ${Math.round((i / partes) * 100)}%...`;
+      renderizarListaAlunos();
+      const pedaco = bytes.slice(i * TAMANHO_PARTE_ARQUIVO, (i + 1) * TAMANHO_PARTE_ARQUIVO);
+      await docRef.collection("partes").doc(String(i)).set({ dados: firebase.firestore.Blob.fromUint8Array(pedaco), indice: i });
+    }
+    await docRef.set({
+      titulo, professorId: professorIdAtual, criadoEm: firebase.firestore.FieldValue.serverTimestamp(),
+      nomeArquivo: arquivo.name.slice(0, 200), tipoArquivo: (arquivo.type || "").slice(0, 200),
+      tamanho: arquivo.size, partes
+    });
+  } catch (e) {
+    apagarPartesDoDocumento(docRef).catch(() => {}); // não deixa pedaços soltos
+    throw e;
+  }
+}
+
 async function adicionarDocumentoAula(alunoId) {
+  if (envioEmAndamento[alunoId]) return;
   const campoTitulo = document.getElementById(`input-titulo-documento-${alunoId}`);
   const campoUrl = document.getElementById(`input-url-documento-${alunoId}`);
   const titulo = (campoTitulo ? campoTitulo.value : "").trim().slice(0, 200);
-  const url = normalizarLink(campoUrl ? campoUrl.value : "");
+  const arquivo = arquivosEscolhidos[alunoId];
+  const url = arquivo ? "" : normalizarLink(campoUrl ? campoUrl.value : "");
   if (!titulo) { alert("Dê um título ao documento."); return; }
-  if (!url) { alert("Cole um link válido para o documento, começando com https://."); return; }
+  if (!arquivo && !url) { alert("Escolha um arquivo ou cole um link válido, começando com https://."); return; }
   try {
-    await db.collection("usuarios").doc(alunoId).collection("documentosAula").add({
-      titulo, url, professorId: professorIdAtual, criadoEm: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    if (arquivo) {
+      await enviarArquivoDocumento(alunoId, titulo, arquivo);
+      delete arquivosEscolhidos[alunoId];
+    } else {
+      await db.collection("usuarios").doc(alunoId).collection("documentosAula").add({
+        titulo, url, professorId: professorIdAtual, criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    delete envioEmAndamento[alunoId];
+    renderizarListaAlunos();
     // Busca os campos de novo: a tela pode ter sido redesenhada durante o "await"
     const t = document.getElementById(`input-titulo-documento-${alunoId}`);
     const u = document.getElementById(`input-url-documento-${alunoId}`);
@@ -953,18 +1027,38 @@ async function adicionarDocumentoAula(alunoId) {
     if (u) u.value = "";
   } catch (e) {
     console.error(e);
-    alert("Não foi possível adicionar o documento. Tente novamente.");
+    delete envioEmAndamento[alunoId];
+    renderizarListaAlunos();
+    alert("Não foi possível adicionar o documento. Confira sua internet e tente novamente.");
   }
 }
 
 async function removerDocumentoAula(alunoId, documentoId) {
   if (!confirm("Excluir esse documento? O aluno deixa de vê-lo, junto com as anotações dele sobre o documento.")) return;
   try {
-    await db.collection("usuarios").doc(alunoId).collection("documentosAula").doc(documentoId).delete();
+    const ref = db.collection("usuarios").doc(alunoId).collection("documentosAula").doc(documentoId);
+    await apagarPartesDoDocumento(ref);
+    await ref.delete();
   } catch (e) {
     console.error(e);
     alert("Não foi possível excluir o documento. Tente novamente.");
   }
+}
+
+function buscarDocumentosAluno(alunoId, texto) {
+  estadoAlunos[alunoId].buscaDocumentos = texto;
+  estadoAlunos[alunoId].limiteDocumentos = DOCUMENTOS_POR_PAGINA;
+  renderizarListaAlunos();
+}
+
+function mostrarMaisDocumentosAluno(alunoId) {
+  estadoAlunos[alunoId].limiteDocumentos += DOCUMENTOS_POR_PAGINA * 2;
+  renderizarListaAlunos();
+}
+
+function abrirArquivoDocumentoProfessor(alunoId, documentoId) {
+  const documento = estadoAlunos[alunoId].documentosAula.find((d) => d.id === documentoId);
+  if (documento) abrirArquivoDaAula(alunoId, documento);
 }
 
 function alternarNotasDocumentoProfessor(alunoId, documentoId) {

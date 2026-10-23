@@ -294,6 +294,30 @@ function dataDaqui(dias) {
     await prof.waitForSelector('.bloco-notas-documento:has-text("Past simple: verbo + ed")', { timeout: 5000 });
   });
 
+  await caso('professor envia um arquivo; o aluno vê e baixa o mesmo conteúdo', async () => {
+    const conteudo = 'Lesson 2 — Past simple\n'.repeat(60000); // ~1,4 MB: vai em 2 pedaços
+    await prof.setInputFiles('input[id^="input-arquivo-documento-"]', { name: 'lesson2.txt', mimeType: 'text/plain', buffer: Buffer.from(conteudo) });
+    await prof.waitForSelector('.arquivo-escolhido:has-text("lesson2.txt")', { timeout: 3000 });
+    esperar((await prof.inputValue('input[id^="input-titulo-documento-"]')) === 'lesson2', 'título não veio do nome do arquivo');
+    await prof.click('button:has-text("Adicionar documento")');
+    await prof.waitForSelector('.documento-aula:has-text("lesson2.txt")', { timeout: 15000 });
+    await aluno.waitForFunction(() => documentosAulaCache.some((d) => d.nomeArquivo === 'lesson2.txt'), null, { timeout: 5000 });
+    const baixado = await aluno.evaluate(async () => {
+      const d = documentosAulaCache.find((x) => x.nomeArquivo === 'lesson2.txt');
+      return { partes: d.partes, texto: await (await baixarArquivoDaAula(auth.currentUser.uid, d)).text() };
+    });
+    esperar(baixado.partes === 2, `partes: ${baixado.partes}`);
+    esperar(baixado.texto === conteudo, 'conteúdo baixado é diferente do enviado');
+  });
+
+  await caso('arquivo acima de 10 MB é recusado com explicação', async () => {
+    prof.ultimoDialogo = null;
+    await prof.setInputFiles('input[id^="input-arquivo-documento-"]', { name: 'grande.pdf', mimeType: 'application/pdf', buffer: Buffer.alloc(11 * 1024 * 1024) });
+    await dormir(500);
+    esperar(prof.ultimoDialogo && /10 MB/.test(prof.ultimoDialogo), 'aceitou arquivo grande');
+    esperar(!(await prof.$('.arquivo-escolhido')), 'arquivo grande ficou escolhido');
+  });
+
   await caso('link que não é http(s) é recusado', async () => {
     prof.ultimoDialogo = null;
     await prof.fill('input[id^="input-link-aula-"]', 'javascript:alert(1)');

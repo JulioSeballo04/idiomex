@@ -230,6 +230,9 @@ async function excluirMinhaConta() {
         await aula.ref.update({ status: "cancelada", canceladoPor: "aluno" });
       }
     }
+    // Os arquivos da sala de aula ficam em pedaços dentro de cada documento
+    const documentos = await perfilRef.collection("documentosAula").get();
+    for (const documento of documentos.docs) await apagarPartesDoDocumento(documento.ref);
     for (const sub of ["palavras", "anotacoes", "mensagens", "notificacoes", "documentosAula", "salaDeAula"]) {
       await apagarSubcolecao(perfilRef.collection(sub));
     }

@@ -832,6 +832,8 @@ let linkAulaCache = null; // {url, professorId} ou null
 let documentosAulaCache = [];
 let notasDocumentoAbertas = new Set(); // ids dos documentos com o bloco de anotações aberto
 const statusNotasDocumento = {}; // {id: "Anotações salvas."} — sobrevive aos re-renders em tempo real
+let buscaDocumentos = "";
+let limiteDocumentos = DOCUMENTOS_POR_PAGINA;
 
 function escutarSalaDeAula(uid) {
   const ref = db.collection("usuarios").doc(uid);
@@ -871,10 +873,11 @@ function desenharSalaDeAula(corpo) {
     ? `<a class="btn btn-primario btn-entrar-aula" href="${escapeHtml(link)}" target="_blank" rel="noopener">Entrar na aula</a>`
     : `<p class="vazio">Seu professor ainda não deixou o link da aula.</p>`;
 
-  const documentos = documentosDaSala();
-  const lista = documentos.length === 0
-    ? `<p class="vazio">Nenhum documento ainda. Os materiais que o professor usar em aula aparecem aqui.</p>`
-    : documentos.map((d) => {
+  const lista = montarListaDocumentosAula(documentosDaSala(), {
+    busca: buscaDocumentos, limite: limiteDocumentos, idBusca: "busca-documentos-aluno",
+    aoBuscar: "buscarDocumentos(this.value)", aoMostrarMais: "mostrarMaisDocumentos()",
+    vazio: "Nenhum documento ainda. Os materiais que o professor usar em aula aparecem aqui.",
+    item: (d) => {
         const aberto = notasDocumentoAbertas.has(d.id);
         const nota = aberto ? `
           <div class="bloco-notas-documento">
@@ -886,13 +889,17 @@ function desenharSalaDeAula(corpo) {
           </div>` : "";
         return `
           <div class="documento-aula">
-            <a class="titulo-documento" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${escapeHtml(d.titulo)}</a>
+            ${d.url
+              ? `<a class="titulo-documento" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${escapeHtml(d.titulo)}</a>`
+              : `<button class="titulo-documento link-arquivo" onclick="abrirArquivoDocumento('${d.id}')">${escapeHtml(d.titulo)}</button>
+                 <span class="data-msg">${escapeHtml(d.nomeArquivo)} · ${formatarTamanhoArquivo(d.tamanho)}</span>`}
             <button class="btn-notas-documento ${d.anotacao ? "tem-nota" : ""}" onclick="alternarNotasDocumento('${d.id}')">
               ${aberto ? "Fechar anotações" : d.anotacao ? "Ver anotações" : "Fazer anotações"}
             </button>
             ${nota}
           </div>`;
-      }).join("");
+      }
+  });
 
   corpo.innerHTML = `
     <div class="sala-secao">
@@ -903,6 +910,22 @@ function desenharSalaDeAula(corpo) {
       <h4>Documentos da aula</h4>
       ${lista}
     </div>`;
+}
+
+function buscarDocumentos(texto) {
+  buscaDocumentos = texto;
+  limiteDocumentos = DOCUMENTOS_POR_PAGINA;
+  renderizarSalaDeAula();
+}
+
+function mostrarMaisDocumentos() {
+  limiteDocumentos += DOCUMENTOS_POR_PAGINA * 2;
+  renderizarSalaDeAula();
+}
+
+function abrirArquivoDocumento(id) {
+  const documento = documentosAulaCache.find((d) => d.id === id);
+  if (documento && auth.currentUser) abrirArquivoDaAula(auth.currentUser.uid, documento);
 }
 
 function alternarNotasDocumento(id) {
