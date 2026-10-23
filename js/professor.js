@@ -1191,10 +1191,24 @@ function renderizarHojeProfessor() {
   const limiteIso = chaveDataISO(limite);
   const ordenar = (lista) => lista.sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio));
 
+  if (idiomaFiltroAgenda && !idiomasAtuaisProfessor.includes(idiomaFiltroAgenda)) idiomaFiltroAgenda = null;
+  // Avisos de todos os idiomas: o contador da aba e os números do filtro contam tudo
+  const todasAtrasadas = aulasCache.filter((a) => a.status === "agendada" && fimDaAula(a) <= agora);
+  const todosPedidos = aulasCache.filter((a) => a.status === "pendente");
+  const todosLembretes = lembretesAlunosSemApp();
+  atualizarContadorPedidos(todasAtrasadas.length + todosPedidos.length + todosLembretes.length);
+  const avisosPorIdioma = {};
+  [...todasAtrasadas, ...todosPedidos].forEach((a) => {
+    const id = idiomaValido(a.idioma);
+    avisosPorIdioma[id] = (avisosPorIdioma[id] || 0) + 1;
+  });
+  todosLembretes.forEach((l) => { avisosPorIdioma[l.idioma] = (avisosPorIdioma[l.idioma] || 0) + 1; });
+  const totalAvisos = todasAtrasadas.length + todosPedidos.length + todosLembretes.length;
+
   // Já passaram e continuam "agendada": ninguém concluiu nem cancelou
-  const atrasadas = ordenar(aulasCache.filter((a) => a.status === "agendada" && fimDaAula(a) <= agora));
+  const atrasadas = ordenar(todasAtrasadas.filter(noFiltroAgenda));
   // Próximos dias: as que ainda vão acontecer, mais as de hoje já concluídas (com "Desfazer")
-  const proximas = ordenar(aulasCache.filter((a) =>
+  const proximas = ordenar(aulasCache.filter(noFiltroAgenda).filter((a) =>
     a.data >= hojeIso && a.data <= limiteIso &&
     ((a.status === "agendada" && fimDaAula(a) > agora) || (a.status === "concluida" && a.data === hojeIso))));
   const proxima = proximas.find((a) => a.status === "agendada");
@@ -1206,15 +1220,24 @@ function renderizarHojeProfessor() {
     else ultimo.aulas.push(a);
   });
 
-  const pedidos = ordenar(aulasCache.filter((a) => a.status === "pendente"));
-  const lembretes = lembretesAlunosSemApp();
-  atualizarContadorPedidos(pedidos.length + atrasadas.length + lembretes.length);
+  const pedidos = ordenar(todosPedidos.filter(noFiltroAgenda));
+  const lembretes = todosLembretes.filter((l) => !idiomaFiltroAgenda || l.idioma === idiomaFiltroAgenda);
 
   const aulasHoje = proximas.filter((a) => a.data === hojeIso && a.status === "agendada").length;
   const resumo = [`${aulasHoje} ${aulasHoje === 1 ? "aula hoje" : "aulas hoje"}`];
   if (atrasadas.length) resumo.push(`${atrasadas.length} para confirmar`);
 
+  const filtro = idiomasAtuaisProfessor.length > 1 ? `
+    <div class="filtro-idioma-agenda" role="tablist" aria-label="Idioma da agenda">
+      <button type="button" class="chip-idioma${!idiomaFiltroAgenda ? " ativo" : ""}" onclick="filtrarAgendaPorIdioma('')">
+        Todos${totalAvisos ? ` <span class="contador-pedidos">${totalAvisos}</span>` : ""}</button>
+      ${idiomasAtuaisProfessor.map((id) => `
+        <button type="button" class="chip-idioma${idiomaFiltroAgenda === id ? " ativo" : ""}" data-idioma="${id}" onclick="filtrarAgendaPorIdioma('${id}')">
+          <span class="ponto-idioma" style="background:${IDIOMAS[id].cor}"></span>${IDIOMAS[id].nome}${avisosPorIdioma[id] ? ` <span class="contador-pedidos">${avisosPorIdioma[id]}</span>` : ""}</button>`).join("")}
+    </div>` : "";
+
   container.innerHTML = `
+    ${filtro}
     ${atrasadas.length ? `
       <div class="cartao-pedidos-reposicao" id="confirmar-aulas">
         <h3>${atrasadas.length === 1 ? "1 aula para confirmar" : `${atrasadas.length} aulas para confirmar`}</h3>
@@ -1228,10 +1251,11 @@ function renderizarHojeProfessor() {
               ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
               ${badgeIdiomaAula(a)}
             </div>
+            ${escolhaNaoRealizada.aulaId === a.id ? montarEscolhaIdiomaReposicao(a) : `
             <div class="aula-acoes">
               <button class="btn btn-primario btn-mini" onclick="concluirAula('${a.id}')">Foi realizada</button>
               <button class="btn btn-secundario btn-mini" onclick="marcarAulaNaoRealizada('${a.id}')">Não foi realizada</button>
-            </div>
+            </div>`}
           </div>`).join("")}
       </div>` : ""}
     ${lembretes.length ? `
@@ -1284,6 +1308,21 @@ function renderizarHojeProfessor() {
           ${g.aulas.map((a) => linhaAulaPainel(a, false)).join("")}
         </div>`).join("") : `<p class="vazio">Nenhuma aula marcada nos próximos ${DIAS_PAINEL_HOJE} dias.</p>`}
     </div>`;
+}
+
+// -------------------- FILTRO DE IDIOMA DA AGENDA --------------------
+// Professor que ensina mais de um idioma vê a Agenda de um idioma de cada vez (ou
+// todos): avisos, próximas aulas e o calendário. O contador da aba conta todos.
+let idiomaFiltroAgenda = null; // null = todos
+
+function noFiltroAgenda(aula) {
+  return !idiomaFiltroAgenda || aulaDoIdioma(aula, idiomaFiltroAgenda);
+}
+
+function filtrarAgendaPorIdioma(idioma) {
+  idiomaFiltroAgenda = idioma && idiomasAtuaisProfessor.includes(idioma) ? idioma : null;
+  renderizarHojeProfessor();
+  montarCalendarioProfessor();
 }
 
 // Contador de avisos na aba "Agenda" e no ícone da barra lateral: pedidos de
@@ -1389,14 +1428,55 @@ function gravarReposicoesConcedidas(lote, alunoId, idioma, total) {
   });
 }
 
-async function marcarAulaNaoRealizada(aulaId) {
+// Com mais de um idioma, "Não foi realizada" pergunta de qual idioma é a reposição
+// (já vem o idioma da aula). A escolha fica guardada aqui porque a Agenda é
+// redesenhada a cada minuto e a cada atualização em tempo real.
+let escolhaNaoRealizada = { aulaId: null, idioma: null };
+
+function montarEscolhaIdiomaReposicao(a) {
+  return `
+    <div class="escolha-idioma-reposicao">
+      <label>Reposição de
+        <select onchange="escolhaNaoRealizada.idioma = this.value">
+          ${idiomasAtuaisProfessor.map((id) => `<option value="${id}" ${id === escolhaNaoRealizada.idioma ? "selected" : ""}>${IDIOMAS[id].nome}</option>`).join("")}
+        </select>
+      </label>
+      <button class="btn btn-primario btn-mini" onclick="confirmarAulaNaoRealizada('${a.id}')">Confirmar: não foi realizada</button>
+      <button class="link-trocar" onclick="cancelarEscolhaNaoRealizada()">Cancelar</button>
+    </div>`;
+}
+
+function cancelarEscolhaNaoRealizada() {
+  escolhaNaoRealizada = { aulaId: null, idioma: null };
+  renderizarHojeProfessor();
+}
+
+function marcarAulaNaoRealizada(aulaId) {
   const aula = aulasCache.find((a) => a.id === aulaId);
   if (!aula) return;
+  // Aula que já era reposição: o crédito usado volta sozinho, no idioma dela
+  if (idiomasAtuaisProfessor.length > 1 && !aula.reposicao) {
+    escolhaNaoRealizada = { aulaId, idioma: idiomaValido(aula.idioma) };
+    renderizarHojeProfessor();
+    return;
+  }
   if (!confirm(`A aula de ${aula.alunoNome} (${descricaoAula(aula)}) não foi realizada?\n\nO aluno ganha 1 reposição para marcar outra aula.`)) return;
+  registrarAulaNaoRealizada(aula, idiomaValido(aula.idioma));
+}
+
+function confirmarAulaNaoRealizada(aulaId) {
+  const aula = aulasCache.find((a) => a.id === aulaId);
+  const idioma = idiomaValido(escolhaNaoRealizada.idioma);
+  escolhaNaoRealizada = { aulaId: null, idioma: null };
+  if (aula) registrarAulaNaoRealizada(aula, idioma);
+}
+
+async function registrarAulaNaoRealizada(aula, idioma) {
   const lote = db.batch();
   const gerarCredito = !aula.reposicao;
-  lote.update(db.collection("aulas").doc(aulaId), { status: "nao-realizada", reposicaoGerada: gerarCredito });
-  const idioma = idiomaValido(aula.idioma);
+  lote.update(db.collection("aulas").doc(aula.id), gerarCredito
+    ? { status: "nao-realizada", reposicaoGerada: true, idiomaReposicao: idioma }
+    : { status: "nao-realizada", reposicaoGerada: false });
   if (gerarCredito) gravarReposicoesConcedidas(lote, aula.alunoId, idioma, creditosDoAluno(aula.alunoId, idioma).concedidas + 1);
   if (alunosCache.some((a) => a.id === aula.alunoId)) {
     lote.set(db.collection("usuarios").doc(aula.alunoId).collection("notificacoes").doc(),
@@ -1416,9 +1496,13 @@ async function desfazerAulaNaoRealizada(aulaId) {
   const aula = aulasCache.find((a) => a.id === aulaId);
   if (!aula) return;
   const lote = db.batch();
-  lote.update(db.collection("aulas").doc(aulaId), { status: "agendada", reposicaoGerada: firebase.firestore.FieldValue.delete() });
+  lote.update(db.collection("aulas").doc(aulaId), {
+    status: "agendada",
+    reposicaoGerada: firebase.firestore.FieldValue.delete(),
+    idiomaReposicao: firebase.firestore.FieldValue.delete()
+  });
   if (aula.reposicaoGerada) {
-    const idioma = idiomaValido(aula.idioma);
+    const idioma = idiomaValido(aula.idiomaReposicao || aula.idioma);
     const { concedidas, usadas } = creditosDoAluno(aula.alunoId, idioma);
     gravarReposicoesConcedidas(lote, aula.alunoId, idioma, Math.max(usadas, concedidas - 1));
   }
@@ -1794,7 +1878,7 @@ function montarCalendarioProfessor() {
 
   const contagemPorDia = {};
   const idiomasPorDia = {}; // {data: [códigos de idioma das aulas agendadas nesse dia]}
-  aulasCache.forEach((a) => {
+  aulasCache.filter(noFiltroAgenda).forEach((a) => {
     if ((a.status === "agendada" || a.status === "pendente") && a.data.startsWith(prefixoMes)) {
       contagemPorDia[a.data] = (contagemPorDia[a.data] || 0) + 1;
       (idiomasPorDia[a.data] = idiomasPorDia[a.data] || new Set()).add(idiomaValido(a.idioma));
@@ -1975,7 +2059,7 @@ function badgeIdiomaAula(aula) {
 
 function aulasAtivasDoDia(dataIso) {
   return aulasCache
-    .filter((a) => a.data === dataIso && a.status !== "cancelada" && a.status !== "recusada")
+    .filter((a) => a.data === dataIso && noFiltroAgenda(a) && a.status !== "cancelada" && a.status !== "recusada")
     .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
 }
 
@@ -2060,7 +2144,7 @@ async function salvarAnotacoesDia() {
 
 function montarListaAulasDia(dataIso) {
   const aulasDoDia = aulasCache
-    .filter((a) => a.data === dataIso && a.status !== "cancelada" && a.status !== "recusada")
+    .filter((a) => a.data === dataIso && noFiltroAgenda(a) && a.status !== "cancelada" && a.status !== "recusada")
     .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
 
   if (aulasDoDia.length === 0) return `<p class="vazio">Nenhuma aula marcada nesse dia.</p>`;
@@ -2281,7 +2365,7 @@ function lembretesAlunosSemApp() {
     if (idiomasAtuaisProfessor.length > 1) motivos.push(IDIOMAS[idioma].nome);
     if (!proximaAulaDoAluno(aluno.id, idioma)) motivos.push("nenhuma aula marcada");
     if (saldo > 0) motivos.push(saldo === 1 ? "1 reposição para marcar" : `${saldo} reposições para marcar`);
-    return motivos.length ? { aluno, motivo: motivos.join(" · ") } : null;
+    return motivos.length ? { aluno, idioma, motivo: motivos.join(" · ") } : null;
   }).filter(Boolean);
 }
 
@@ -2401,6 +2485,7 @@ function abrirMarcarAula(alunoId, dataIso) {
   const campoIdioma = document.getElementById("marcar-idioma");
   campoIdioma.innerHTML = idiomasAtuaisProfessor.map((id) => `<option value="${id}">${IDIOMAS[id].nome}</option>`).join("");
   document.getElementById("marcar-idioma-wrap").hidden = idiomasAtuaisProfessor.length < 2;
+  if (idiomaFiltroAgenda) campoIdioma.value = idiomaFiltroAgenda; // a Agenda está num idioma: a aula começa nele
   escolherIdiomaDoAlunoNoFormulario();
 
   document.getElementById("status-marcar-aula").textContent = "";

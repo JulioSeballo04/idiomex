@@ -861,3 +861,16 @@ html[data-tema="noturno"] .aviso-pedido { color: #E0B24C; }
 .btn-slot-horario.escolhido { background: var(--acento); color: #fff; }
 .horario-manual { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-top: 0.5rem; }
 .dica-campo { font-weight: 400; }
+
+/* Filtro de idioma da Agenda (professor com mais de um idioma) */
+.filtro-idioma-agenda { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+.chip-idioma {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.35em 0.8em; border-radius: 999px;
+  border: 1px solid var(--borda); background: var(--bg-cartao); color: var(--ink);
+  font-size: 0.82rem; font-weight: 600; cursor: pointer;
+}
+.chip-idioma.ativo { border-color: var(--acento); background: var(--acento); color: #fff; }
+.ponto-idioma { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.escolha-idioma-reposicao { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; font-size: 0.85rem; }
+.escolha-idioma-reposicao select { margin-left: 0.3rem; padding: 0.3em 0.5em; border-radius: 6px; border: 1px solid var(--borda); background: var(--bg-cartao); color: var(--ink); }

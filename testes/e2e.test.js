@@ -792,6 +792,31 @@ function dataDaqui(dias) {
     esperar(saldos[0] === 0 && saldos[1] === 1, 'saldos por idioma: ' + saldos);
     await iris.evaluate(() => { agendamento = null; });
   });
+
+  await caso('Agenda filtrada por idioma; "Não foi realizada" deixa escolher o idioma da reposição', async () => {
+    await iris.evaluate(async () => {
+      await agendarAula(professorIdDoAluno, dataDeHojeISO(), '00:00', '00:30', 'online', auth.currentUser.uid, 'Iris', false, 'es');
+    });
+    await diego.click('#btn-aba-agenda');
+    const cartao = '#confirmar-aulas .cartao-aula:has-text("Iris")';
+    await diego.waitForSelector(cartao, { timeout: 8000 });
+    await diego.click('.chip-idioma[data-idioma="en"]');
+    await diego.waitForSelector(cartao, { state: 'detached', timeout: 3000 });
+    await diego.click('.chip-idioma[data-idioma="es"]');
+    await diego.waitForSelector(cartao, { timeout: 3000 });
+
+    const saldoEn = () => diego.evaluate(() => creditosDoAluno(alunosCache.find((a) => a.nome === 'Iris').id, 'en').saldo);
+    const antes = await saldoEn();
+    await diego.click(`${cartao} button:has-text("Não foi realizada")`);
+    const seletor = `${cartao} .escolha-idioma-reposicao select`;
+    await diego.waitForSelector(seletor, { timeout: 3000 });
+    esperar((await diego.inputValue(seletor)) === 'es', 'não veio com o idioma da aula');
+    await diego.selectOption(seletor, 'en');
+    await diego.click(`${cartao} button:has-text("Confirmar")`);
+    await diego.waitForSelector(cartao, { state: 'detached', timeout: 5000 });
+    await diego.waitForFunction((n) => creditosDoAluno(alunosCache.find((a) => a.nome === 'Iris').id, 'en').saldo === n, antes + 1, { timeout: 5000 });
+    await iris.waitForFunction(() => notificacoesCache.some((n) => n.tipo === 'aula-nao-realizada' && n.idioma === 'en'), null, { timeout: 5000 });
+  });
   await ctxIris.close();
   await ctxDiego.close();
 
