@@ -53,10 +53,16 @@ function escutarNotificacoes(uid) {
 const ICONES_NOTIFICACAO = { "credito-reposicao": "🎟️", "reposicao-aprovada": "✅", "reposicao-recusada": "❌",
   "aula-nao-realizada": "🎟️", "aula-marcada": "📅" };
 
-// Cada notificação é de um idioma (as antigas, sem o campo, aparecem em todos):
-// o sino mostra só as do idioma que o aluno está estudando agora
+// Cada notificação é de um idioma: o sino mostra só as do idioma que o aluno está
+// estudando agora. As antigas, de antes de existir o campo, contam como do primeiro
+// idioma do professor — a mesma regra do plano antigo (antes ficavam em todos os
+// idiomas, e um crédito de inglês aparecia também no espanhol).
+function idiomaDaNotificacao(n) {
+  return n.idioma ? idiomaValido(n.idioma) : idiomasParaAula()[0];
+}
+
 function notificacoesDoIdioma(idioma) {
-  return notificacoesCache.filter((n) => !n.idioma || n.idioma === idioma);
+  return notificacoesCache.filter((n) => idiomaDaNotificacao(n) === idioma);
 }
 
 function renderizarNotificacoes() {
@@ -154,7 +160,7 @@ function atualizarSeletorIdioma() {
   const seletor = document.getElementById("seletor-idioma");
   if (!seletor) return;
   seletor.innerHTML = idiomasDisponiveis.map((id) => {
-    const avisos = id === idiomaDoAluno ? 0 : notificacoesCache.filter((n) => n.idioma === id && !n.lida).length;
+    const avisos = id === idiomaDoAluno ? 0 : notificacoesCache.filter((n) => idiomaDaNotificacao(n) === id && !n.lida).length;
     return `<option value="${id}" ${id === idiomaDoAluno ? "selected" : ""}>${IDIOMAS[id].nome}${avisos ? ` (${avisos} aviso${avisos > 1 ? "s" : ""})` : ""}</option>`;
   }).join("");
   seletor.hidden = idiomasDisponiveis.length < 2; // só aparece quando existe mais de um idioma
