@@ -1756,6 +1756,9 @@ function montarCalendarioProfessor() {
     celula.onclick = () => {
       const dataIso = celula.dataset.calday;
       diaSelecionadoProfessor = diaSelecionadoProfessor === dataIso ? null : dataIso;
+      // Com o "Marcar aula" aberto ao lado, o dia clicado já vai para o formulário
+      const formularioAberto = !document.getElementById("modal-marcar-aula").classList.contains("modal-oculto");
+      if (formularioAberto && dataIso >= dataDeHojeISO()) document.getElementById("marcar-data").value = dataIso;
       montarCalendarioProfessor();
     };
   });
@@ -2253,7 +2256,11 @@ function abrirMarcarAula(alunoId, dataIso) {
 
   document.getElementById("status-marcar-aula").textContent = "";
   atualizarReposicaoMarcarAula();
-  document.getElementById("modal-marcar-aula").classList.remove("modal-oculto");
+  // O formulário fica ao lado do calendário, na Agenda (pode ter sido aberto em "Meus Alunos")
+  mostrarAbaProfessor("agenda");
+  const painel = document.getElementById("modal-marcar-aula");
+  painel.classList.remove("modal-oculto");
+  painel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function fecharMarcarAula() {
