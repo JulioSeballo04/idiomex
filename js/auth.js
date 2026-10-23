@@ -230,7 +230,7 @@ async function excluirMinhaConta() {
         await aula.ref.update({ status: "cancelada", canceladoPor: "aluno" });
       }
     }
-    for (const sub of ["palavras", "anotacoes", "mensagens", "notificacoes"]) {
+    for (const sub of ["palavras", "anotacoes", "mensagens", "notificacoes", "documentosAula", "salaDeAula"]) {
       await apagarSubcolecao(perfilRef.collection(sub));
     }
   }

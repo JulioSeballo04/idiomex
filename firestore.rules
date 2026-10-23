@@ -63,6 +63,16 @@ service cloud.firestore {
         plano.reposicoesConcedidas is int && plano.reposicoesConcedidas >= 0 && plano.reposicoesConcedidas <= 1000;
     }
 
+    // Links da sala de aula (aula online e documentos): só http(s) — impede um
+    // "javascript:..." que rodaria código ao ser clicado.
+    function linkValido(url) {
+      return url is string && url.size() <= 2000 && url.matches('https?://[^\\s]+');
+    }
+
+    function tituloDocumentoValido(titulo) {
+      return titulo is string && titulo.size() > 0 && titulo.size() <= 200;
+    }
+
     match /usuarios/{userId} {
       // Leitura: o próprio dono, o professor vinculado a esse aluno, ou o aluno
       // vinculado a esse professor (o aluno lê o perfil do professor pra saber quais
@@ -153,6 +163,48 @@ service cloud.firestore {
         allow read: if request.auth != null &&
           (request.auth.uid == userId || ehProfessorDoAluno(userId));
         allow write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Sala de aula: o link da aula online (doc "link"), deixado pelo professor
+      // vinculado. O aluno só lê (e apaga, ao excluir a própria conta).
+      match /salaDeAula/{docId} {
+        allow read: if request.auth != null &&
+          (request.auth.uid == userId || ehProfessorDoAluno(userId));
+        allow create, update: if request.auth != null && docId == "link" &&
+          ehProfessorDoAluno(userId) &&
+          request.resource.data.keys().hasOnly(["url", "professorId", "atualizadoEm"]) &&
+          linkValido(request.resource.data.url) &&
+          request.resource.data.professorId == request.auth.uid;
+        allow delete: if request.auth != null &&
+          (request.auth.uid == userId || ehProfessorDoAluno(userId));
+      }
+
+      // Documentos usados em aula (título + link), adicionados pelo professor
+      // vinculado. Cada documento tem um bloco de anotações do aluno sobre ele
+      // ("anotacao"): o aluno escreve, o professor só lê — como o vocabulário.
+      // O professor não mexe na anotação; o aluno não mexe no documento.
+      match /documentosAula/{documentoId} {
+        allow read: if request.auth != null &&
+          (request.auth.uid == userId || ehProfessorDoAluno(userId));
+        allow create: if request.auth != null && ehProfessorDoAluno(userId) &&
+          request.resource.data.keys().hasOnly(["titulo", "url", "professorId", "criadoEm"]) &&
+          tituloDocumentoValido(request.resource.data.titulo) &&
+          linkValido(request.resource.data.url) &&
+          request.resource.data.professorId == request.auth.uid;
+        allow update: if request.auth != null && (
+          (ehProfessorDoAluno(userId) &&
+            resource.data.professorId == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["titulo", "url"]) &&
+            tituloDocumentoValido(request.resource.data.titulo) &&
+            linkValido(request.resource.data.url)) ||
+
+          (request.auth.uid == userId &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["anotacao", "anotacaoEm"]) &&
+            request.resource.data.get('anotacao', '') is string &&
+            request.resource.data.get('anotacao', '').size() <= 5000)
+        );
+        allow delete: if request.auth != null &&
+          (request.auth.uid == userId || ehProfessorDoAluno(userId));
       }
 
       // Relatório de aulas: o "diário de bordo" do professor sobre o que foi trabalhado

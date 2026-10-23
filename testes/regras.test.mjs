@@ -93,6 +93,29 @@ await t("student reads own notifications", getDocs(collection(db("S1"), "usuario
 await t("other user cannot read notifications", assertFails(getDocs(collection(db("S9"), "usuarios/S1/notificacoes"))));
 await t("student marks notification as read", updateDoc(doc(db("S1"), "usuarios/S1/notificacoes/n1"), { lida: true }));
 await t("student cannot change notification text", assertFails(updateDoc(doc(db("S1"), "usuarios/S1/notificacoes/n1"), { texto: "x" })));
+// Sala de aula: link da aula e documentos (o aluno anota, o professor lê)
+const link = (extra) => ({ url: "https://meet.google.com/abc-defg-hij", professorId: "P1", atualizadoEm: new Date(), ...extra });
+await t("linked professor sets lesson link", setDoc(doc(db("P1"), "usuarios/S1/salaDeAula/link"), link()));
+await t("student reads lesson link", getDoc(doc(db("S1"), "usuarios/S1/salaDeAula/link")));
+await t("stranger cannot read lesson link", assertFails(getDoc(doc(db("S9"), "usuarios/S1/salaDeAula/link"))));
+await t("unlinked professor cannot set lesson link", assertFails(setDoc(doc(db("P0"), "usuarios/S1/salaDeAula/link"), link({ professorId: "P0" }))));
+await t("student cannot set own lesson link", assertFails(setDoc(doc(db("S1"), "usuarios/S1/salaDeAula/link"), link())));
+await t("javascript: link rejected", assertFails(setDoc(doc(db("P1"), "usuarios/S1/salaDeAula/link"), link({ url: "javascript:alert(1)" }))));
+await t("only the 'link' doc is allowed", assertFails(setDoc(doc(db("P1"), "usuarios/S1/salaDeAula/outro"), link())));
+const documento = (extra) => ({ titulo: "Lesson 1", url: "https://drive.google.com/file/d/x", professorId: "P1", criadoEm: new Date(), ...extra });
+await t("linked professor adds a document", setDoc(doc(db("P1"), "usuarios/S1/documentosAula/d1"), documento()));
+await t("document with a javascript: link rejected", assertFails(setDoc(doc(db("P1"), "usuarios/S1/documentosAula/d2"), documento({ url: "javascript:alert(1)" }))));
+await t("professor cannot pre-fill the student's notes", assertFails(setDoc(doc(db("P1"), "usuarios/S1/documentosAula/d3"), documento({ anotacao: "x" }))));
+await t("student cannot add documents", assertFails(setDoc(doc(db("S1"), "usuarios/S1/documentosAula/d4"), documento())));
+await t("unlinked professor cannot add documents", assertFails(setDoc(doc(db("P0"), "usuarios/S1/documentosAula/d5"), documento({ professorId: "P0" }))));
+await t("student writes notes on a document", updateDoc(doc(db("S1"), "usuarios/S1/documentosAula/d1"), { anotacao: "past simple: verbo + ed", anotacaoEm: new Date() }));
+await t("student cannot change the document", assertFails(updateDoc(doc(db("S1"), "usuarios/S1/documentosAula/d1"), { url: "https://evil.example" })));
+await t("professor reads the student's notes", getDoc(doc(db("P1"), "usuarios/S1/documentosAula/d1")));
+await t("professor cannot edit the student's notes", assertFails(updateDoc(doc(db("P1"), "usuarios/S1/documentosAula/d1"), { anotacao: "x" })));
+await t("professor renames the document", updateDoc(doc(db("P1"), "usuarios/S1/documentosAula/d1"), { titulo: "Lesson 1 — Past simple" }));
+await t("stranger cannot read documents", assertFails(getDocs(collection(db("S9"), "usuarios/S1/documentosAula"))));
+await t("professor deletes a document", deleteDoc(doc(db("P1"), "usuarios/S1/documentosAula/d1")));
+await t("student deletes lesson link (account deletion)", deleteDoc(doc(db("S1"), "usuarios/S1/salaDeAula/link")));
 // Messages deletion by student
 await setDoc(doc(db("P1"), "usuarios/S1/mensagens/m1"), { texto: "oi" });
 await t("student deletes own messages", deleteDoc(doc(db("S1"), "usuarios/S1/mensagens/m1")));

@@ -1337,3 +1337,81 @@ html[data-tema="noturno"] .secao-perigo h4 { color: #F08A75; }
 .badge-status-agendada { background: #fff7e6; color: #916a00; }
 .badge-status-concluida { background: #e3f7e8; color: #1e6b34; }
 .badge-status-cancelada { background: #f2f2f2; color: #777; }
+
+/* ---------- Sala de aula (link da aula + documentos com anotações) ---------- */
+.sala-secao { margin-bottom: 1.4rem; }
+.sala-secao h4 { font-size: 0.9rem; margin: 0 0 0.4rem; }
+.linha-sala {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
+}
+.linha-sala input {
+  flex: 1;
+  min-width: 180px;
+  padding: 0.6em 0.7em;
+  border-radius: 6px;
+  border: 1px solid var(--borda);
+  background: var(--bg-cartao);
+}
+.acoes-link-aula {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+.acoes-link-aula button {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0;
+}
+.acoes-link-aula button:hover { color: var(--acento-forte); }
+.btn-entrar-aula { display: inline-block; text-decoration: none; }
+
+.documento-aula {
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--acento-secundario);
+  border-radius: 6px;
+  padding: 0.8rem 1rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.92rem;
+}
+.titulo-documento {
+  display: block;
+  font-weight: 600;
+  color: var(--acento-forte);
+  word-break: break-word;
+}
+.btn-notas-documento {
+  background: none;
+  border: 1px dashed var(--borda);
+  border-radius: 6px;
+  padding: 0.35em 0.8em;
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.btn-notas-documento:hover,
+.btn-notas-documento.tem-nota { border-color: var(--acento); color: var(--acento-forte); }
+.bloco-notas-documento {
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 0.6em 0.7em;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+.texto-nota-documento { white-space: pre-wrap; display: block; }
+.bloco-notas-documento textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 0.5em 0.6em;
+  border-radius: 6px;
+  border: 1px solid var(--borda);
+  background: var(--bg-cartao);
+}
+.vazio-inline { color: var(--ink-soft); font-style: italic; }

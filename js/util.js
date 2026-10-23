@@ -43,6 +43,18 @@ function redesenharPreservandoCampos(container, redesenhar) {
   }
 }
 
+// Confere um link colado pelo professor (aula online, documento). Sem "https://"
+// na frente, completa; aceita só http(s) — as regras do Firestore recusam o resto.
+// Devolve "" se o link não servir.
+function normalizarLink(texto) {
+  let url = (texto || "").trim();
+  if (!url) return "";
+  if (!/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(url)) url = "https://" + url;
+  url = url.replace(/^https?:/i, (esquema) => esquema.toLowerCase());
+  if (!/^https?:\/\/\S+$/.test(url) || url.length > 2000) return "";
+  return url;
+}
+
 // Esc fecha a janela (modal) que estiver aberta, como o botão ✕ dela
 document.addEventListener("keydown", (evento) => {
   if (evento.key !== "Escape") return;

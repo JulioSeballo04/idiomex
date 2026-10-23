@@ -5,8 +5,9 @@ italiano, francês, japonês, mandarim, alemão e coreano), com contas de **prof
 **aluno**. O professor escolhe o idioma que ensina; os alunos vinculados
 pelo código adicionam palavras nesse idioma, recebem a tradução e frases
 de exemplo geradas por IA. O professor acompanha o vocabulário de cada
-aluno, deixa recados, registra anotações no calendário e gerencia a
-agenda de aulas (com confirmação e cancelamento por WhatsApp).
+aluno, deixa recados, registra anotações no calendário, monta a sala de
+aula (link da aula online e documentos, com anotações do aluno em cada
+um) e gerencia a agenda de aulas (com confirmação e cancelamento por WhatsApp).
 
 **Custo: R$ 0,00.** Firebase no plano Spark (grátis, sem cartão) +
 Vercel no plano Hobby (grátis, sem cartão) + Gemini API (camada
@@ -123,6 +124,16 @@ usuarios/{uid}/notificacoes/{id}
   tipo, texto, lida, criadoEm, professorId
                           -> criadas pelo professor (crédito de reposição,
                              pedido aprovado/recusado), lidas pelo aluno
+
+usuarios/{uid}/salaDeAula/link
+  url, professorId, atualizadoEm
+                          -> link da aula online, deixado pelo professor
+
+usuarios/{uid}/documentosAula/{id}
+  titulo, url, professorId, criadoEm
+                          -> documentos usados em aula (link), do professor
+  anotacao, anotacaoEm    -> bloco de anotações do aluno sobre o documento
+                             (o aluno escreve, o professor lê)
 
 aulas/{professorId_data_hora}
   professorId, alunoId, alunoNome, data, horaInicio, horaFim, modalidade,

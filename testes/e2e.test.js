@@ -271,6 +271,37 @@ function dataDaqui(dias) {
     esperar(prof.ultimoDialogo, 'excluiu sem perguntar');
   });
 
+  console.log('\nSala de aula');
+  await caso('professor deixa link e documento; aluno anota e o professor lê a anotação', async () => {
+    await prof.click('.aba-detalhe:has-text("Sala de aula")');
+    await prof.fill('input[id^="input-link-aula-"]', 'meet.google.com/abc-defg-hij');
+    await prof.click('button:has-text("Salvar link")');
+    await prof.waitForSelector('.acoes-link-aula a[href="https://meet.google.com/abc-defg-hij"]', { timeout: 5000 });
+    await prof.fill('input[id^="input-titulo-documento-"]', 'Lesson 1');
+    await prof.fill('input[id^="input-url-documento-"]', 'https://drive.google.com/file/d/abc');
+    await prof.click('button:has-text("Adicionar documento")');
+    await prof.waitForSelector('.documento-aula:has-text("Lesson 1")', { timeout: 5000 });
+
+    await aluno.click('#btn-sala-aula');
+    await aluno.waitForSelector('#corpo-sala-aula a[href="https://meet.google.com/abc-defg-hij"]', { timeout: 5000 });
+    await aluno.click('#corpo-sala-aula .btn-notas-documento');
+    await aluno.fill('textarea[id^="nota-documento-"]', 'Past simple: verbo + ed');
+    await aluno.click('button:has-text("Salvar anotações")');
+    await aluno.waitForFunction(() => /salvas/.test((document.querySelector('[id^="status-nota-documento-"]') || {}).textContent), null, { timeout: 5000 });
+    await aluno.click('#modal-sala-aula .btn-fechar-modal');
+
+    await prof.click('.documento-aula .btn-notas-documento');
+    await prof.waitForSelector('.bloco-notas-documento:has-text("Past simple: verbo + ed")', { timeout: 5000 });
+  });
+
+  await caso('link que não é http(s) é recusado', async () => {
+    prof.ultimoDialogo = null;
+    await prof.fill('input[id^="input-link-aula-"]', 'javascript:alert(1)');
+    await prof.click('button:has-text("Salvar link")');
+    await dormir(500);
+    esperar(prof.ultimoDialogo && /link válido/.test(prof.ultimoDialogo), 'aceitou link javascript:');
+  });
+
   console.log('\nAgendamento');
   const dia = dataDaqui(3);
   const chaveMes = (n) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };

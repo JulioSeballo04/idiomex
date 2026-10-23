@@ -2,8 +2,8 @@
 // PAINEL DO PROFESSOR
 // ============================================================
 // Cada aluno é um bloco de "acordeão": clica para abrir/fechar.
-// Dentro do bloco, três abas: Vocabulário (por letra), Recados
-// e Relatório de aulas. O sistema guarda, por aluno e por letra,
+// Dentro do bloco, abas: Vocabulário (por letra), Recados,
+// Relatório de aulas, Aulas marcadas e Sala de aula. O sistema guarda, por aluno e por letra,
 // a última vez que o professor abriu aquela letra — o destaque
 // de "novidade" (bolinha âmbar) some só na letra clicada, não
 // no aluno inteiro.
@@ -150,15 +150,20 @@ function garantirEstado(alunoId) {
   if (!estadoAlunos[alunoId]) {
     estadoAlunos[alunoId] = {
       aberto: false,
-      abaAtiva: "vocabulario",       // vocabulario | recados | relatorio | aulas
+      abaAtiva: "vocabulario",       // vocabulario | recados | relatorio | aulas | sala
       letraSelecionada: "TODAS",
       idiomaFiltro: null,            // idioma do vocabulário em exibição (só importa se o aluno estuda mais de um)
       palavras: [],
       mensagens: [],
       relatorios: [],
+      linkAula: null,                // {url, professorId} do doc salaDeAula/link
+      documentosAula: [],
+      notasDocumentoAbertas: new Set(), // ids dos documentos com o bloco de anotações aberto
       unsubPalavras: null,
       unsubMensagens: null,
       unsubRelatorios: null,
+      unsubLinkAula: null,
+      unsubDocumentosAula: null,
       letrasVistas: null,            // {A: Timestamp, B: Timestamp, ...} última vez que cada letra foi aberta
       temNovidade: false,
       letrasNovas: new Set(),
@@ -448,12 +453,32 @@ function ativarListenersDetalheAluno(alunoId) {
         if (estado.aberto) renderizarListaAlunos();
       });
   }
+
+  const salaRef = db.collection("usuarios").doc(alunoId);
+  if (!estado.unsubLinkAula) {
+    estado.unsubLinkAula = salaRef.collection("salaDeAula").doc("link")
+      .onSnapshot((snap) => {
+        estado.linkAula = snap.exists ? snap.data() : null;
+        if (estado.aberto) renderizarListaAlunos();
+      });
+  }
+
+  if (!estado.unsubDocumentosAula) {
+    estado.unsubDocumentosAula = salaRef.collection("documentosAula")
+      .orderBy("criadoEm", "desc")
+      .onSnapshot((snap) => {
+        estado.documentosAula = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        if (estado.aberto) renderizarListaAlunos();
+      });
+  }
 }
 
 function desativarListenersDetalheAluno(alunoId) {
   const estado = estadoAlunos[alunoId];
   if (estado.unsubMensagens) { estado.unsubMensagens(); estado.unsubMensagens = null; }
   if (estado.unsubRelatorios) { estado.unsubRelatorios(); estado.unsubRelatorios = null; }
+  if (estado.unsubLinkAula) { estado.unsubLinkAula(); estado.unsubLinkAula = null; }
+  if (estado.unsubDocumentosAula) { estado.unsubDocumentosAula(); estado.unsubDocumentosAula = null; }
 }
 
 // -------------------- DETALHE DO ALUNO (ABAS) --------------------
@@ -471,6 +496,8 @@ function montarHtmlDetalheAluno(alunoId) {
         onclick="mudarAbaAluno('${alunoId}','relatorio')">Relatório de aulas</button>
       <button class="aba-detalhe ${estado.abaAtiva === "aulas" ? "ativa" : ""}"
         onclick="mudarAbaAluno('${alunoId}','aulas')">Aulas marcadas</button>
+      <button class="aba-detalhe ${estado.abaAtiva === "sala" ? "ativa" : ""}"
+        onclick="mudarAbaAluno('${alunoId}','sala')">Sala de aula</button>
     </div>
   `;
 
@@ -478,6 +505,7 @@ function montarHtmlDetalheAluno(alunoId) {
   if (estado.abaAtiva === "recados") conteudo = montarAbaRecados(alunoId);
   else if (estado.abaAtiva === "relatorio") conteudo = montarAbaRelatorio(alunoId);
   else if (estado.abaAtiva === "aulas") conteudo = montarAbaAulas(alunoId);
+  else if (estado.abaAtiva === "sala") conteudo = montarAbaSalaDeAula(alunoId);
   else conteudo = montarAbaVocabulario(alunoId);
 
   return montarContatoAluno(alunoId) + montarPlanoAluno(alunoId) + abas + conteudo;
@@ -559,11 +587,11 @@ function montarContatoAluno(alunoId) {
   const partes = [];
   if (aluno.telefone) {
     const link = linkWhatsapp(aluno.telefone, `Olá ${aluno.nome}! Tudo bem?`);
-    partes.push(`<span>📱 ${escapeHtml(aluno.telefone)}${link ? ` — <a href="${link}" target="_blank" rel="noopener">Chamar no WhatsApp</a>` : ""}</span>`);
+    partes.push(`<span>${escapeHtml(aluno.telefone)}${link ? ` — <a href="${link}" target="_blank" rel="noopener">Chamar no WhatsApp</a>` : ""}</span>`);
   } else {
-    partes.push(`<span>📱 Telefone não informado pelo aluno</span>`);
+    partes.push(`<span>Telefone não informado pelo aluno</span>`);
   }
-  if (email) partes.push(`<span>✉️ ${escapeHtml(email)}</span>`);
+  if (email) partes.push(`<span>${escapeHtml(email)}</span>`);
   return `<div class="contato-aluno">${partes.join("")}</div>`;
 }
 
@@ -808,6 +836,139 @@ async function excluirRelatorio(alunoId, relatorioId) {
     console.error(e);
     alert("Não foi possível excluir o registro. Tente novamente.");
   }
+}
+
+// -------------------- ABA: SALA DE AULA --------------------
+// O professor deixa o link da aula online e os documentos usados em aula
+// (título + link). Cada documento tem um bloco de anotações que o aluno escreve
+// e o professor acompanha (só leitura), como o vocabulário.
+
+function montarAbaSalaDeAula(alunoId) {
+  const estado = estadoAlunos[alunoId];
+  // Só o que foi deixado por este professor (o aluno pode ter vindo de outro)
+  const link = estado.linkAula && estado.linkAula.professorId === professorIdAtual ? estado.linkAula.url : "";
+  const documentos = estado.documentosAula.filter((d) => d.professorId === professorIdAtual);
+
+  const blocoLink = `
+    <div class="sala-secao">
+      <h4>Link da aula</h4>
+      <p class="dica-plano">Meet, Zoom, Teams... O aluno entra na aula por este link.</p>
+      <div class="linha-sala">
+        <input type="text" inputmode="url" id="input-link-aula-${alunoId}" placeholder="https://meet.google.com/..." value="${escapeHtml(link)}">
+        <button class="btn btn-primario" onclick="salvarLinkAula('${alunoId}')">Salvar link</button>
+      </div>
+      ${link ? `
+        <div class="acoes-link-aula">
+          <a href="${escapeHtml(link)}" target="_blank" rel="noopener">Abrir a aula ↗</a>
+          <button class="excluir" onclick="removerLinkAula('${alunoId}')">Remover link</button>
+        </div>` : ""}
+    </div>`;
+
+  const lista = documentos.length === 0
+    ? `<p class="vazio">Nenhum documento adicionado ainda.</p>`
+    : documentos.map((d) => {
+        const aberto = estado.notasDocumentoAbertas.has(d.id);
+        const data = d.criadoEm ? d.criadoEm.toDate().toLocaleDateString("pt-BR") : "";
+        const nota = aberto ? `
+          <div class="bloco-notas-documento">
+            ${d.anotacao
+              ? `<span class="texto-nota-documento">${escapeHtml(d.anotacao)}</span>${d.anotacaoEm ? `<span class="data-msg">Atualizada em ${escapeHtml(d.anotacaoEm.toDate().toLocaleDateString("pt-BR"))}</span>` : ""}`
+              : `<span class="vazio-inline">O aluno ainda não fez anotações sobre este documento.</span>`}
+          </div>` : "";
+        return `
+          <div class="documento-aula">
+            <div class="acoes-msg">
+              <button class="excluir" onclick="removerDocumentoAula('${alunoId}','${d.id}')">Excluir</button>
+            </div>
+            <a class="titulo-documento" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${escapeHtml(d.titulo)}</a>
+            <span class="data-msg">${escapeHtml(data)}</span>
+            <button class="btn-notas-documento ${d.anotacao ? "tem-nota" : ""}" onclick="alternarNotasDocumentoProfessor('${alunoId}','${d.id}')">
+              ${aberto ? "Fechar anotações" : "Anotações do aluno"}${d.anotacao && !aberto ? " •" : ""}
+            </button>
+            ${nota}
+          </div>`;
+      }).join("");
+
+  const blocoDocumentos = `
+    <div class="sala-secao">
+      <h4>Documentos da aula</h4>
+      <p class="dica-plano">Cole o link do arquivo (Google Drive, Docs, PDF na internet...). Deixe o compartilhamento como "qualquer pessoa com o link".</p>
+      <div class="linha-sala">
+        <input type="text" id="input-titulo-documento-${alunoId}" placeholder="Título (ex: Lesson 3 — Past simple)">
+        <input type="text" inputmode="url" id="input-url-documento-${alunoId}" placeholder="https://drive.google.com/...">
+        <button class="btn btn-primario" onclick="adicionarDocumentoAula('${alunoId}')">Adicionar documento</button>
+      </div>
+      ${lista}
+    </div>`;
+
+  return blocoLink + blocoDocumentos;
+}
+
+async function salvarLinkAula(alunoId) {
+  const campo = document.getElementById(`input-link-aula-${alunoId}`);
+  const url = normalizarLink(campo ? campo.value : "");
+  if (!url) {
+    alert("Cole um link válido, começando com https:// (ex: https://meet.google.com/abc-defg-hij).");
+    return;
+  }
+  try {
+    await db.collection("usuarios").doc(alunoId).collection("salaDeAula").doc("link").set({
+      url, professorId: professorIdAtual, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível salvar o link. Tente novamente.");
+  }
+}
+
+async function removerLinkAula(alunoId) {
+  if (!confirm("Remover o link da aula? O aluno deixa de vê-lo.")) return;
+  try {
+    await db.collection("usuarios").doc(alunoId).collection("salaDeAula").doc("link").delete();
+    const campo = document.getElementById(`input-link-aula-${alunoId}`);
+    if (campo) campo.value = "";
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível remover o link. Tente novamente.");
+  }
+}
+
+async function adicionarDocumentoAula(alunoId) {
+  const campoTitulo = document.getElementById(`input-titulo-documento-${alunoId}`);
+  const campoUrl = document.getElementById(`input-url-documento-${alunoId}`);
+  const titulo = (campoTitulo ? campoTitulo.value : "").trim().slice(0, 200);
+  const url = normalizarLink(campoUrl ? campoUrl.value : "");
+  if (!titulo) { alert("Dê um título ao documento."); return; }
+  if (!url) { alert("Cole um link válido para o documento, começando com https://."); return; }
+  try {
+    await db.collection("usuarios").doc(alunoId).collection("documentosAula").add({
+      titulo, url, professorId: professorIdAtual, criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    // Busca os campos de novo: a tela pode ter sido redesenhada durante o "await"
+    const t = document.getElementById(`input-titulo-documento-${alunoId}`);
+    const u = document.getElementById(`input-url-documento-${alunoId}`);
+    if (t) t.value = "";
+    if (u) u.value = "";
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível adicionar o documento. Tente novamente.");
+  }
+}
+
+async function removerDocumentoAula(alunoId, documentoId) {
+  if (!confirm("Excluir esse documento? O aluno deixa de vê-lo, junto com as anotações dele sobre o documento.")) return;
+  try {
+    await db.collection("usuarios").doc(alunoId).collection("documentosAula").doc(documentoId).delete();
+  } catch (e) {
+    console.error(e);
+    alert("Não foi possível excluir o documento. Tente novamente.");
+  }
+}
+
+function alternarNotasDocumentoProfessor(alunoId, documentoId) {
+  const abertas = estadoAlunos[alunoId].notasDocumentoAbertas;
+  if (abertas.has(documentoId)) abertas.delete(documentoId); else abertas.add(documentoId);
+  renderizarListaAlunos();
 }
 
 // -------------------- CÓDIGO DO PROFESSOR --------------------
