@@ -1251,16 +1251,22 @@ function fecharAgendamento() {
 
 // Blocos de horário efetivos de um dia: a exceção pontual do professor pra
 // aquele dia, se houver, senão a grade semanal recorrente do dia da semana.
+// Configuração das aulas do idioma escolhido no agendamento (cada idioma pode ter a
+// própria duração, dias e horários; sem isso, vale a configuração padrão do professor)
+function configDoAgendamento() {
+  return configDoIdioma(configAgendaProfessor, idiomaDoAgendamento());
+}
+
 function blocosDoDia(dataIso) {
   const override = overridesAgendaProfessor[dataIso];
   if (override) return override.fechado ? [] : (override.blocos || []);
-  return (configAgendaProfessor.disponibilidade || {})[chaveDiaSemana(dataIso)] || [];
+  return (configDoAgendamento().disponibilidade || {})[chaveDiaSemana(dataIso)] || [];
 }
 
 // Modalidades oferecidas num dia: a exceção pontual do professor (se ele
 // especificou online/presencial só pra esse dia), senão a configuração geral.
 function modalidadesDoDia(dataIso) {
-  return modalidadesDaData(configAgendaProfessor, overridesAgendaProfessor, dataIso);
+  return modalidadesDaData(configDoAgendamento(), overridesAgendaProfessor, dataIso);
 }
 
 // Um dia tem disponibilidade se sobrar algum bloco de horário depois de
@@ -1546,8 +1552,9 @@ async function carregarHorariosLivres(dataEscolhida) {
   // Outra data pode ter sido escolhida enquanto esta carregava
   if (!agendamento || agendamento.data !== dataEscolhida) return;
 
-  const duracao = configAgendaProfessor.duracaoAulaMinutos || 50;
-  let horarios = slotsSemConflito(gerarSlotsDoDia(blocos, duracao, configAgendaProfessor.intervaloMinutos), duracao, marcadas);
+  const config = configDoAgendamento();
+  const duracao = config.duracaoAulaMinutos || 50;
+  let horarios = slotsSemConflito(gerarSlotsDoDia(blocos, duracao, config.intervaloMinutos), duracao, marcadas);
 
   // Se a data escolhida for hoje, esconde horários que já passaram
   if (dataEscolhida === dataDeHojeISO()) {
@@ -1584,7 +1591,7 @@ function renderizarHorariosAgendamento() {
     botao.type = "button";
     botao.className = "btn-slot-horario";
     // textContent: seguro, sem risco de injeção
-    botao.textContent = faixaHorario(horaInicio, somarMinutos(horaInicio, configAgendaProfessor.duracaoAulaMinutos || 50));
+    botao.textContent = faixaHorario(horaInicio, somarMinutos(horaInicio, configDoAgendamento().duracaoAulaMinutos || 50));
     botao.setAttribute("aria-pressed", "false");
     botao.onclick = () => {
       agendamento.hora = horaInicio;
@@ -1623,7 +1630,7 @@ async function confirmarAgendamento() {
   }
 
   const { data, hora, modalidade, reposicao, idioma } = agendamento;
-  const duracao = configAgendaProfessor.duracaoAulaMinutos || 50;
+  const duracao = configDoAgendamento().duracaoAulaMinutos || 50;
 
   // A aba do WhatsApp é aberta em branco JÁ AQUI, antes do "await" — celulares
   // (principalmente Safari/iOS) bloqueiam window.open() se ele só acontecer depois de uma

@@ -132,6 +132,14 @@ usuarios/{uid}/notificacoes/{id}
                           -> criadas pelo professor (crédito de reposição,
                              pedido aprovado/recusado), lidas pelo aluno
 
+usuarios/{professorId}/configuracaoAgenda/dados
+  duracaoAulaMinutos, intervaloMinutos, modalidades, modalidadesPorDia,
+  disponibilidade         -> configuração padrão das aulas
+  porIdioma: {en: {...os mesmos campos}}
+                          -> idioma com configuração própria (os outros
+                             usam a padrão)
+  whatsapp, mesesLiberados -> valem para todos os idiomas
+
 usuarios/{uid}/salaDeAula/link
   url, professorId, atualizadoEm
                           -> link da aula online, deixado pelo professor

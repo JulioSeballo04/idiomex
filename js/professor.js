@@ -325,13 +325,21 @@ function renderizarVisaoGeralTurma() {
   let totalPalavras = 0;
   let maisAtivo = null;
   const inativos = [];
+  const idioma = idiomaAtivoProfessor;
+  const palavrasDe = (estado) => idioma ? estado.palavras.filter((p) => idiomaDaPalavra(p) === idioma) : estado.palavras;
+  // Com um idioma escolhido, a turma é quem estuda esse idioma (tem palavras ou aulas nele)
+  const turma = idioma
+    ? alunosCache.filter((aluno) => palavrasDe(garantirEstado(aluno.id)).length > 0 ||
+        aulasCache.some((a) => a.alunoId === aluno.id && aulaDoIdioma(a, idioma)))
+    : alunosCache;
 
-  alunosCache.forEach((aluno) => {
+  turma.forEach((aluno) => {
     const estado = garantirEstado(aluno.id);
-    totalPalavras += estado.palavras.length;
+    const palavras = palavrasDe(estado);
+    totalPalavras += palavras.length;
 
     let ultimaAtividadeMs = null;
-    estado.palavras.forEach((p) => {
+    palavras.forEach((p) => {
       if (p.criadoEm) {
         const ms = p.criadoEm.toMillis();
         if (!ultimaAtividadeMs || ms > ultimaAtividadeMs) ultimaAtividadeMs = ms;
@@ -342,22 +350,23 @@ function renderizarVisaoGeralTurma() {
       inativos.push(aluno.nome);
     }
 
-    if (!maisAtivo || estado.palavras.length > maisAtivo.qtd) {
-      maisAtivo = { nome: aluno.nome, qtd: estado.palavras.length };
+    if (!maisAtivo || palavras.length > maisAtivo.qtd) {
+      maisAtivo = { nome: aluno.nome, qtd: palavras.length };
     }
   });
+  const deIdioma = idioma ? ` de ${IDIOMAS[idioma].nome}` : "";
 
   container.innerHTML = `
     <div class="visao-geral-cartoes">
       <div class="cartao-metrica">
-        <div class="metrica-numero">${alunosCache.length}</div>
-        <div class="metrica-label">${alunosCache.length === 1 ? "aluno vinculado" : "alunos vinculados"}</div>
+        <div class="metrica-numero">${turma.length}</div>
+        <div class="metrica-label">${turma.length === 1 ? "aluno" : "alunos"}${deIdioma || (turma.length === 1 ? " vinculado" : " vinculados")}</div>
       </div>
       <div class="cartao-metrica">
         <div class="metrica-numero">${totalPalavras}</div>
-        <div class="metrica-label">${totalPalavras === 1 ? "palavra no total" : "palavras no total"}</div>
+        <div class="metrica-label">${totalPalavras === 1 ? "palavra" : "palavras"}${deIdioma || " no total"}</div>
       </div>
-      ${alunosCache.length > 1 ? `
+      ${turma.length > 1 ? `
         <div class="cartao-metrica">
           <div class="metrica-numero metrica-numero-nome">${maisAtivo && maisAtivo.qtd > 0 ? escapeHtml(maisAtivo.nome) : "—"}</div>
           <div class="metrica-label">aluno mais ativo</div>
@@ -540,7 +549,9 @@ function montarPlanoAluno(alunoId) {
   if (!aluno) return "";
   const aulasDoAluno = aulasCache.filter((a) => a.alunoId === alunoId);
   const varios = idiomasAtuaisProfessor.length > 1;
-  const linhas = idiomasAtuaisProfessor.map((idioma) => {
+  // Com um idioma escolhido no topo do painel, só o plano desse idioma
+  const idiomasDoPlano = idiomaAtivoProfessor ? [idiomaAtivoProfessor] : idiomasAtuaisProfessor;
+  const linhas = idiomasDoPlano.map((idioma) => {
     const plano = planoNoIdioma(aluno, idioma);
     const saldo = saldoReposicoes(plano, aulasDoAluno, professorIdAtual, idioma);
     const usadas = reposicoesUsadas(aulasDoAluno, professorIdAtual, idioma);
@@ -639,7 +650,8 @@ function montarAbaVocabulario(alunoId) {
 
   // Se o aluno estuda mais de um idioma, o professor vê um idioma de cada vez
   const idiomasDoAluno = Object.keys(IDIOMAS).filter((id) => estado.palavras.some((p) => idiomaDaPalavra(p) === id));
-  const idiomaEmExibicao = idiomasDoAluno.includes(estado.idiomaFiltro) ? estado.idiomaFiltro : idiomasDoAluno[0];
+  const preferido = idiomaAtivoProfessor && idiomasDoAluno.includes(idiomaAtivoProfessor) ? idiomaAtivoProfessor : estado.idiomaFiltro;
+  const idiomaEmExibicao = idiomasDoAluno.includes(preferido) ? preferido : idiomasDoAluno[0];
   const palavrasVisiveis = idiomasDoAluno.length > 1
     ? estado.palavras.filter((p) => idiomaDaPalavra(p) === idiomaEmExibicao)
     : estado.palavras;
@@ -1191,7 +1203,7 @@ function renderizarHojeProfessor() {
   const limiteIso = chaveDataISO(limite);
   const ordenar = (lista) => lista.sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio));
 
-  if (idiomaFiltroAgenda && !idiomasAtuaisProfessor.includes(idiomaFiltroAgenda)) idiomaFiltroAgenda = null;
+  if (idiomaAtivoProfessor && !idiomasAtuaisProfessor.includes(idiomaAtivoProfessor)) idiomaAtivoProfessor = null;
   // Avisos de todos os idiomas: o contador da aba e os números do filtro contam tudo
   const todasAtrasadas = aulasCache.filter((a) => a.status === "agendada" && fimDaAula(a) <= agora);
   const todosPedidos = aulasCache.filter((a) => a.status === "pendente");
@@ -1221,23 +1233,26 @@ function renderizarHojeProfessor() {
   });
 
   const pedidos = ordenar(todosPedidos.filter(noFiltroAgenda));
-  const lembretes = todosLembretes.filter((l) => !idiomaFiltroAgenda || l.idioma === idiomaFiltroAgenda);
+  const lembretes = todosLembretes.filter((l) => !idiomaAtivoProfessor || l.idioma === idiomaAtivoProfessor);
 
   const aulasHoje = proximas.filter((a) => a.data === hojeIso && a.status === "agendada").length;
   const resumo = [`${aulasHoje} ${aulasHoje === 1 ? "aula hoje" : "aulas hoje"}`];
   if (atrasadas.length) resumo.push(`${atrasadas.length} para confirmar`);
 
-  const filtro = idiomasAtuaisProfessor.length > 1 ? `
-    <div class="filtro-idioma-agenda" role="tablist" aria-label="Idioma da agenda">
-      <button type="button" class="chip-idioma${!idiomaFiltroAgenda ? " ativo" : ""}" onclick="filtrarAgendaPorIdioma('')">
+  // O seletor de idioma fica no topo do painel (vale para a página toda)
+  const seletorTopo = document.getElementById("seletor-idioma-professor");
+  if (seletorTopo) {
+    seletorTopo.hidden = idiomasAtuaisProfessor.length < 2;
+    seletorTopo.innerHTML = idiomasAtuaisProfessor.length < 2 ? "" : `
+      <span class="rotulo-seletor-idioma">Idioma:</span>
+      <button type="button" class="chip-idioma${!idiomaAtivoProfessor ? " ativo" : ""}" onclick="selecionarIdiomaProfessor('')">
         Todos${totalAvisos ? ` <span class="contador-pedidos">${totalAvisos}</span>` : ""}</button>
       ${idiomasAtuaisProfessor.map((id) => `
-        <button type="button" class="chip-idioma${idiomaFiltroAgenda === id ? " ativo" : ""}" data-idioma="${id}" onclick="filtrarAgendaPorIdioma('${id}')">
-          <span class="ponto-idioma" style="background:${IDIOMAS[id].cor}"></span>${IDIOMAS[id].nome}${avisosPorIdioma[id] ? ` <span class="contador-pedidos">${avisosPorIdioma[id]}</span>` : ""}</button>`).join("")}
-    </div>` : "";
+        <button type="button" class="chip-idioma${idiomaAtivoProfessor === id ? " ativo" : ""}" data-idioma="${id}" onclick="selecionarIdiomaProfessor('${id}')">
+          <span class="ponto-idioma" style="background:${IDIOMAS[id].cor}"></span>${IDIOMAS[id].nome}${avisosPorIdioma[id] ? ` <span class="contador-pedidos">${avisosPorIdioma[id]}</span>` : ""}</button>`).join("")}`;
+  }
 
   container.innerHTML = `
-    ${filtro}
     ${atrasadas.length ? `
       <div class="cartao-pedidos-reposicao" id="confirmar-aulas">
         <h3>${atrasadas.length === 1 ? "1 aula para confirmar" : `${atrasadas.length} aulas para confirmar`}</h3>
@@ -1310,19 +1325,27 @@ function renderizarHojeProfessor() {
     </div>`;
 }
 
-// -------------------- FILTRO DE IDIOMA DA AGENDA --------------------
-// Professor que ensina mais de um idioma vê a Agenda de um idioma de cada vez (ou
-// todos): avisos, próximas aulas e o calendário. O contador da aba conta todos.
-let idiomaFiltroAgenda = null; // null = todos
+// -------------------- IDIOMA DO PAINEL --------------------
+// Professor que ensina mais de um idioma escolhe, no topo do painel, um idioma
+// (ou todos): a visão geral da turma, a Agenda, o calendário, os alunos e a
+// configuração de disponibilidade passam a mostrar só aquele idioma. O contador
+// da aba Agenda continua contando os avisos de todos.
+let idiomaAtivoProfessor = (() => {
+  try { return localStorage.getItem("idiomaPainelProfessor") || null; } catch (e) { return null; }
+})(); // null = todos
 
 function noFiltroAgenda(aula) {
-  return !idiomaFiltroAgenda || aulaDoIdioma(aula, idiomaFiltroAgenda);
+  return !idiomaAtivoProfessor || aulaDoIdioma(aula, idiomaAtivoProfessor);
 }
 
-function filtrarAgendaPorIdioma(idioma) {
-  idiomaFiltroAgenda = idioma && idiomasAtuaisProfessor.includes(idioma) ? idioma : null;
+function selecionarIdiomaProfessor(idioma) {
+  idiomaAtivoProfessor = idioma && idiomasAtuaisProfessor.includes(idioma) ? idioma : null;
+  try { localStorage.setItem("idiomaPainelProfessor", idiomaAtivoProfessor || ""); } catch (e) {}
+  const idiomaSemApp = document.getElementById("input-idioma-sem-app");
+  if (idiomaSemApp && idiomaAtivoProfessor) idiomaSemApp.value = idiomaAtivoProfessor;
   renderizarHojeProfessor();
-  montarCalendarioProfessor();
+  renderizarListaAlunos(); // também redesenha a visão geral e o calendário
+  renderizarAlunosSemApp();
 }
 
 // Contador de avisos na aba "Agenda" e no ícone da barra lateral: pedidos de
@@ -1544,10 +1567,109 @@ async function carregarConfigAgenda() {
   };
 }
 
+// -------------------- CONFIGURAÇÃO POR IDIOMA --------------------
+// O formulário edita um "alvo" de cada vez: a configuração padrão ou a de um
+// idioma. O que foi editado em cada alvo fica em rascunhosConfig até salvar
+// (null = o idioma usa a configuração padrão).
+let rascunhosConfig = {};
+let alvoConfig = "padrao";
+
+function camposDeAula(config) {
+  const campos = {};
+  CAMPOS_CONFIG_POR_IDIOMA.forEach((c) => { if (config && config[c] !== undefined) campos[c] = config[c]; });
+  return campos;
+}
+
 async function abrirConfigAgenda() {
   await carregarConfigAgenda();
+  rascunhosConfig = { padrao: camposDeAula(configAgendaAtual) };
+  idiomasAtuaisProfessor.forEach((id) => {
+    const propria = configAgendaAtual.porIdioma && configAgendaAtual.porIdioma[id];
+    rascunhosConfig[id] = propria ? camposDeAula(propria) : null;
+  });
+  // Abre no idioma escolhido no topo do painel ("Todos" = configuração padrão)
+  alvoConfig = idiomaAtivoProfessor && idiomasAtuaisProfessor.length > 1 ? idiomaAtivoProfessor : "padrao";
   preencherFormularioConfigAgenda();
   document.getElementById("modal-config-agenda").classList.remove("modal-oculto");
+}
+
+function montarSeletorAlvoConfig() {
+  const wrap = document.getElementById("config-alvo-idioma");
+  wrap.hidden = idiomasAtuaisProfessor.length < 2;
+  document.getElementById("config-idioma-alvo").innerHTML =
+    `<option value="padrao" ${alvoConfig === "padrao" ? "selected" : ""}>Padrão (todos os idiomas)</option>` +
+    idiomasAtuaisProfessor.map((id) => `<option value="${id}" ${alvoConfig === id ? "selected" : ""}>${IDIOMAS[id].nome}${rascunhosConfig[id] ? " — horários próprios" : " — usa o padrão"}</option>`).join("");
+}
+
+// Mostra o alvo atual: os campos da aula (do idioma, ou do padrão) e, só no padrão,
+// o que vale para todos (WhatsApp e meses liberados)
+function mostrarAlvoConfig() {
+  montarSeletorAlvoConfig();
+  const ehPadrao = alvoConfig === "padrao";
+  const propria = !ehPadrao && !!rascunhosConfig[alvoConfig];
+  document.getElementById("config-idioma-proprio-wrap").hidden = ehPadrao;
+  document.getElementById("config-idioma-proprio").checked = propria;
+  if (!ehPadrao) {
+    document.getElementById("config-idioma-proprio-texto").textContent =
+      `${IDIOMAS[alvoConfig].nome} tem duração, dias e horários próprios`;
+  }
+  const usaPadrao = document.getElementById("config-usa-padrao");
+  usaPadrao.hidden = ehPadrao || propria;
+  usaPadrao.textContent = ehPadrao ? "" : `As aulas de ${IDIOMAS[alvoConfig].nome} seguem a configuração padrão. Marque acima para definir duração, dias e horários só deste idioma.`;
+  document.getElementById("config-campos-aula").hidden = !ehPadrao && !propria;
+  document.getElementById("config-compartilhado").hidden = !ehPadrao;
+  preencherCamposDeAula(ehPadrao || !propria ? rascunhosConfig.padrao : rascunhosConfig[alvoConfig]);
+}
+
+// Lê o alvo atual do formulário para o rascunho. Devolve uma mensagem de erro, se houver.
+function guardarAlvoConfig() {
+  if (alvoConfig !== "padrao" && !rascunhosConfig[alvoConfig]) return null; // usa o padrão: nada a ler
+  const lidos = lerCamposDeAula();
+  if (lidos.erro) return alvoConfig === "padrao" ? lidos.erro : `${IDIOMAS[alvoConfig].nome}: ${lidos.erro}`;
+  rascunhosConfig[alvoConfig] = lidos.campos;
+  return null;
+}
+
+function trocarIdiomaDaConfig(novo) {
+  const erro = guardarAlvoConfig();
+  if (erro) {
+    alert(erro);
+    document.getElementById("config-idioma-alvo").value = alvoConfig;
+    return;
+  }
+  alvoConfig = novo;
+  mostrarAlvoConfig();
+}
+
+function alternarConfigPropriaDoIdioma(ligado) {
+  // Começa como cópia do padrão (como está agora no formulário do padrão)
+  rascunhosConfig[alvoConfig] = ligado ? JSON.parse(JSON.stringify(rascunhosConfig.padrao)) : null;
+  mostrarAlvoConfig();
+}
+
+function preencherCamposDeAula(config) {
+  const c = config || {};
+  document.getElementById("config-duracao-aula").value = String(c.duracaoAulaMinutos || DURACAO_PADRAO_MINUTOS);
+  document.getElementById("config-intervalo-aula").value = String(c.intervaloMinutos || 0);
+  document.getElementById("config-modalidade-online").checked = (c.modalidades || []).includes("online");
+  document.getElementById("config-modalidade-presencial").checked = (c.modalidades || []).includes("presencial");
+  preencherSemanaDeTrabalho(c.disponibilidade || {}, c.modalidadesPorDia || {});
+}
+
+// Duração, intervalo, modalidades e semana de trabalho do formulário: {campos} ou {erro}
+function lerCamposDeAula() {
+  const duracaoAulaMinutos = Number(document.getElementById("config-duracao-aula").value);
+  const intervaloMinutos = Number(document.getElementById("config-intervalo-aula").value) || 0;
+  const lida = lerSemanaDeTrabalho();
+  if (lida.erro) return { erro: lida.erro };
+  // Modo "igual": uma modalidade geral. Modo "dia por dia": cada dia tem a sua, e a
+  // geral vira a soma delas (usada onde não houver nada mais específico).
+  const modalidadesPorDia = lida.modalidadesPorDia || {};
+  const modalidades = lida.modalidadesPorDia
+    ? ["online", "presencial"].filter((m) => Object.values(modalidadesPorDia).some((l) => l.includes(m)))
+    : modalidadesGeraisDoFormulario();
+  if (modalidades.length === 0) return { erro: "Selecione pelo menos uma modalidade de atendimento (online ou presencial)." };
+  return { campos: { duracaoAulaMinutos, intervaloMinutos, modalidades, modalidadesPorDia, disponibilidade: lida.disponibilidade } };
 }
 
 function fecharConfigAgenda() {
@@ -1555,10 +1677,6 @@ function fecharConfigAgenda() {
 }
 
 function preencherFormularioConfigAgenda() {
-  document.getElementById("config-duracao-aula").value = String(configAgendaAtual.duracaoAulaMinutos || DURACAO_PADRAO_MINUTOS);
-  document.getElementById("config-intervalo-aula").value = String(configAgendaAtual.intervaloMinutos || 0);
-  document.getElementById("config-modalidade-online").checked = (configAgendaAtual.modalidades || []).includes("online");
-  document.getElementById("config-modalidade-presencial").checked = (configAgendaAtual.modalidades || []).includes("presencial");
   document.getElementById("config-whatsapp").value = configAgendaAtual.whatsapp || "";
 
   const liberados = configAgendaAtual.mesesLiberados || [];
@@ -1570,7 +1688,7 @@ function preencherFormularioConfigAgenda() {
       return `<label class="opcao-mes"><input type="checkbox" class="chk-mes-liberado" value="${chave}" ${liberados.includes(chave) ? "checked" : ""}> ${NOMES_MESES[d.getMonth()]}${d.getFullYear() !== hoje.getFullYear() ? ` de ${d.getFullYear()}` : ""}</label>`;
     }).join("");
 
-  preencherSemanaDeTrabalho(configAgendaAtual.disponibilidade || {}, configAgendaAtual.modalidadesPorDia || {});
+  mostrarAlvoConfig();
 }
 
 // -------------------- SEMANA DE TRABALHO (configurar disponibilidade) --------------------
@@ -1783,24 +1901,9 @@ function alternarPeriodoConfig(checkbox) {
 }
 
 async function salvarConfigAgenda() {
-  const duracaoAulaMinutos = Number(document.getElementById("config-duracao-aula").value);
-  const intervaloMinutos = Number(document.getElementById("config-intervalo-aula").value) || 0;
-
-  const lida = lerSemanaDeTrabalho();
-  if (lida.erro) {
-    alert(lida.erro);
-    return;
-  }
-  const disponibilidade = lida.disponibilidade;
-
-  // Modo "igual": uma modalidade geral. Modo "dia por dia": cada dia tem a sua, e a
-  // geral vira a soma delas (usada onde não houver nada mais específico).
-  const modalidadesPorDia = lida.modalidadesPorDia || {};
-  const modalidades = lida.modalidadesPorDia
-    ? ["online", "presencial"].filter((m) => Object.values(modalidadesPorDia).some((l) => l.includes(m)))
-    : modalidadesGeraisDoFormulario();
-  if (modalidades.length === 0) {
-    alert("Selecione pelo menos uma modalidade de atendimento (online ou presencial).");
+  const erro = guardarAlvoConfig();
+  if (erro) {
+    alert(erro);
     return;
   }
 
@@ -1811,7 +1914,13 @@ async function salvarConfigAgenda() {
     return;
   }
   const mesesLiberados = Array.from(document.querySelectorAll(".chk-mes-liberado:checked")).map((c) => c.value);
-  const dados = { duracaoAulaMinutos, intervaloMinutos, modalidades, modalidadesPorDia, disponibilidade, whatsapp, mesesLiberados };
+  const porIdioma = {};
+  idiomasAtuaisProfessor.forEach((id) => { if (rascunhosConfig[id]) porIdioma[id] = rascunhosConfig[id]; });
+  // Idiomas que o professor deixou de ensinar guardam a configuração própria, caso volte a ensinar
+  Object.keys((configAgendaAtual && configAgendaAtual.porIdioma) || {}).forEach((id) => {
+    if (!idiomasAtuaisProfessor.includes(id)) porIdioma[id] = configAgendaAtual.porIdioma[id];
+  });
+  const dados = { ...rascunhosConfig.padrao, whatsapp, mesesLiberados, porIdioma };
   try {
     await db.collection("usuarios").doc(professorIdAtual)
       .collection("configuracaoAgenda").doc("dados").set(dados);
@@ -1824,6 +1933,7 @@ async function salvarConfigAgenda() {
   configAgendaAtual = dados;
   fecharConfigAgenda();
   montarCalendarioProfessor();
+  renderizarHorariosMarcarAula();
 }
 
 // -------------------- AGENDA: PRÓXIMAS AULAS (todas) --------------------
@@ -1873,7 +1983,13 @@ function montarCalendarioProfessor() {
   const primeiroDoMes = new Date(ano, mes, 1);
   const diasNoMes = new Date(ano, mes + 1, 0).getDate();
   const offsetInicio = primeiroDoMes.getDay();
-  const disponibilidade = (configAgendaAtual && configAgendaAtual.disponibilidade) || {};
+  // Dias de atendimento do idioma escolhido no topo; em "Todos", de qualquer idioma
+  const idiomasDoCalendario = idiomaAtivoProfessor ? [idiomaAtivoProfessor] : idiomasAtuaisProfessor;
+  const disponibilidade = {};
+  idiomasDoCalendario.forEach((id) => {
+    const disp = (configDoIdioma(configAgendaAtual, id) || {}).disponibilidade || {};
+    Object.keys(disp).forEach((dia) => { if ((disp[dia] || []).length) disponibilidade[dia] = disp[dia]; });
+  });
   const prefixoMes = `${ano}-${String(mes + 1).padStart(2, "0")}`;
 
   const contagemPorDia = {};
@@ -2312,7 +2428,7 @@ async function concluirAula(aulaId) {
 
 function montarAbaAulas(alunoId) {
   const aulasDoAluno = aulasCache
-    .filter((a) => a.alunoId === alunoId)
+    .filter((a) => a.alunoId === alunoId && noFiltroAgenda(a))
     .sort((a, b) => (b.data + b.horaInicio).localeCompare(a.data + a.horaInicio)); // mais recente primeiro
 
   if (aulasDoAluno.length === 0) {
@@ -2372,11 +2488,12 @@ function lembretesAlunosSemApp() {
 function renderizarAlunosSemApp() {
   const lista = document.getElementById("lista-alunos-sem-app");
   if (!lista) return;
-  if (alunosSemAppCache.length === 0) {
-    lista.innerHTML = `<p class="vazio">Nenhum aluno sem app cadastrado.</p>`;
+  const doIdioma = alunosSemAppCache.filter((a) => !idiomaAtivoProfessor || idiomaDoAlunoSemApp(a) === idiomaAtivoProfessor);
+  if (doIdioma.length === 0) {
+    lista.innerHTML = `<p class="vazio">Nenhum aluno sem app cadastrado${idiomaAtivoProfessor ? ` em ${IDIOMAS[idiomaAtivoProfessor].nome}` : ""}.</p>`;
     return;
   }
-  lista.innerHTML = alunosSemAppCache.map((aluno) => {
+  lista.innerHTML = doIdioma.map((aluno) => {
     const idioma = idiomaDoAlunoSemApp(aluno);
     const proxima = proximaAulaDoAluno(aluno.id, idioma);
     const { saldo } = creditosDoAluno(aluno.id, idioma);
@@ -2485,7 +2602,7 @@ function abrirMarcarAula(alunoId, dataIso) {
   const campoIdioma = document.getElementById("marcar-idioma");
   campoIdioma.innerHTML = idiomasAtuaisProfessor.map((id) => `<option value="${id}">${IDIOMAS[id].nome}</option>`).join("");
   document.getElementById("marcar-idioma-wrap").hidden = idiomasAtuaisProfessor.length < 2;
-  if (idiomaFiltroAgenda) campoIdioma.value = idiomaFiltroAgenda; // a Agenda está num idioma: a aula começa nele
+  if (idiomaAtivoProfessor) campoIdioma.value = idiomaAtivoProfessor; // a Agenda está num idioma: a aula começa nele
   escolherIdiomaDoAlunoNoFormulario();
 
   document.getElementById("status-marcar-aula").textContent = "";
@@ -2508,18 +2625,27 @@ function formularioMarcarAulaAberto() {
   return painel && !painel.classList.contains("modal-oculto");
 }
 
-function duracaoDasAulas() {
-  return (configAgendaAtual && configAgendaAtual.duracaoAulaMinutos) || DURACAO_PADRAO_MINUTOS;
+// Idioma escolhido no formulário "Marcar aula" (cada idioma pode ter a própria configuração)
+function idiomaDoFormularioMarcar() {
+  const campo = document.getElementById("marcar-idioma");
+  return idiomaValido((campo && campo.value) || idiomaAtivoProfessor || idiomasAtuaisProfessor[0]);
 }
 
-function horariosLivresDoDia(dataIso) {
+function duracaoDasAulas(idioma) {
+  const config = configDoIdioma(configAgendaAtual, idioma || idiomaDoFormularioMarcar());
+  return (config && config.duracaoAulaMinutos) || DURACAO_PADRAO_MINUTOS;
+}
+
+function horariosLivresDoDia(dataIso, idioma) {
+  const config = configDoIdioma(configAgendaAtual, idioma || idiomaDoFormularioMarcar()) || {};
   const override = overridesAgendaCache[dataIso];
   const blocos = override
     ? (override.fechado ? [] : override.blocos || [])
-    : ((configAgendaAtual && configAgendaAtual.disponibilidade) || {})[chaveDiaSemana(dataIso)] || [];
-  const duracao = duracaoDasAulas();
+    : (config.disponibilidade || {})[chaveDiaSemana(dataIso)] || [];
+  const duracao = config.duracaoAulaMinutos || DURACAO_PADRAO_MINUTOS;
+  // Ocupado é ocupado, em qualquer idioma: o professor não dá duas aulas ao mesmo tempo
   const ocupadas = aulasCache.filter((a) => a.data === dataIso && ["agendada", "pendente", "concluida"].includes(a.status));
-  let horarios = slotsSemConflito(gerarSlotsDoDia(blocos, duracao, configAgendaAtual && configAgendaAtual.intervaloMinutos), duracao, ocupadas);
+  let horarios = slotsSemConflito(gerarSlotsDoDia(blocos, duracao, config.intervaloMinutos), duracao, ocupadas);
   if (dataIso === dataDeHojeISO()) {
     const agora = new Date();
     horarios = horarios.filter((h) => minutosDoHorario(h) > agora.getHours() * 60 + agora.getMinutes());
@@ -2588,6 +2714,7 @@ function escolherIdiomaDoAlunoNoFormulario() {
 function trocarAlunoMarcarAula() {
   escolherIdiomaDoAlunoNoFormulario();
   atualizarReposicaoMarcarAula();
+  renderizarHorariosMarcarAula(); // o idioma pode ter mudado, e com ele os horários
 }
 
 // A opção "reposição" só aparece se o aluno escolhido tem crédito no idioma da aula
@@ -2615,7 +2742,7 @@ async function confirmarMarcarAula() {
 
   if (!aluno) { status.textContent = "Escolha o aluno."; return; }
   if (!data || !hora) { status.textContent = "Escolha o dia e o horário."; return; }
-  const duracao = (configAgendaAtual && configAgendaAtual.duracaoAulaMinutos) || DURACAO_PADRAO_MINUTOS;
+  const duracao = duracaoDasAulas(idiomaValido(idioma));
   const horaFim = somarMinutos(hora, duracao);
   if (new Date(`${data}T${hora}:00`) < new Date()) { status.textContent = "Esse horário já passou."; return; }
 
