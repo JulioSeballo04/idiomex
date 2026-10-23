@@ -7,7 +7,9 @@ pelo código adicionam palavras nesse idioma, recebem a tradução e frases
 de exemplo geradas por IA. O professor acompanha o vocabulário de cada
 aluno, deixa recados, registra anotações no calendário, monta a sala de
 aula (link da aula online e documentos, com anotações do aluno em cada
-um) e gerencia a agenda de aulas (com confirmação e cancelamento por WhatsApp).
+um) e gerencia a agenda de aulas — confirma se cada aula foi realizada (se
+não foi, o aluno ganha uma reposição) e marca aulas para alunos, inclusive
+os que não usam o app (com confirmação e cancelamento por WhatsApp).
 
 **Custo: R$ 0,00.** Firebase no plano Spark (grátis, sem cartão) +
 Vercel no plano Hobby (grátis, sem cartão) + Gemini API (camada
@@ -138,8 +140,18 @@ usuarios/{uid}/documentosAula/{id}
 aulas/{professorId_data_hora}
   professorId, alunoId, alunoNome, data, horaInicio, horaFim, modalidade,
   idioma, reposicao, status ("agendada" | "pendente" | "concluida" |
-  "cancelada" | "recusada")  -> "pendente" = pedido de reposição sem
-                                crédito, esperando o professor aprovar
+  "cancelada" | "recusada" | "nao-realizada")
+                             -> "pendente" = pedido de reposição sem
+                                crédito, esperando o professor aprovar;
+                                "nao-realizada" = o professor confirmou que
+                                a aula não aconteceu (o aluno ganha 1 reposição)
+                             alunoId pode ser um aluno sem app (abaixo)
+
+usuarios/{professorId}/alunosSemApp/{id}
+  nome, telefone, reposicoesConcedidas, criadoEm
+                          -> alunos que não usam o app: o professor marca as
+                             aulas por eles e recebe um lembrete na agenda
+                             enquanto não houver aula marcada
 ```
 
 ## Por que a IA não fica direto no site?

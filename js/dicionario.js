@@ -50,7 +50,8 @@ function escutarNotificacoes(uid) {
     }, (e) => console.warn("Não foi possível carregar as notificações:", e));
 }
 
-const ICONES_NOTIFICACAO = { "credito-reposicao": "🎟️", "reposicao-aprovada": "✅", "reposicao-recusada": "❌" };
+const ICONES_NOTIFICACAO = { "credito-reposicao": "🎟️", "reposicao-aprovada": "✅", "reposicao-recusada": "❌",
+  "aula-nao-realizada": "🎟️", "aula-marcada": "📅" };
 
 function renderizarNotificacoes() {
   const naoLidas = notificacoesCache.filter((n) => !n.lida).length;
@@ -1600,28 +1601,4 @@ async function confirmarAgendamento() {
   agendamento.salvando = false;
   agendamento.confirmada = { data, hora, modalidade, reposicao, idioma, pedido, linkWhatsapp: linkConfirmacao };
   renderizarAgendamento();
-}
-
-// Usa uma transação: o ID do documento é determinístico ("professor_data_hora"), então
-// duas tentativas simultâneas de marcar o MESMO horário disputam o mesmo documento — a
-// segunda falha com um erro claro, em vez de sobrescrever silenciosamente a primeira.
-async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, alunoId, alunoNome, reposicao, idioma, status) {
-  const aulaId = `${professorId}_${data}_${horaInicio.replace(":", "")}`;
-  const ref = db.collection("aulas").doc(aulaId);
-
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    // Horário cancelado ou com pedido de reposição recusado volta a ficar livre
-    if (snap.exists && !["cancelada", "recusada"].includes(snap.data().status)) {
-      throw new Error("Esse horário acabou de ser reservado por outro aluno. Escolha outro.");
-    }
-    tx.set(ref, {
-      professorId, alunoId, alunoNome,
-      data, horaInicio, horaFim, modalidade,
-      reposicao: !!reposicao,
-      idioma: idiomaValido(idioma),
-      status: status === "pendente" ? "pendente" : "agendada",
-      criadoEm: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  });
 }
