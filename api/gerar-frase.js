@@ -94,8 +94,62 @@ async function conferirLogin(idToken, site) {
 
 // Modelos do Gemini, na ordem de preferência. Se um deles não existir (404), estiver
 // sem cota (429) ou sobrecarregado (5xx), tenta o próximo.
-const MODELOS = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite"];
+//
+// O Google aposenta modelos de tempos em tempos (o gemini-2.5-flash-lite saiu do ar
+// para chaves novas). Por isso, além desta lista, o servidor pergunta ao Google quais
+// modelos "flash-lite" a chave pode usar (veja modelosParaTentar): os desta lista que
+// ainda existem vêm primeiro, depois os outros "flash-lite", do mais novo para o mais
+// antigo. Assim um modelo novo entra sozinho, sem precisar mudar o código.
+const MODELOS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
+const MAXIMO_MODELOS_TENTADOS = 3;
 const TEMPO_MAXIMO_MODELO_MS = 9000; // por modelo; a function pode rodar até 30 s (vercel.json)
+const VALIDADE_LISTA_MODELOS_MS = 60 * 60 * 1000; // 1 hora
+
+let cacheModelos = null; // {nomes: [...], em: instante} — lista de modelos da chave
+
+// Só para os testes: esquece a lista de modelos guardada
+export function limparCacheDeModelos() {
+  cacheModelos = null;
+}
+
+// "gemini-3.5-flash-lite" -> 3.5 (para ordenar do mais novo para o mais antigo)
+function versaoDoModelo(nome) {
+  const m = nome.match(/gemini-(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : 0;
+}
+
+// Nomes dos modelos que a chave pode usar para gerar texto, ou null se a lista não veio
+async function modelosDisponiveis(apiKey) {
+  if (cacheModelos && Date.now() - cacheModelos.em < VALIDADE_LISTA_MODELOS_MS) return cacheModelos.nomes;
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000&key=${apiKey}`,
+      { signal: AbortSignal.timeout(4000) });
+    if (!r.ok) return null;
+    const dados = await r.json().catch(() => ({}));
+    const nomes = (dados.models || [])
+      .filter((m) => !m.supportedGenerationMethods || m.supportedGenerationMethods.includes("generateContent"))
+      .map((m) => String(m.name || "").replace(/^models\//, ""))
+      .filter(Boolean);
+    if (!nomes.length) return null;
+    cacheModelos = { nomes, em: Date.now() };
+    return nomes;
+  } catch (e) {
+    console.warn("Não foi possível listar os modelos do Gemini:", e.message || e);
+    return null;
+  }
+}
+
+async function modelosParaTentar(apiKey) {
+  const disponiveis = await modelosDisponiveis(apiKey);
+  if (!disponiveis) return MODELOS; // sem a lista, tenta os preferidos mesmo assim
+  const existentes = new Set(disponiveis);
+  const outros = disponiveis
+    .filter((m) => /^gemini-[\d.]+-flash-lite/.test(m) && !/(image|tts|audio|live)/.test(m) && !MODELOS.includes(m))
+    // estáveis antes de "preview"/"exp"; dentro disso, o mais novo primeiro
+    .sort((a, b) => (/preview|exp/.test(a) - /preview|exp/.test(b)) || versaoDoModelo(b) - versaoDoModelo(a));
+  const lista = [...MODELOS.filter((m) => existentes.has(m)), ...outros].slice(0, MAXIMO_MODELOS_TENTADOS);
+  return lista.length ? lista : MODELOS;
+}
 
 function siteDoPedido(req) {
   const origem = req.headers.origin;
@@ -117,6 +171,8 @@ async function diagnostico(req, res) {
       if (r.ok) {
         const existentes = new Set((dados.models || []).map((m) => m.name.replace(/^models\//, "")));
         resultado.modelos = Object.fromEntries(MODELOS.map((m) => [m, existentes.has(m)]));
+        limparCacheDeModelos();
+        resultado.modelosQueSeraoUsados = await modelosParaTentar(process.env.GEMINI_API_KEY);
       } else {
         resultado.erroGemini = dados?.error?.message || `HTTP ${r.status}`;
       }
@@ -196,9 +252,11 @@ Responda APENAS com 6 linhas, sem numeração, sem aspas e sem explicações:
     // novos "pensam" antes de responder e esse raciocínio também gasta o limite de
     // tokens da resposta, por isso o limite é folgado. Erros de chave (400/401/403)
     // valem para todos os modelos, então param na hora.
+    // Guarda o motivo de cada modelo que falhou: só o último escondia por que os
+    // anteriores não deram certo.
     let texto = "";
-    let ultimoErro = "";
-    for (const modelo of MODELOS) {
+    const erros = [];
+    for (const modelo of await modelosParaTentar(apiKey)) {
       let resposta;
       try {
         resposta = await fetch(
@@ -214,8 +272,8 @@ Responda APENAS com 6 linhas, sem numeração, sem aspas e sem explicações:
           }
         );
       } catch (e) {
-        ultimoErro = `${modelo}: sem resposta (${e.name === "TimeoutError" ? "demorou demais" : e.message})`;
-        console.warn("Gemini falhou, tentando o próximo modelo —", ultimoErro);
+        erros.push(`${modelo}: sem resposta (${e.name === "TimeoutError" ? "demorou demais" : e.message})`);
+        console.warn("Gemini falhou, tentando o próximo modelo —", erros[erros.length - 1]);
         continue;
       }
       const dados = await resposta.json().catch(() => ({}));
@@ -225,17 +283,17 @@ Responda APENAS com 6 linhas, sem numeração, sem aspas e sem explicações:
           .filter((p) => !p.thought && typeof p.text === "string")
           .map((p) => p.text).join("").trim();
         if (texto) break;
-        ultimoErro = `${modelo}: resposta vazia (${dados?.candidates?.[0]?.finishReason || "sem motivo"})`;
+        erros.push(`${modelo}: resposta vazia (${dados?.candidates?.[0]?.finishReason || "sem motivo"})`);
       } else {
-        ultimoErro = `${modelo}: ${dados?.error?.message || `HTTP ${resposta.status}`}`;
+        erros.push(`${modelo}: ${dados?.error?.message || `HTTP ${resposta.status}`}`);
         if ([400, 401, 403].includes(resposta.status)) break;
       }
-      console.warn("Gemini falhou, tentando o próximo modelo —", ultimoErro);
+      console.warn("Gemini falhou, tentando o próximo modelo —", erros[erros.length - 1]);
     }
 
     if (!texto) {
-      console.error("Nenhum modelo do Gemini gerou frases:", ultimoErro);
-      return res.status(200).json({ frases: [], aviso: ultimoErro || "IA não retornou frases desta vez." });
+      console.error("Nenhum modelo do Gemini gerou frases:", erros.join(" | "));
+      return res.status(200).json({ frases: [], aviso: erros.join(" · ") || "IA não retornou frases desta vez." });
     }
 
     // Quebra a resposta em linhas: a linha "TRADUÇÕES:" vira a lista de traduções,

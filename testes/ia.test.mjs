@@ -8,6 +8,8 @@ process.env.GEMINI_API_KEY = "chave-de-teste";
 const simulado = {
   chaveFirebaseBloqueada: false,   // chave web restrita e sem Referer aceito
   modelos: {},                     // modelo -> "ok" | "404" | "vazio" | "403"
+  lista: null,                     // modelos que a chave enxerga (null = a lista padrão abaixo)
+  listaFalha: false,               // a consulta da lista de modelos dá erro
   pedidosGemini: [],
   ultimoReferer: ""
 };
@@ -25,7 +27,9 @@ globalThis.fetch = async (url, opts = {}) => {
       : json(400, { error: { message: "INVALID_ID_TOKEN" } });
   }
   if (url.includes("/models?")) {
-    return json(200, { models: [{ name: "models/gemini-2.5-flash-lite" }] });
+    if (simulado.listaFalha) return json(500, { error: { message: "erro" } });
+    const nomes = simulado.lista || ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview-tts"];
+    return json(200, { models: nomes.map((n) => ({ name: `models/${n}`, supportedGenerationMethods: ["generateContent"] })) });
   }
   const modelo = url.match(/models\/([^:]+):generateContent/)[1];
   const prompt = JSON.parse(opts.body).contents[0].parts[0].text;
@@ -37,7 +41,7 @@ globalThis.fetch = async (url, opts = {}) => {
   return json(200, { candidates: [{ content: { parts: [{ text: "**TRADUÇÕES:** mundo, Terra\nHallo Welt | Olá mundo" }] } }] });
 };
 
-const { default: handler } = await import(new URL("../api/gerar-frase.js", import.meta.url));
+const { default: handler, limparCacheDeModelos } = await import(new URL("../api/gerar-frase.js", import.meta.url));
 
 async function chamar(headers, body, method = "POST", query = {}) {
   const r = {};
@@ -49,6 +53,7 @@ const logado = { authorization: "Bearer token-bom" };
 let ok = 0;
 async function caso(nome, fn) {
   simulado.chaveFirebaseBloqueada = false; simulado.modelos = {}; simulado.pedidosGemini = [];
+  simulado.lista = null; simulado.listaFalha = false; limparCacheDeModelos();
   await fn(); ok++; console.log("  ✔", nome);
 }
 
@@ -79,23 +84,49 @@ await caso("devolve as traduções corretas da palavra (linha TRADUÇÕES)", asy
   assert.ok(simulado.pedidosGemini[0].prompt.includes('anotou a tradução "juros" (pode estar errada)'));
 });
 await caso("modelo inexistente (404) passa para o próximo", async () => {
-  simulado.modelos = { "gemini-3.1-flash-lite": "404" };
+  simulado.modelos = { "gemini-3.5-flash-lite": "404" };
   const r = await chamar(logado, { palavra: "Welt" });
   assert.equal(r.j.frases.length, 1);
-  assert.deepEqual(simulado.pedidosGemini.map((p) => p.modelo), ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]);
+  assert.deepEqual(simulado.pedidosGemini.map((p) => p.modelo), ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]);
 });
 await caso("resposta vazia (só raciocínio) passa para o próximo modelo", async () => {
-  simulado.modelos = { "gemini-3.1-flash-lite": "vazio", "gemini-3.5-flash-lite": "vazio" };
+  simulado.lista = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.0-flash-lite"];
+  simulado.modelos = { "gemini-3.5-flash-lite": "vazio", "gemini-3.1-flash-lite": "vazio" };
   const r = await chamar(logado, { palavra: "Welt" });
   assert.equal(r.j.frases.length, 1);
   assert.equal(simulado.pedidosGemini.length, 3);
 });
 await caso("chave do Gemini inválida para na hora e devolve o motivo", async () => {
-  simulado.modelos = { "gemini-3.1-flash-lite": "403" };
+  simulado.modelos = { "gemini-3.5-flash-lite": "403" };
   const r = await chamar(logado, { palavra: "Welt" });
   assert.deepEqual(r.j.frases, []);
   assert.match(r.j.aviso, /API key not valid/);
   assert.equal(simulado.pedidosGemini.length, 1);
+});
+await caso("só tenta modelos que a chave enxerga (um modelo aposentado não é tentado)", async () => {
+  simulado.lista = ["gemini-3.1-flash-lite", "gemini-2.0-flash"];
+  await chamar(logado, { palavra: "Welt" });
+  assert.deepEqual(simulado.pedidosGemini.map((p) => p.modelo), ["gemini-3.1-flash-lite"]);
+});
+await caso("modelo flash-lite novo, fora da lista, entra sozinho (mais novo primeiro, sem tts)", async () => {
+  simulado.lista = ["gemini-4.0-flash-lite-preview", "gemini-4.0-flash-lite", "gemini-3.1-flash-lite", "gemini-4.0-flash-lite-preview-tts"];
+  simulado.modelos = { "gemini-3.1-flash-lite": "404" };
+  await chamar(logado, { palavra: "Welt" });
+  assert.deepEqual(simulado.pedidosGemini.map((p) => p.modelo), ["gemini-3.1-flash-lite", "gemini-4.0-flash-lite"]);
+});
+await caso("sem a lista de modelos, tenta os preferidos mesmo assim", async () => {
+  simulado.listaFalha = true;
+  simulado.modelos = { "gemini-3.5-flash-lite": "404" };
+  const r = await chamar(logado, { palavra: "Welt" });
+  assert.equal(r.j.frases.length, 1);
+  assert.deepEqual(simulado.pedidosGemini.map((p) => p.modelo), ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]);
+});
+await caso("quando todos falham, o aviso traz o motivo de cada modelo", async () => {
+  simulado.modelos = { "gemini-3.5-flash-lite": "404", "gemini-3.1-flash-lite": "vazio" };
+  const r = await chamar(logado, { palavra: "Welt" });
+  assert.deepEqual(r.j.frases, []);
+  assert.match(r.j.aviso, /gemini-3\.5-flash-lite: models\/gemini-3\.5-flash-lite is not found/);
+  assert.match(r.j.aviso, /gemini-3\.1-flash-lite: resposta vazia/);
 });
 for (const [codigo, nome] of [["de", "alemão"], ["ko", "coreano"], ["ja", "japonês"], ["es", "espanhol"]]) {
   await caso(`pede as frases em ${nome}`, async () => {
@@ -108,7 +139,8 @@ await caso("diagnóstico mostra a configuração sem expor segredos", async () =
   assert.equal(r.c, 200);
   assert.equal(r.j.chaveGeminiConfigurada, true);
   assert.equal(r.j.chaveGeminiFunciona, true);
-  assert.deepEqual(r.j.modelos, { "gemini-3.1-flash-lite": false, "gemini-3.5-flash-lite": false, "gemini-2.5-flash-lite": true });
+  assert.deepEqual(r.j.modelos, { "gemini-3.5-flash-lite": true, "gemini-3.1-flash-lite": true });
+  assert.deepEqual(r.j.modelosQueSeraoUsados, ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]);
   assert.equal(r.j.conferenciaDeLoginFunciona, true);
   assert.ok(!JSON.stringify(r.j).includes("chave-de-teste"));
 });
