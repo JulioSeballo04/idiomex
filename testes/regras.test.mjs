@@ -150,6 +150,17 @@ await t("professor reuses a cancelled slot for another student", setDoc(doc(db("
 await t("notification with a language allowed", setDoc(doc(db("P1"), "usuarios/S1/notificacoes/n6"), notif({ idioma: "ja" })));
 await t("student without the app with a language", setDoc(doc(db("P1"), "usuarios/P1/alunosSemApp/z2"), { nome: "Ana", telefone: "", idioma: "ja", reposicoesConcedidas: 0, criadoEm: new Date() }));
 await t("lesson-booked notification allowed", setDoc(doc(db("P1"), "usuarios/S1/notificacoes/n5"), notif({ tipo: "aula-marcada" })));
+// Notificações do professor, criadas pelos alunos vinculados
+const notifProf = (extra) => ({ tipo: "aluno-marcou-aula", texto: "s1 marcou uma aula.", criadoEm: new Date(), lida: false, alunoId: "S1", idioma: "en", ...extra });
+await t("linked student notifies the professor", setDoc(doc(db("S1"), "usuarios/P1/notificacoes/p1"), notifProf()));
+await t("student notifies a cancellation", setDoc(doc(db("S1"), "usuarios/P1/notificacoes/p2"), notifProf({ tipo: "aluno-cancelou-aula" })));
+await t("unlinked student cannot notify the professor", assertFails(setDoc(doc(db("S9"), "usuarios/P1/notificacoes/p3"), notifProf({ alunoId: "S9" }))));
+await t("student cannot notify in another student's name", assertFails(setDoc(doc(db("S1"), "usuarios/P1/notificacoes/p4"), notifProf({ alunoId: "S2" }))));
+await t("student cannot send a professor-only notification type", assertFails(setDoc(doc(db("S1"), "usuarios/P1/notificacoes/p5"), notifProf({ tipo: "credito-reposicao" }))));
+await t("student notification with extra fields rejected", assertFails(setDoc(doc(db("S1"), "usuarios/P1/notificacoes/p6"), notifProf({ professorId: "P1" }))));
+await t("professor reads own notifications", getDocs(collection(db("P1"), "usuarios/P1/notificacoes")));
+await t("student cannot read the professor's notifications", assertFails(getDocs(collection(db("S1"), "usuarios/P1/notificacoes"))));
+await t("professor marks a notification as read", updateDoc(doc(db("P1"), "usuarios/P1/notificacoes/p1"), { lida: true }));
 // Messages deletion by student
 await setDoc(doc(db("P1"), "usuarios/S1/mensagens/m1"), { texto: "oi" });
 await t("student deletes own messages", deleteDoc(doc(db("S1"), "usuarios/S1/mensagens/m1")));

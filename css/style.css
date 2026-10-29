@@ -68,6 +68,9 @@ html[data-tema="noturno"] {
   --acento-secundario: #E0B24C;
   --lateral-bg: #223247;
   --sombra: rgba(0, 0, 0, 0.4);
+  /* Controles nativos do navegador (caixas de seleção, calendário e relógio dos
+     campos de data/hora) também no escuro */
+  color-scheme: dark;
 }
 
 /* ---------- Reset & base ---------- */
@@ -106,6 +109,12 @@ input, select, textarea, button {
 }
 
 textarea { resize: vertical; }
+
+/* Fundo padrão dos campos: o do cartão do tema. Sem isso, um campo sem estilo
+   próprio ficava com o fundo branco do navegador — e, no tema noturno, com o
+   texto claro do tema por cima (ilegível). :where() não pesa na especificidade:
+   qualquer estilo próprio de um campo continua valendo. */
+:where(input, select, textarea) { background-color: var(--bg-cartao); }
 
 input[type="checkbox"],
 input[type="radio"] {
@@ -511,7 +520,9 @@ html[data-tema="noturno"] .secao-perigo h4 { color: #F08A75; }
 
   .letra-tab { width: 36px; height: 36px; flex-shrink: 0; }
 
-  .conteudo { padding: 1.4rem 1.1rem 3rem; }
+  /* margin 0: com "auto" na coluna, o conteúdo encolhia/esticava pelo tamanho do que tem
+     dentro (e passava da largura da tela); assim ocupa exatamente a largura */
+  .conteudo { padding: 1.4rem 1.1rem 3rem; margin: 0; width: 100%; }
 
   /* Alvos de toque maiores no mobile — botões pequenos demais são
      difíceis de acertar com o dedo (recomendação usual: ~40-44px). */
