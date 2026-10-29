@@ -2744,13 +2744,24 @@ function horariosLivresDoDia(dataIso, idioma) {
     ? (override.fechado ? [] : override.blocos || [])
     : (config.disponibilidade || {})[chaveDiaSemana(dataIso)] || [];
   const duracao = config.duracaoAulaMinutos || DURACAO_PADRAO_MINUTOS;
-  // Ocupado é ocupado, em qualquer idioma: o professor não dá duas aulas ao mesmo tempo
-  const ocupadas = aulasCache.filter((a) => a.data === dataIso && ["agendada", "pendente", "concluida"].includes(a.status));
-  return slotsSemConflito(gerarSlotsDoDia(blocos, duracao, config.intervaloMinutos), duracao, ocupadas);
+  return gerarSlotsDoDia(blocos, duracao, config.intervaloMinutos)
+    .filter((h) => slotsSemConflito([h], duracao, aulasQueOcupam(dataIso, h)).length > 0);
 }
 
 function horarioJaPassou(dataIso, hora) {
   return new Date(`${dataIso}T${hora}:00`) < new Date();
+}
+
+const STATUS_QUE_OCUPAM = ["agendada", "pendente", "concluida"];
+
+// Aulas do dia que impedem marcar outra num horário, em qualquer idioma (o professor
+// não dá duas aulas ao mesmo tempo). Num horário que ainda vai acontecer, uma aula
+// cancelada ou recusada libera o horário. Num horário que já passou, o professor só
+// registra aula onde não houve agendamento nenhum: qualquer aula ali (cancelada, não
+// realizada...) já ocupa o horário.
+function aulasQueOcupam(dataIso, hora) {
+  const passou = horarioJaPassou(dataIso, hora);
+  return aulasCache.filter((a) => a.data === dataIso && (passou || STATUS_QUE_OCUPAM.includes(a.status)));
 }
 
 function renderizarHorariosMarcarAula() {
@@ -2875,10 +2886,12 @@ async function confirmarMarcarAula() {
   const realizada = horarioJaPassou(data, hora);
 
   const inicio = minutosDoHorario(hora), fim = inicio + duracao;
-  const choque = aulasCache.find((a) => a.data === data && ["agendada", "pendente", "concluida"].includes(a.status) &&
+  const choque = aulasQueOcupam(data, hora).find((a) =>
     minutosDoHorario(a.horaInicio) < fim && minutosDoHorario(a.horaFim || somarMinutos(a.horaInicio, duracao)) > inicio);
   if (choque) {
-    status.textContent = `Esse horário bate com a aula de ${choque.alunoNome} às ${choque.horaInicio}.`;
+    status.textContent = STATUS_QUE_OCUPAM.includes(choque.status)
+      ? `Esse horário bate com a aula de ${choque.alunoNome} às ${choque.horaInicio}.`
+      : `Nesse horário já houve um agendamento: aula de ${choque.alunoNome} às ${choque.horaInicio} (${legendaStatusAula(choque.status).toLowerCase()}).`;
     return;
   }
 

@@ -576,6 +576,29 @@ function dataDaqui(dias) {
     esperar(popups.length === 0, 'abriu o WhatsApp para uma aula que já aconteceu');
     // Não fica pedindo confirmação: já entrou como realizada
     esperar(!(await prof.$(`#confirmar-aulas .cartao-aula:has-text("Seu Zé")`)), 'a aula registrada caiu em "aulas para confirmar"');
+
+    // No dia que passou, só aparecem horários sem agendamento nenhum: nem a aula
+    // registrada, nem uma cancelada, nem uma "não realizada"
+    const [h2, h3] = await prof.evaluate((d) => horariosLivresDoDia(d).slice(0, 2), diaPassado);
+    esperar(h2 && h3, 'o dia de teste não tem horários suficientes');
+    await prof.evaluate(async ({ d, h2, h3, ze }) => {
+      for (const [h, st] of [[h2, 'cancelada'], [h3, 'nao-realizada']]) {
+        const id = await agendarAula(professorIdAtual, d, h, somarMinutos(h, 50), 'online', ze, 'Seu Zé', false, 'en', 'agendada');
+        await db.collection('aulas').doc(id).update({ status: st });
+      }
+    }, { d: diaPassado, h2, h3, ze });
+    await prof.waitForFunction(({ d, h2, h3 }) => aulasCache.filter((a) => a.data === d && [h2, h3].includes(a.horaInicio)).length === 2, { d: diaPassado, h2, h3 }, { timeout: 5000 });
+    await prof.evaluate((id) => abrirMarcarAula(id), ze);
+    await prof.fill('#marcar-data', diaPassado);
+    await prof.dispatchEvent('#marcar-data', 'change');
+    const mostrados = await prof.$$eval('#marcar-slots .btn-slot-horario', (bs) => bs.map((b) => b.textContent.split(' – ')[0].trim()));
+    esperar(![hora, h2, h3].some((h) => mostrados.includes(h)), `mostrou horário que já teve agendamento: ${mostrados.join(', ')}`);
+    // "Outro horário" no mesmo horário de uma aula cancelada também é recusado
+    await prof.click('#btn-outro-horario');
+    await prof.fill('#marcar-hora', h2);
+    await prof.click('#modal-marcar-aula button:has-text("Marcar aula")');
+    await prof.waitForFunction(() => /já houve um agendamento/.test(document.getElementById('status-marcar-aula').textContent), null, { timeout: 3000 });
+    await prof.click('#modal-marcar-aula .btn-fechar-modal');
   });
 
   await caso('professor marca aula para aluno com WhatsApp: abre a confirmação pronta para o aluno', async () => {
