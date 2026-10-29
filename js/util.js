@@ -405,6 +405,7 @@ async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, a
       criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     });
   });
+  return aulaId;
 }
 
 // ============================================================

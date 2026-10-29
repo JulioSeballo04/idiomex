@@ -533,6 +533,66 @@ function dataDaqui(dias) {
     esperar(criada && criada.horaFim, 'aula não foi criada no horário escolhido');
   });
 
+  await caso('aluno sem WhatsApp também pode ser cadastrado (e o formulário não oferece WhatsApp para ele)', async () => {
+    await prof.click('#btn-aba-alunos');
+    await prof.fill('#input-nome-sem-app', 'Dona Rosa');
+    await prof.fill('#input-telefone-sem-app', '');
+    await prof.click('.secao-alunos-sem-app button:has-text("Adicionar aluno")');
+    await prof.waitForSelector('.cartao-aluno-sem-app:has-text("Dona Rosa")', { timeout: 5000 });
+    const rosa = await prof.evaluate(() => alunosSemAppCache.find((a) => a.nome === 'Dona Rosa'));
+    esperar(rosa && rosa.telefone === '', 'cadastro sem telefone não foi gravado');
+    await prof.evaluate((id) => abrirMarcarAula(id), rosa.id);
+    esperar(await prof.isHidden('#marcar-whatsapp-wrap'), 'ofereceu WhatsApp para aluno sem telefone');
+    await prof.evaluate(() => abrirMarcarAula(alunosSemAppCache.find((a) => a.nome === 'Seu Zé').id));
+    esperar(await prof.isVisible('#marcar-whatsapp-wrap') && await prof.isChecked('#marcar-whatsapp'), 'não ofereceu WhatsApp para aluno com telefone');
+    await prof.click('#modal-marcar-aula .btn-fechar-modal');
+    // Remove de novo: sem aula marcada, ela somaria um lembrete aos contadores dos próximos testes
+    await prof.evaluate((id) => removerAlunoSemApp(id), rosa.id);
+    await prof.waitForSelector('.cartao-aluno-sem-app:has-text("Dona Rosa")', { state: 'detached', timeout: 5000 });
+  });
+
+  await caso('professor registra uma aula que já aconteceu (horário que já passou): entra como realizada', async () => {
+    const ze = await prof.evaluate(() => alunosSemAppCache.find((a) => a.nome === 'Seu Zé').id);
+    await prof.evaluate((id) => abrirMarcarAula(id), ze);
+    // Um dia de atendimento que já passou: os horários aparecem (antes sumiam)
+    const diaPassado = await prof.evaluate(() => {
+      for (let i = 1; i < 15; i++) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const iso = chaveDataISO(d);
+        if (horariosLivresDoDia(iso).length) return iso;
+      }
+    });
+    esperar(diaPassado, 'nenhum dia de atendimento nas últimas 2 semanas');
+    await prof.fill('#marcar-data', diaPassado);
+    await prof.dispatchEvent('#marcar-data', 'change');
+    await prof.waitForSelector('#marcar-slots .btn-slot-horario.slot-passado', { timeout: 3000 });
+    const hora = (await prof.textContent('#marcar-slots .btn-slot-horario >> nth=0')).split(' – ')[0].trim();
+    const popups = [];
+    ctxP.on('page', (pg) => popups.push(pg));
+    await prof.click('#marcar-slots .btn-slot-horario >> nth=0');
+    await prof.click('#modal-marcar-aula button:has-text("Marcar aula")');
+    await prof.waitForSelector('#modal-marcar-aula.modal-oculto', { state: 'attached', timeout: 5000 });
+    await prof.waitForFunction(({ d, h }) => aulasCache.some((a) => a.data === d && a.horaInicio === h && a.status === 'concluida'), { d: diaPassado, h: hora }, { timeout: 5000 });
+    esperar(popups.length === 0, 'abriu o WhatsApp para uma aula que já aconteceu');
+    // Não fica pedindo confirmação: já entrou como realizada
+    esperar(!(await prof.$(`#confirmar-aulas .cartao-aula:has-text("Seu Zé")`)), 'a aula registrada caiu em "aulas para confirmar"');
+  });
+
+  await caso('professor marca aula para aluno com WhatsApp: abre a confirmação pronta para o aluno', async () => {
+    await prof.evaluate(() => abrirMarcarAula(alunosSemAppCache.find((a) => a.nome === 'Seu Zé').id));
+    await prof.fill('#marcar-data', dataDaqui(6));
+    await prof.click('#btn-outro-horario');
+    await prof.fill('#marcar-hora', '16:00');
+    const [aba] = await Promise.all([
+      ctxP.waitForEvent('page', { timeout: 5000 }),
+      prof.click('#modal-marcar-aula button:has-text("Marcar aula")')
+    ]);
+    await aba.waitForURL(/wa\.me/, { timeout: 5000 });
+    const url = decodeURIComponent(aba.url());
+    esperar(url.includes('wa.me/5511988887777') && url.includes('16:00'), 'link do WhatsApp errado: ' + url);
+    await aba.close();
+  });
+
   console.log('\nPlano do aluno (aulas por semana e reposições)');
   const ctxHugo = await h.novoContexto(browser); const hugo = await h.novaPagina(ctxHugo);
   await h.cadastrar(hugo, { tipo: 'aluno', nome: 'Hugo', email: `hugo-${id}@t.com`, codigo });
@@ -575,6 +635,19 @@ function dataDaqui(dias) {
     esperar(pedido && pedido.reposicao === true, 'pedido não gravado como reposição pendente');
   });
 
+  await caso('professor recebe no sino a aula marcada e o pedido de reposição do aluno', async () => {
+    await prof.waitForFunction(() => notificacoesProfessorCache.some((n) => n.tipo === 'aluno-pediu-reposicao'), null, { timeout: 5000 });
+    // Outros alunos dos testes anteriores também avisaram: o sino conta todas as não lidas
+    const naoLidas = await prof.evaluate(() => notificacoesProfessorCache.filter((n) => !n.lida).length);
+    esperar(naoLidas >= 2 && (await contadorSino(prof)) === (naoLidas > 9 ? '9+' : String(naoLidas)), `sino do professor: ${await contadorSino(prof)} (não lidas: ${naoLidas})`);
+    await prof.click('#btn-notificacoes');
+    await prof.waitForSelector('#modal-notificacoes .item-notificacao:has-text("Hugo marcou uma aula")', { timeout: 3000 });
+    await prof.waitForSelector('#modal-notificacoes .item-notificacao:has-text("Hugo pediu uma reposição")', { timeout: 3000 });
+    await prof.waitForFunction(() => notificacoesProfessorCache.every((n) => n.lida), null, { timeout: 5000 });
+    await prof.keyboard.press('Escape');
+    esperar((await contadorSino(prof)) === '0', 'abrir não marcou como lidas');
+  });
+
   await caso('professor vê o pedido em destaque (com contador) e aprova; o aluno é notificado', async () => {
     await prof.click('#btn-aba-agenda');
     await prof.waitForSelector('#pedidos-reposicao .cartao-aula:has-text("Hugo")', { timeout: 8000 });
@@ -613,6 +686,7 @@ function dataDaqui(dias) {
     await hugo.evaluate((id) => cancelarMinhaAula(id), repo);
     await hugo.waitForFunction(() => situacaoDoPlano(null).saldo === 1, null, { timeout: 5000 });
     await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("1")`, { timeout: 5000 });
+    await prof.waitForFunction(() => notificacoesProfessorCache.some((n) => n.tipo === 'aluno-cancelou-aula' && /Hugo cancelou a reposição/.test(n.texto)), null, { timeout: 5000 });
   });
 
   await caso('professor tira o crédito (−) e o saldo não fica negativo', async () => {
@@ -867,6 +941,36 @@ function dataDaqui(dias) {
   });
   await ctxIris.close();
   await ctxDiego.close();
+
+  console.log('\nWhatsApp do professor e tema noturno');
+  await caso('professor cadastra o WhatsApp em Configurações; aparece também em "Configurar disponibilidade"', async () => {
+    await prof.click('#btn-aba-config');
+    esperar(await prof.isVisible('#aviso-sem-whatsapp'), 'sem aviso de WhatsApp não cadastrado');
+    await prof.fill('#input-whatsapp-professor', '123');
+    await prof.click('.secao-whatsapp-professor button:has-text("Salvar WhatsApp")');
+    await prof.waitForSelector('#status-whatsapp-professor:has-text("inválido")', { timeout: 3000 });
+    await prof.fill('#input-whatsapp-professor', '11 97777-6666');
+    await prof.click('.secao-whatsapp-professor button:has-text("Salvar WhatsApp")');
+    await prof.waitForSelector('#status-whatsapp-professor:has-text("Salvo")', { timeout: 5000 });
+    esperar(await prof.isHidden('#aviso-sem-whatsapp'), 'aviso continuou depois de salvar');
+    const cfg = await prof.evaluate(async () => (await db.collection('usuarios').doc(professorIdAtual).collection('configuracaoAgenda').doc('dados').get()).data());
+    esperar(cfg.whatsapp === '11 97777-6666' && cfg.disponibilidade && Object.keys(cfg.disponibilidade).length, 'não gravou o WhatsApp (ou apagou a disponibilidade)');
+    await prof.click('#btn-aba-agenda');
+    await prof.click('button:has-text("Configurar disponibilidade")');
+    await prof.waitForSelector('#modal-config-agenda:not(.modal-oculto)', { timeout: 5000 });
+    esperar(await prof.isVisible('#config-whatsapp') && (await prof.inputValue('#config-whatsapp')) === '11 97777-6666', 'WhatsApp não aparece na configuração da agenda');
+  });
+
+  await caso('tema noturno: os campos da configuração têm fundo escuro (texto legível)', async () => {
+    await prof.evaluate(() => aplicarTema('noturno'));
+    const claros = await prof.evaluate(() => ['config-duracao-aula', 'config-intervalo-aula', 'config-whatsapp'].filter((id) => {
+      const [r, g, b] = getComputedStyle(document.getElementById(id)).backgroundColor.match(/\d+/g).map(Number);
+      return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.5;
+    }));
+    await prof.evaluate(() => aplicarTema('classico'));
+    await prof.click('#modal-config-agenda .btn-fechar-modal');
+    esperar(claros.length === 0, 'campos com fundo claro no tema noturno: ' + claros.join(', '));
+  });
 
   console.log('\nCelular (375 px)');
   for (const [nome, pg] of [['aluno', aluno], ['professor', prof]]) {

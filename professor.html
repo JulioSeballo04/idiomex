@@ -47,6 +47,7 @@
         <h1 id="nome-usuario">Olá!</h1>
       </div>
       <div class="acoes-topo">
+        <button class="btn btn-secundario btn-notificacoes" id="btn-notificacoes" aria-label="Notificações" title="Notificações" onclick="abrirNotificacoesProfessor()">🔔<span class="contador-notificacoes" id="contador-notificacoes" hidden>0</span></button>
         <div class="seletor-tema" id="seletor-tema">
           <button class="btn-tema" type="button" title="Mudar cores do app" onclick="alternarMenuTema()">
             <span class="ponto-tema-atual" id="ponto-tema-atual"></span>
@@ -54,6 +55,16 @@
           <div class="menu-tema oculto" id="menu-tema"></div>
         </div>
         <button class="btn btn-secundario" onclick="sair()">Sair</button>
+      </div>
+    </div>
+
+    <div id="modal-notificacoes" class="modal-oculto">
+      <div class="modal-conteudo">
+        <div class="modal-cabecalho">
+          <h3>Notificações</h3>
+          <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharNotificacoesProfessor()">✕</button>
+        </div>
+        <div id="lista-notificacoes"></div>
       </div>
     </div>
 
@@ -114,6 +125,9 @@
               <label class="opcao-reposicao-marcar" id="marcar-reposicao-wrap" hidden>
                 <input type="checkbox" id="marcar-reposicao"> É reposição (usa 1 crédito — <span id="marcar-reposicao-saldo"></span>)
               </label>
+              <label class="opcao-reposicao-marcar" id="marcar-whatsapp-wrap" hidden>
+                <input type="checkbox" id="marcar-whatsapp"> Enviar a confirmação para o WhatsApp do aluno
+              </label>
               <button class="btn btn-primario" onclick="confirmarMarcarAula()">Marcar aula</button>
               <p class="status-msg" id="status-marcar-aula"></p>
             </div>
@@ -157,6 +171,17 @@
         <span class="status-msg" id="status-idioma"></span>
       </div>
       <p class="dica-idioma-professor">Seus alunos escolhem, entre esses idiomas, qual estudar — cada idioma tem o próprio vocabulário. Desmarcar um idioma não apaga palavras já cadastradas.</p>
+
+      <form class="secao-whatsapp-professor" onsubmit="event.preventDefault(); salvarWhatsappProfessor();">
+        <label class="campo-whatsapp-professor" for="input-whatsapp-professor">Seu WhatsApp (com DDD)</label>
+        <div class="linha-sala">
+          <input type="tel" id="input-whatsapp-professor" placeholder="Ex: 11 91234-5678">
+          <button type="submit" class="btn btn-primario">Salvar WhatsApp</button>
+        </div>
+        <p class="dica-whatsapp-professor">Quando o aluno marca uma aula, o WhatsApp abre com a confirmação pronta para esse número. Também recebe os avisos de cancelamento.</p>
+        <p class="aviso-pedido" id="aviso-sem-whatsapp" hidden>Sem WhatsApp cadastrado, os alunos não conseguem mandar a confirmação das aulas.</p>
+        <p class="status-msg" id="status-whatsapp-professor"></p>
+      </form>
 
       <div class="secao-conta secao-perigo">
         <h4>Excluir minha conta</h4>

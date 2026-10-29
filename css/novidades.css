@@ -888,3 +888,22 @@ html[data-tema="noturno"] .aviso-pedido { color: #E0B24C; }
 .config-alvo-idioma select { padding: 0.4em 0.5em; border-radius: 8px; border: 1px solid var(--borda); background: var(--bg-cartao); color: var(--ink); }
 .config-idioma-proprio { font-weight: 500 !important; }
 .config-alvo-idioma .dica-whatsapp-professor { margin: 0; }
+
+/* Marcar aula: horário que já passou (o professor registra uma aula já realizada) */
+.btn-slot-horario.slot-passado:not(.escolhido) { border-style: dashed; opacity: 0.7; }
+
+/* WhatsApp do professor na aba Configurações */
+.secao-whatsapp-professor { margin: 1.4rem 0 1.6rem; }
+.secao-whatsapp-professor .campo-whatsapp-professor { margin-top: 0; }
+
+/* Tema noturno: caixas e etiquetas que tinham fundo claro fixo (feitas para o
+   tema claro) ficam com fundo translúcido e texto claro */
+html[data-tema="noturno"] .aviso-inativos { background: rgba(224, 178, 76, 0.12); border-color: rgba(224, 178, 76, 0.45); color: #E0B24C; }
+html[data-tema="noturno"] .badge-modalidade.badge-online { background: rgba(127, 166, 201, 0.18); color: #9CC0E4; }
+html[data-tema="noturno"] .badge-modalidade.badge-presencial { background: rgba(170, 130, 230, 0.18); color: #C3A6F0; }
+html[data-tema="noturno"] .badge-status-agendada,
+html[data-tema="noturno"] .badge-reposicao { background: rgba(224, 178, 76, 0.16); color: #E0B24C; }
+html[data-tema="noturno"] .badge-status-concluida { background: rgba(80, 190, 120, 0.16); color: #7FD69B; }
+html[data-tema="noturno"] .badge-status-cancelada { background: rgba(255, 255, 255, 0.08); color: var(--ink-soft); }
+html[data-tema="noturno"] .btn-opcao-quiz.opcao-errada { background: rgba(214, 69, 69, 0.16); color: #F08A75; }
+html[data-tema="noturno"] .btn-opcao-quiz.opcao-certa { background: rgba(80, 190, 120, 0.16); color: #7FD69B; }

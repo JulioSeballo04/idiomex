@@ -1044,6 +1044,21 @@ async function carregarWhatsappDoProfessor() {
   }
 }
 
+// Avisa o professor no sino do painel dele (aula marcada, pedido de reposição,
+// cancelamento). Um aviso que falhar não atrapalha o que o aluno acabou de fazer.
+function avisarProfessor(tipo, texto, idioma) {
+  const user = auth.currentUser;
+  if (!user || !professorIdDoAluno) return;
+  db.collection("usuarios").doc(professorIdDoAluno).collection("notificacoes").add({
+    tipo, texto: texto.slice(0, 300), idioma: idiomaValido(idioma), alunoId: user.uid, lida: false,
+    criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch((e) => console.warn("Não foi possível avisar o professor:", e));
+}
+
+function descricaoAulaParaProfessor(dataIso, hora, idioma) {
+  return `${formatarDataBR(dataIso)} às ${hora}${idiomasParaAula().length > 1 ? ` (${IDIOMAS[idiomaValido(idioma)].nome})` : ""}`;
+}
+
 function mensagemCancelamentoPeloAluno(aula) {
   return "Olá! Preciso cancelar minha aula:\n" +
     `Aluno: ${nomeDoAlunoAtual}\n` +
@@ -1065,6 +1080,10 @@ async function cancelarMinhaAula(aulaId) {
   try {
     await db.collection("aulas").doc(aulaId).update({ status: "cancelada", canceladoPor: "aluno" });
     if (abaWhatsapp) abaWhatsapp.location = link;
+    if (aula) {
+      avisarProfessor("aluno-cancelou-aula",
+        `${nomeDoAlunoAtual} cancelou ${aula.reposicao ? "a reposição" : "a aula"} de ${descricaoAulaParaProfessor(aula.data, aula.horaInicio, aula.idioma)}.`, aula.idioma);
+    }
   } catch (e) {
     if (abaWhatsapp) abaWhatsapp.close();
     alert("Não foi possível cancelar a aula agora. Tente novamente em instantes.");
@@ -1667,6 +1686,9 @@ async function confirmarAgendamento() {
   }
 
   if (abaWhatsapp) abaWhatsapp.location = linkConfirmacao;
+  avisarProfessor(pedido ? "aluno-pediu-reposicao" : "aluno-marcou-aula", pedido
+    ? `${nomeDoAlunoAtual} pediu uma reposição para ${descricaoAulaParaProfessor(data, hora, idioma)}. Aprove ou recuse na Agenda.`
+    : `${nomeDoAlunoAtual} marcou ${reposicao ? "uma reposição" : "uma aula"} para ${descricaoAulaParaProfessor(data, hora, idioma)}.`, idioma);
   agendamento.salvando = false;
   agendamento.confirmada = { data, hora, modalidade, reposicao, idioma, pedido, linkWhatsapp: linkConfirmacao };
   renderizarAgendamento();

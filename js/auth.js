@@ -214,7 +214,7 @@ async function excluirMinhaConta() {
     for (const aluno of alunos.docs) {
       await aluno.ref.update({ professorId: firebase.firestore.FieldValue.delete() });
     }
-    for (const sub of ["anotacoesAgenda", "agendaOverrides", "configuracaoAgenda", "visualizacoes", "alunosSemApp"]) {
+    for (const sub of ["anotacoesAgenda", "agendaOverrides", "configuracaoAgenda", "visualizacoes", "alunosSemApp", "notificacoes"]) {
       await apagarSubcolecao(perfilRef.collection(sub));
     }
     if (perfil.codigoProfessor) {

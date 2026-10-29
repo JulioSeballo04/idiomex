@@ -43,6 +43,16 @@ function periodoDoHorario(horaInicio) {
 }
 const DURACAO_PADRAO_MINUTOS = 50;
 
+// Mensagem de erro de uma gravação. "permission-denied" num recurso que funciona
+// nos testes quase sempre quer dizer que as regras do Firestore publicadas estão
+// mais antigas que o site (o site sobe sozinho; as regras precisam ser publicadas).
+function mensagemErroGravacao(erro, padrao) {
+  if (erro && erro.code === "permission-denied") {
+    return `${padrao}\n\nO banco recusou a gravação (permissão negada). Provavelmente as regras do Firestore estão desatualizadas: publique o arquivo firestore.rules (firebase deploy --only firestore:rules, ou cole no Console do Firebase → Firestore → Regras).`;
+  }
+  return `${padrao} Tente novamente.`;
+}
+
 exigirLogin("professor");
 
 auth.onAuthStateChanged(async (user) => {
@@ -57,14 +67,62 @@ auth.onAuthStateChanged(async (user) => {
   const hoje = new Date();
   mesCalendarioProfessor = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   await carregarConfigAgenda();
+  preencherWhatsappConfiguracoes();
 
   carregarAlunos(user.uid);
   escutarAlunosSemApp(user.uid);
   escutarAulasDoProfessor(user.uid);
   escutarOverridesAgenda(user.uid);
   escutarAnotacoesAgenda(user.uid);
+  escutarNotificacoesProfessor(user.uid);
   montarCalendarioProfessor();
 });
+
+// -------------------- NOTIFICAÇÕES DO PROFESSOR --------------------
+// Criadas pelos alunos do app: aula marcada, pedido de reposição, aula cancelada.
+// O sino mostra quantas ainda não foram lidas; abrir a lista marca todas como lidas.
+
+let notificacoesProfessorCache = [];
+const ICONES_NOTIFICACAO_PROFESSOR = { "aluno-marcou-aula": "📅", "aluno-pediu-reposicao": "🔔", "aluno-cancelou-aula": "❌" };
+
+function escutarNotificacoesProfessor(uid) {
+  db.collection("usuarios").doc(uid).collection("notificacoes")
+    .orderBy("criadoEm", "desc").limit(30)
+    .onSnapshot((snap) => {
+      notificacoesProfessorCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      renderizarNotificacoesProfessor();
+    }, (e) => console.warn("Não foi possível carregar as notificações:", e));
+}
+
+function renderizarNotificacoesProfessor() {
+  const naoLidas = notificacoesProfessorCache.filter((n) => !n.lida).length;
+  const contador = document.getElementById("contador-notificacoes");
+  contador.textContent = naoLidas > 9 ? "9+" : String(naoLidas);
+  contador.hidden = naoLidas === 0;
+  document.getElementById("btn-notificacoes").setAttribute("aria-label", naoLidas ? `Notificações (${naoLidas} não lidas)` : "Notificações");
+  document.getElementById("lista-notificacoes").innerHTML = notificacoesProfessorCache.length ? notificacoesProfessorCache.map((n) => `
+    <div class="item-notificacao${n.lida ? "" : " nao-lida"}">
+      <span class="icone-notificacao">${ICONES_NOTIFICACAO_PROFESSOR[n.tipo] || "🔔"}</span>
+      <div>
+        <div>${escapeHtml(n.texto)}</div>
+        <span class="data-msg">${n.criadoEm ? escapeHtml(n.criadoEm.toDate().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })) : ""}</span>
+      </div>
+    </div>`).join("") : `<p class="vazio">Nenhuma notificação por enquanto. Aqui aparecem as aulas que os alunos marcarem ou cancelarem.</p>`;
+}
+
+async function abrirNotificacoesProfessor() {
+  renderizarNotificacoesProfessor();
+  document.getElementById("modal-notificacoes").classList.remove("modal-oculto");
+  const naoLidas = notificacoesProfessorCache.filter((n) => !n.lida);
+  if (!naoLidas.length) return;
+  const lote = db.batch();
+  naoLidas.forEach((n) => lote.update(db.collection("usuarios").doc(professorIdAtual).collection("notificacoes").doc(n.id), { lida: true }));
+  try { await lote.commit(); } catch (e) { console.warn("Não foi possível marcar as notificações como lidas:", e); }
+}
+
+function fecharNotificacoesProfessor() {
+  document.getElementById("modal-notificacoes").classList.add("modal-oculto");
+}
 
 // Contas criadas antes do índice "codigosProfessor" ainda não têm o código lá — e,
 // sem ele, novos alunos não conseguem usar o código. Cria a entrada na primeira
@@ -593,7 +651,7 @@ async function salvarPlanoAluno(alunoId, idioma, mudancas) {
     return true;
   } catch (e) {
     console.error(e);
-    alert("Não foi possível salvar o plano do aluno. Tente novamente.");
+    alert(mensagemErroGravacao(e, "Não foi possível salvar o plano do aluno."));
     renderizarListaAlunos();
     return false;
   }
@@ -1601,8 +1659,9 @@ function montarSeletorAlvoConfig() {
     idiomasAtuaisProfessor.map((id) => `<option value="${id}" ${alvoConfig === id ? "selected" : ""}>${IDIOMAS[id].nome}${rascunhosConfig[id] ? " — horários próprios" : " — usa o padrão"}</option>`).join("");
 }
 
-// Mostra o alvo atual: os campos da aula (do idioma, ou do padrão) e, só no padrão,
-// o que vale para todos (WhatsApp e meses liberados)
+// Mostra o alvo atual: os campos da aula (do idioma, ou do padrão). O que vale para
+// todos os idiomas (WhatsApp e meses liberados) aparece sempre — antes ficava só no
+// padrão e sumia quando o painel estava num idioma.
 function mostrarAlvoConfig() {
   montarSeletorAlvoConfig();
   const ehPadrao = alvoConfig === "padrao";
@@ -1617,7 +1676,6 @@ function mostrarAlvoConfig() {
   usaPadrao.hidden = ehPadrao || propria;
   usaPadrao.textContent = ehPadrao ? "" : `As aulas de ${IDIOMAS[alvoConfig].nome} seguem a configuração padrão. Marque acima para definir duração, dias e horários só deste idioma.`;
   document.getElementById("config-campos-aula").hidden = !ehPadrao && !propria;
-  document.getElementById("config-compartilhado").hidden = !ehPadrao;
   preencherCamposDeAula(ehPadrao || !propria ? rascunhosConfig.padrao : rascunhosConfig[alvoConfig]);
 }
 
@@ -1908,9 +1966,8 @@ async function salvarConfigAgenda() {
   }
 
   const whatsapp = document.getElementById("config-whatsapp").value.trim();
-  const digitos = apenasDigitos(whatsapp);
-  if (whatsapp && (digitos.length < 10 || digitos.length > 13)) {
-    alert("WhatsApp inválido — use DDD + número (ex: 11 91234-5678), ou deixe em branco.");
+  if (!whatsappValido(whatsapp)) {
+    alert(AVISO_WHATSAPP_INVALIDO);
     return;
   }
   const mesesLiberados = Array.from(document.querySelectorAll(".chk-mes-liberado:checked")).map((c) => c.value);
@@ -1931,9 +1988,50 @@ async function salvarConfigAgenda() {
   }
 
   configAgendaAtual = dados;
+  preencherWhatsappConfiguracoes();
   fecharConfigAgenda();
   montarCalendarioProfessor();
   renderizarHorariosMarcarAula();
+}
+
+// -------------------- WHATSAPP DO PROFESSOR --------------------
+// Número para onde o aluno manda a confirmação ao marcar uma aula (e o aviso ao
+// cancelar). Fica em configuracaoAgenda/dados e aparece em dois lugares: na aba
+// Configurações e em "Configurar disponibilidade".
+
+const AVISO_WHATSAPP_INVALIDO = "WhatsApp inválido — use DDD + número (ex: 11 91234-5678), ou deixe em branco.";
+
+function whatsappValido(texto) {
+  const digitos = apenasDigitos(texto);
+  return !texto || (digitos.length >= 10 && digitos.length <= 13);
+}
+
+function preencherWhatsappConfiguracoes() {
+  const campo = document.getElementById("input-whatsapp-professor");
+  if (campo) campo.value = (configAgendaAtual && configAgendaAtual.whatsapp) || "";
+  const aviso = document.getElementById("aviso-sem-whatsapp");
+  if (aviso) aviso.hidden = !!(configAgendaAtual && configAgendaAtual.whatsapp);
+}
+
+async function salvarWhatsappProfessor() {
+  const whatsapp = document.getElementById("input-whatsapp-professor").value.trim();
+  const status = document.getElementById("status-whatsapp-professor");
+  if (!whatsappValido(whatsapp)) {
+    status.textContent = AVISO_WHATSAPP_INVALIDO;
+    return;
+  }
+  try {
+    // merge: o resto da configuração da agenda continua como está
+    await db.collection("usuarios").doc(professorIdAtual)
+      .collection("configuracaoAgenda").doc("dados").set({ whatsapp }, { merge: true });
+    configAgendaAtual = { ...configAgendaAtual, whatsapp };
+    preencherWhatsappConfiguracoes();
+    status.textContent = "Salvo!";
+    setTimeout(() => (status.textContent = ""), 1500);
+  } catch (e) {
+    console.error(e);
+    status.textContent = "Não foi possível salvar agora. Tente novamente.";
+  }
 }
 
 // -------------------- AGENDA: PRÓXIMAS AULAS (todas) --------------------
@@ -2092,7 +2190,7 @@ function montarCalendarioProfessor() {
       diaSelecionadoProfessor = diaSelecionadoProfessor === dataIso ? null : dataIso;
       // Com o "Marcar aula" aberto ao lado, o dia clicado já vai para o formulário
       const formularioAberto = !document.getElementById("modal-marcar-aula").classList.contains("modal-oculto");
-      if (formularioAberto && dataIso >= dataDeHojeISO()) {
+      if (formularioAberto) {
         document.getElementById("marcar-data").value = dataIso;
         selecionarDiaMarcarAula();
       }
@@ -2535,7 +2633,7 @@ async function adicionarAlunoSemApp() {
     document.getElementById("input-telefone-sem-app").value = "";
   } catch (e) {
     console.error(e);
-    alert("Não foi possível cadastrar o aluno. Tente novamente.");
+    alert(mensagemErroGravacao(e, "Não foi possível cadastrar o aluno."));
   }
 }
 
@@ -2552,7 +2650,7 @@ async function ajustarReposicoesSemApp(alunoId, delta) {
     await lote.commit();
   } catch (e) {
     console.error(e);
-    alert("Não foi possível salvar as reposições. Tente novamente.");
+    alert(mensagemErroGravacao(e, "Não foi possível salvar as reposições."));
   }
 }
 
@@ -2578,7 +2676,8 @@ async function removerAlunoSemApp(alunoId) {
 // -------------------- MARCAR AULA PELO PROFESSOR --------------------
 // Para qualquer aluno: os do app e os sem app. O professor escolhe dia, horário e
 // modalidade livremente (pode até ser fora da disponibilidade configurada); só não
-// deixa encavalar com outra aula já marcada.
+// deixa encavalar com outra aula já marcada. Também serve para registrar, no fim do
+// dia, uma aula que já aconteceu e não estava marcada: ela entra como concluída.
 
 function abrirMarcarAula(alunoId, dataIso) {
   const seletor = document.getElementById("marcar-aluno");
@@ -2588,7 +2687,6 @@ function abrirMarcarAula(alunoId, dataIso) {
     (alunosSemAppCache.length ? `<optgroup label="Alunos sem app">${alunosSemAppCache.map(opcao).join("")}</optgroup>` : "");
 
   const campoData = document.getElementById("marcar-data");
-  campoData.min = dataDeHojeISO();
   campoData.value = dataIso || dataDeHojeISO();
   horarioEscolhidoMarcar = null;
   definirHorarioManual(false);
@@ -2607,6 +2705,7 @@ function abrirMarcarAula(alunoId, dataIso) {
 
   document.getElementById("status-marcar-aula").textContent = "";
   atualizarReposicaoMarcarAula();
+  atualizarWhatsappMarcarAula();
   // O formulário fica ao lado do calendário, na Agenda (pode ter sido aberto em "Meus Alunos")
   mostrarAbaProfessor("agenda");
   const painel = document.getElementById("modal-marcar-aula");
@@ -2616,7 +2715,9 @@ function abrirMarcarAula(alunoId, dataIso) {
 
 // Horários livres do dia, iguais aos que o aluno vê ao agendar: a disponibilidade do
 // professor (com a exceção do dia, se houver), em aulas da duração configurada, sem
-// os horários já ocupados. "Outro horário" deixa marcar fora disso.
+// os horários já ocupados. "Outro horário" deixa marcar fora disso. Diferente do
+// aluno, o professor também vê os horários que já passaram, para registrar uma aula
+// que aconteceu sem estar marcada.
 let horarioEscolhidoMarcar = null;
 let horarioManualMarcar = false;
 
@@ -2645,12 +2746,11 @@ function horariosLivresDoDia(dataIso, idioma) {
   const duracao = config.duracaoAulaMinutos || DURACAO_PADRAO_MINUTOS;
   // Ocupado é ocupado, em qualquer idioma: o professor não dá duas aulas ao mesmo tempo
   const ocupadas = aulasCache.filter((a) => a.data === dataIso && ["agendada", "pendente", "concluida"].includes(a.status));
-  let horarios = slotsSemConflito(gerarSlotsDoDia(blocos, duracao, config.intervaloMinutos), duracao, ocupadas);
-  if (dataIso === dataDeHojeISO()) {
-    const agora = new Date();
-    horarios = horarios.filter((h) => minutosDoHorario(h) > agora.getHours() * 60 + agora.getMinutes());
-  }
-  return horarios;
+  return slotsSemConflito(gerarSlotsDoDia(blocos, duracao, config.intervaloMinutos), duracao, ocupadas);
+}
+
+function horarioJaPassou(dataIso, hora) {
+  return new Date(`${dataIso}T${hora}:00`) < new Date();
 }
 
 function renderizarHorariosMarcarAula() {
@@ -2668,10 +2768,13 @@ function renderizarHorariosMarcarAula() {
     return;
   }
   const duracao = duracaoDasAulas();
+  const algumPassou = horarios.some((h) => horarioJaPassou(data, h));
   container.innerHTML = `<div class="slots-grade">${horarios.map((h) => `
-    <button type="button" class="btn-slot-horario${h === horarioEscolhidoMarcar && !horarioManualMarcar ? " escolhido" : ""}"
+    <button type="button" class="btn-slot-horario${h === horarioEscolhidoMarcar && !horarioManualMarcar ? " escolhido" : ""}${horarioJaPassou(data, h) ? " slot-passado" : ""}"
+      ${horarioJaPassou(data, h) ? 'title="Já passou: a aula fica registrada como realizada"' : ""}
       aria-pressed="${h === horarioEscolhidoMarcar && !horarioManualMarcar}" onclick="escolherHorarioMarcarAula('${h}')">${faixaHorario(h, somarMinutos(h, duracao))}</button>`).join("")}
-  </div>`;
+  </div>
+  ${algumPassou ? `<p class="dica-plano">Horários que já passaram (mais claros) servem para registrar uma aula que aconteceu: ela entra como realizada.</p>` : ""}`;
 }
 
 function selecionarDiaMarcarAula() {
@@ -2714,7 +2817,31 @@ function escolherIdiomaDoAlunoNoFormulario() {
 function trocarAlunoMarcarAula() {
   escolherIdiomaDoAlunoNoFormulario();
   atualizarReposicaoMarcarAula();
+  atualizarWhatsappMarcarAula();
   renderizarHorariosMarcarAula(); // o idioma pode ter mudado, e com ele os horários
+}
+
+// Telefone do aluno escolhido no formulário: o do perfil (aluno do app) ou o do cadastro (sem app)
+function telefoneDoAluno(alunoId) {
+  const aluno = alunosCache.find((a) => a.id === alunoId) || alunosSemAppCache.find((a) => a.id === alunoId);
+  return (aluno && aluno.telefone) || "";
+}
+
+// "Enviar a confirmação pelo WhatsApp" só aparece se o aluno tem telefone
+function atualizarWhatsappMarcarAula() {
+  const temTelefone = !!telefoneDoAluno(document.getElementById("marcar-aluno").value);
+  document.getElementById("marcar-whatsapp-wrap").hidden = !temTelefone;
+  document.getElementById("marcar-whatsapp").checked = temTelefone;
+}
+
+function mensagemConfirmacaoPeloProfessor(nomeAluno, dataIso, hora, modalidade, idioma, reposicao) {
+  return `Olá ${nomeAluno}! Sua aula está marcada:\n` +
+    `Data: ${formatarDataBR(dataIso)}\n` +
+    `Horário: ${hora}\n` +
+    `Modalidade: ${legendaModalidade(modalidade)}` +
+    (idiomasAtuaisProfessor.length > 1 ? `\nIdioma: ${IDIOMAS[idiomaValido(idioma)].nome}` : "") +
+    (reposicao ? "\nTipo: Reposição" : "") +
+    "\nAté lá!";
 }
 
 // A opção "reposição" só aparece se o aluno escolhido tem crédito no idioma da aula
@@ -2744,7 +2871,8 @@ async function confirmarMarcarAula() {
   if (!data || !hora) { status.textContent = "Escolha o dia e o horário."; return; }
   const duracao = duracaoDasAulas(idiomaValido(idioma));
   const horaFim = somarMinutos(hora, duracao);
-  if (new Date(`${data}T${hora}:00`) < new Date()) { status.textContent = "Esse horário já passou."; return; }
+  // Horário que já passou: o professor está registrando uma aula que aconteceu
+  const realizada = horarioJaPassou(data, hora);
 
   const inicio = minutosDoHorario(hora), fim = inicio + duracao;
   const choque = aulasCache.find((a) => a.data === data && ["agendada", "pendente", "concluida"].includes(a.status) &&
@@ -2754,17 +2882,41 @@ async function confirmarMarcarAula() {
     return;
   }
 
-  status.textContent = "Marcando...";
+  // Confirmação pelo WhatsApp do aluno: a aba é aberta antes do "await" (senão o
+  // celular bloqueia o popup) e só recebe o endereço depois de a aula ser gravada
+  const enviarWhatsapp = !realizada && !document.getElementById("marcar-whatsapp-wrap").hidden &&
+    document.getElementById("marcar-whatsapp").checked;
+  const linkConfirmacao = enviarWhatsapp
+    ? linkWhatsapp(telefoneDoAluno(aluno.id), mensagemConfirmacaoPeloProfessor(aluno.nome, data, hora, modalidade, idioma, reposicao))
+    : null;
+  const abaWhatsapp = linkConfirmacao ? window.open("", "_blank") : null;
+
+  status.textContent = realizada ? "Registrando..." : "Marcando...";
+  let aulaId;
   try {
-    await agendarAula(professorIdAtual, data, hora, horaFim, modalidade, aluno.id, aluno.nome, reposicao, idioma, "agendada");
-    if (alunosCache.some((a) => a.id === aluno.id)) {
-      db.collection("usuarios").doc(aluno.id).collection("notificacoes")
-        .add(notificacaoParaAluno("aula-marcada", `Seu professor marcou ${reposicao ? "uma reposição" : "uma aula"} de ${IDIOMAS[idiomaValido(idioma)].nome} para você: ${formatarDataBR(data)} às ${hora}.`, idioma))
-        .catch((e) => console.warn("Não foi possível avisar o aluno da aula marcada:", e));
-    }
-    fecharMarcarAula();
+    aulaId = await agendarAula(professorIdAtual, data, hora, horaFim, modalidade, aluno.id, aluno.nome, reposicao, idioma, "agendada");
   } catch (e) {
     console.error(e);
+    if (abaWhatsapp) abaWhatsapp.close();
     status.textContent = e.message && /reservado/.test(e.message) ? e.message : "Não foi possível marcar a aula. Tente novamente.";
+    return;
   }
+  if (abaWhatsapp) abaWhatsapp.location = linkConfirmacao;
+  if (realizada) {
+    // A aula é criada como "agendada" (como qualquer aula marcada pelo professor) e
+    // logo concluída. Se essa segunda gravação falhar, ela aparece em "aulas para
+    // confirmar", onde o professor confirma com um clique.
+    await db.collection("aulas").doc(aulaId).update({ status: "concluida" })
+      .catch((e) => console.warn("Não foi possível marcar a aula como realizada:", e));
+  }
+  if (alunosCache.some((a) => a.id === aluno.id)) {
+    const oQue = reposicao ? "uma reposição" : "uma aula";
+    const texto = realizada
+      ? `Seu professor registrou ${oQue} de ${IDIOMAS[idiomaValido(idioma)].nome} realizada em ${formatarDataBR(data)} às ${hora}.`
+      : `Seu professor marcou ${oQue} de ${IDIOMAS[idiomaValido(idioma)].nome} para você: ${formatarDataBR(data)} às ${hora}.`;
+    db.collection("usuarios").doc(aluno.id).collection("notificacoes")
+      .add(notificacaoParaAluno("aula-marcada", texto, idioma))
+      .catch((e) => console.warn("Não foi possível avisar o aluno da aula marcada:", e));
+  }
+  fecharMarcarAula();
 }

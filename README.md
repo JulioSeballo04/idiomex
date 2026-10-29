@@ -40,6 +40,12 @@ em **Publicar**.
 Isso garante que um aluno só vê os próprios dados, e um professor só
 vê os alunos vinculados a ele pelo código.
 
+**Publique as regras de novo sempre que o arquivo `firestore.rules` mudar.**
+O site (Vercel) se atualiza sozinho a cada mudança no GitHub, mas as regras
+não: com regras antigas, recursos novos falham com "permissão negada" (ex:
+cadastrar aluno sem app, ajustar o plano do aluno, notificações). O painel
+do professor avisa quando isso acontece.
+
 ## Passo 3 — Criar a chave gratuita da IA (Gemini)
 
 1. Acesse https://aistudio.google.com/app/apikey
@@ -131,6 +137,10 @@ usuarios/{uid}/notificacoes/{id}
                              ele está estudando
                           -> criadas pelo professor (crédito de reposição,
                              pedido aprovado/recusado), lidas pelo aluno
+  tipo, texto, idioma, lida, criadoEm, alunoId
+                          -> no professor: criadas pelos alunos vinculados
+                             (aula marcada, pedido de reposição, aula
+                             cancelada), lidas no sino do painel
 
 usuarios/{professorId}/configuracaoAgenda/dados
   duracaoAulaMinutos, intervaloMinutos, modalidades, modalidadesPorDia,
