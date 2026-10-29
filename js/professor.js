@@ -2690,7 +2690,6 @@ function abrirMarcarAula(alunoId, dataIso) {
   campoData.value = dataIso || dataDeHojeISO();
   horarioEscolhidoMarcar = null;
   definirHorarioManual(false);
-  renderizarHorariosMarcarAula();
 
   const modalidades = (configAgendaAtual && configAgendaAtual.modalidades && configAgendaAtual.modalidades.length)
     ? configAgendaAtual.modalidades : ["online", "presencial"];
@@ -2710,6 +2709,9 @@ function abrirMarcarAula(alunoId, dataIso) {
   mostrarAbaProfessor("agenda");
   const painel = document.getElementById("modal-marcar-aula");
   painel.classList.remove("modal-oculto");
+  // Só depois de visível e com o idioma escolhido: com o formulário escondido, os
+  // horários não eram desenhados e o dia aberto ficava sem nenhum horário
+  renderizarHorariosMarcarAula();
   painel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 

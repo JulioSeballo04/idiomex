@@ -563,8 +563,9 @@ function dataDaqui(dias) {
       }
     });
     esperar(diaPassado, 'nenhum dia de atendimento nas últimas 2 semanas');
-    await prof.fill('#marcar-data', diaPassado);
-    await prof.dispatchEvent('#marcar-data', 'change');
+    // Aberto já no dia (como "Marcar aula neste dia"), os horários aparecem sem trocar o dia
+    await prof.click('#modal-marcar-aula .btn-fechar-modal');
+    await prof.evaluate(({ id, d }) => abrirMarcarAula(id, d), { id: ze, d: diaPassado });
     await prof.waitForSelector('#marcar-slots .btn-slot-horario.slot-passado', { timeout: 3000 });
     const hora = (await prof.textContent('#marcar-slots .btn-slot-horario >> nth=0')).split(' – ')[0].trim();
     const popups = [];
