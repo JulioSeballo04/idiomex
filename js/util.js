@@ -360,6 +360,38 @@ function aulasNaSemana(aulas, professorId, dataIso, idioma) {
 }
 
 // ============================================================
+// FRASES DE EXEMPLO (IA) — usadas pelo aluno e pelo professor ao adicionar palavra
+// ============================================================
+
+// Pede à function da Vercel as frases de exemplo de uma palavra (a chave da IA fica
+// só no servidor; o token de login prova que o pedido vem de um usuário do app).
+// Devolve os campos a gravar na palavra: {frasesExemplo, traducoesSugeridas} ou,
+// se a IA não trouxe frases, {frasesExemplo: [], falhaAoGerarFrases, motivoFalhaFrases}.
+async function pedirFrasesDaIA(palavra, traducao, idioma) {
+  try {
+    const token = await auth.currentUser.getIdToken();
+    const resposta = await fetch(AI_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      body: JSON.stringify({ palavra, traducao, idioma })
+    });
+    const dados = await resposta.json().catch(() => ({}));
+    if (dados.frases && dados.frases.length > 0) {
+      const traducoes = Array.isArray(dados.traducoes) ? dados.traducoes.filter((t) => typeof t === "string" && t.trim()).slice(0, 3) : [];
+      return { frasesExemplo: dados.frases, traducoesSugeridas: traducoes };
+    }
+    // A IA respondeu mas não trouxe frases (quota, sobrecarga etc.): o motivo aparece
+    // discreto no cartão (ajuda a achar o problema)
+    const motivo = String(dados.aviso || dados.erro || `servidor respondeu ${resposta.status}`).slice(0, 200);
+    console.warn("IA:", motivo);
+    return { frasesExemplo: [], falhaAoGerarFrases: true, motivoFalhaFrases: motivo };
+  } catch (e) {
+    console.warn("Não foi possível gerar as frases de exemplo agora:", e);
+    return { frasesExemplo: [], falhaAoGerarFrases: true, motivoFalhaFrases: "sem conexão com o servidor da IA" };
+  }
+}
+
+// ============================================================
 // WHATSAPP — link "wa.me" com mensagem pré-preenchida, sem precisar de
 // nenhuma API paga (o próprio aluno/professor manda a mensagem manualmente
 // depois que o link abre o WhatsApp Web/app já com o texto pronto).

@@ -241,7 +241,10 @@ function garantirEstado(alunoId) {
       letrasVistas: null,            // {A: Timestamp, B: Timestamp, ...} última vez que cada letra foi aberta
       temNovidade: false,
       letrasNovas: new Set(),
-      mensagemEmEdicaoId: null
+      mensagemEmEdicaoId: null,
+      idiomaNovaPalavra: null,       // idioma escolhido no formulário "Adicionar palavra" do professor
+      salvandoPalavra: false,
+      statusNovaPalavra: ""
     };
   }
   return estadoAlunos[alunoId];
@@ -353,6 +356,7 @@ function calcularNovidades(alunoId) {
   const letrasNovas = new Set();
 
   estado.palavras.forEach((p) => {
+    if (p.adicionadaPor === professorIdAtual) return; // o próprio professor adicionou: não é novidade
     const letra = letraInicial(p.palavraEn);
     const vistoEm = estado.letrasVistas[letra];
     if (!vistoEm || (p.criadoEm && p.criadoEm.toMillis() > vistoEm.toMillis())) {
@@ -760,10 +764,13 @@ function montarAbaVocabulario(alunoId) {
               return `<div class="frase-exemplo">"${escapeHtml(en)}"${pt ? `<br><span class="frase-traducao">${escapeHtml(pt)}</span>` : ""}</div>`;
             }).join("")
           : "";
+        const minha = p.adicionadaPor === professorIdAtual;
         return `
           <div class="cartao-palavra">
+            ${minha ? `<button class="btn-remover-palavra-professor" type="button" title="Remover palavra" aria-label="Remover a palavra ${escapeHtml(p.palavraEn)}" onclick="removerPalavraDoAluno('${alunoId}','${p.id}')">✕</button>` : ""}
             <div class="palavra-en">${escapeHtml(p.palavraEn)}</div>
             <div class="palavra-pt">${escapeHtml(p.traducaoPt)}</div>
+            ${minha ? `<span class="selo-palavra-professor">Adicionada por você</span>` : ""}
             ${frases}
           </div>
         `;
@@ -771,7 +778,105 @@ function montarAbaVocabulario(alunoId) {
     }
   }
 
-  return `${seletorIdioma}<div class="indice-letras-mini">${letrasHtml}</div>${listaPalavras}`;
+  return `${montarFormularioPalavraProfessor(alunoId, idiomaEmExibicao)}${seletorIdioma}<div class="indice-letras-mini">${letrasHtml}</div>${listaPalavras}`;
+}
+
+// -------------------- PALAVRAS ADICIONADAS PELO PROFESSOR --------------------
+// Para o aluno que não tem o costume de adicionar palavras: o professor adiciona no
+// vocabulário dele, com as frases de exemplo da IA, como se o aluno tivesse
+// adicionado. A palavra fica marcada como do professor, que pode removê-la.
+
+// Idioma da palavra nova: o escolhido no formulário, senão o do topo do painel, senão
+// o vocabulário em exibição, senão o primeiro idioma do professor
+function idiomaNovaPalavra(alunoId, idiomaEmExibicao) {
+  const estado = estadoAlunos[alunoId];
+  return [estado.idiomaNovaPalavra, idiomaAtivoProfessor, idiomaEmExibicao, idiomasAtuaisProfessor[0]]
+    .find((id) => id && idiomasAtuaisProfessor.includes(id)) || idiomasAtuaisProfessor[0];
+}
+
+function montarFormularioPalavraProfessor(alunoId, idiomaEmExibicao) {
+  const estado = estadoAlunos[alunoId];
+  const idioma = idiomaNovaPalavra(alunoId, idiomaEmExibicao);
+  const seletor = idiomasAtuaisProfessor.length > 1 ? `
+      <select title="Idioma da palavra" onchange="estadoAlunos['${alunoId}'].idiomaNovaPalavra = this.value; renderizarListaAlunos()">
+        ${idiomasAtuaisProfessor.map((id) => `<option value="${id}" ${id === idioma ? "selected" : ""}>${IDIOMAS[id].nome}</option>`).join("")}
+      </select>` : "";
+  return `
+    <form class="form-palavra-professor" onsubmit="event.preventDefault(); adicionarPalavraParaAluno('${alunoId}')">
+      <div class="linha-sala">
+        <input type="text" id="nova-palavra-${alunoId}" maxlength="60" placeholder="Palavra em ${IDIOMAS[idioma].nome.toLowerCase()} (ex: ${escapeHtml(IDIOMAS[idioma].exemplo.split(" / ")[0])})">
+        <input type="text" id="nova-traducao-${alunoId}" maxlength="60" placeholder="Tradução (ex: maçã)">
+        ${seletor}
+        <button type="submit" class="btn btn-primario" ${estado.salvandoPalavra ? "disabled" : ""}>${estado.salvandoPalavra ? "Adicionando..." : "Adicionar palavra"}</button>
+      </div>
+      <p class="status-msg">${escapeHtml(estado.statusNovaPalavra || "")}</p>
+    </form>`;
+}
+
+function avisoNovaPalavra(alunoId, texto) {
+  estadoAlunos[alunoId].statusNovaPalavra = texto;
+  renderizarListaAlunos();
+}
+
+async function adicionarPalavraParaAluno(alunoId) {
+  const estado = estadoAlunos[alunoId];
+  if (estado.salvandoPalavra) return;
+  const campoPalavra = document.getElementById(`nova-palavra-${alunoId}`);
+  const campoTraducao = document.getElementById(`nova-traducao-${alunoId}`);
+  const palavra = (campoPalavra ? campoPalavra.value : "").trim();
+  const traducao = (campoTraducao ? campoTraducao.value : "").trim();
+  if (!palavra || !traducao) { avisoNovaPalavra(alunoId, "Escreva a palavra e a tradução."); return; }
+  const idiomasDoAluno = Object.keys(IDIOMAS).filter((id) => estado.palavras.some((p) => idiomaDaPalavra(p) === id));
+  const idioma = idiomaNovaPalavra(alunoId, idiomasDoAluno.includes(estado.idiomaFiltro) ? estado.idiomaFiltro : idiomasDoAluno[0]);
+  if (estado.palavras.some((p) => idiomaDaPalavra(p) === idioma && p.palavraEn.trim().toLowerCase() === palavra.toLowerCase())) {
+    avisoNovaPalavra(alunoId, `"${palavra}" já está no vocabulário do aluno.`);
+    return;
+  }
+
+  estado.salvandoPalavra = true;
+  avisoNovaPalavra(alunoId, "Gerando as frases de exemplo...");
+  // As frases vêm antes de gravar: o aluno já recebe a palavra completa
+  const frases = await pedirFrasesDaIA(palavra, traducao, idioma);
+  const dados = {
+    palavraEn: palavra, traducaoPt: traducao, idioma, adicionadaPor: professorIdAtual,
+    criadoEm: firebase.firestore.FieldValue.serverTimestamp(), ...frases
+  };
+  if (!frases.falhaAoGerarFrases && !frases.traducoesSugeridas.length) delete dados.traducoesSugeridas;
+  try {
+    await db.collection("usuarios").doc(alunoId).collection("palavras").add(dados);
+  } catch (e) {
+    console.error(e);
+    estado.salvandoPalavra = false;
+    avisoNovaPalavra(alunoId, mensagemErroGravacao(e, "Não foi possível adicionar a palavra.").replace(/\n+/g, " "));
+    return;
+  }
+  db.collection("usuarios").doc(alunoId).collection("notificacoes")
+    .add(notificacaoParaAluno("palavra-adicionada", `Seu professor adicionou a palavra "${palavra}" (${traducao}) ao seu vocabulário de ${IDIOMAS[idioma].nome}.`.slice(0, 300), idioma))
+    .catch((e) => console.warn("Não foi possível avisar o aluno da palavra nova:", e));
+
+  estado.salvandoPalavra = false;
+  estado.idiomaFiltro = idioma;
+  estado.letraSelecionada = letraInicial(palavra); // mostra a palavra recém-adicionada
+  estado.statusNovaPalavra = frases.falhaAoGerarFrases
+    ? `"${palavra}" adicionada, mas a IA não gerou as frases agora (o aluno pode tentar de novo no cartão).`
+    : `"${palavra}" adicionada ao vocabulário do aluno.`;
+  renderizarListaAlunos();
+  // Busca os campos de novo: a tela foi redesenhada durante o "await"
+  const p = document.getElementById(`nova-palavra-${alunoId}`);
+  const t = document.getElementById(`nova-traducao-${alunoId}`);
+  if (p) p.value = "";
+  if (t) t.value = "";
+}
+
+async function removerPalavraDoAluno(alunoId, palavraId) {
+  const palavra = estadoAlunos[alunoId].palavras.find((p) => p.id === palavraId);
+  if (!palavra || !confirm(`Remover "${palavra.palavraEn}" do vocabulário do aluno?`)) return;
+  try {
+    await db.collection("usuarios").doc(alunoId).collection("palavras").doc(palavraId).delete();
+  } catch (e) {
+    console.error(e);
+    alert(mensagemErroGravacao(e, "Não foi possível remover a palavra."));
+  }
 }
 
 function trocarIdiomaFiltroAluno(alunoId, idioma) {
@@ -2093,7 +2198,8 @@ function montarCalendarioProfessor() {
   const contagemPorDia = {};
   const idiomasPorDia = {}; // {data: [códigos de idioma das aulas agendadas nesse dia]}
   aulasCache.filter(noFiltroAgenda).forEach((a) => {
-    if ((a.status === "agendada" || a.status === "pendente") && a.data.startsWith(prefixoMes)) {
+    // Concluídas também: num mês que já passou, mostram os dias em que houve aula
+    if (["agendada", "pendente", "concluida"].includes(a.status) && a.data.startsWith(prefixoMes)) {
       contagemPorDia[a.data] = (contagemPorDia[a.data] || 0) + 1;
       (idiomasPorDia[a.data] = idiomasPorDia[a.data] || new Set()).add(idiomaValido(a.idioma));
     }
@@ -2156,8 +2262,8 @@ function montarCalendarioProfessor() {
   document.getElementById("grade-calendario-professor").innerHTML = `
     <div class="cal-wrap cal-wrap-professor">
       <div class="cal-head">
-        <div class="cal-nav"><button type="button" id="btn-cal-prof-anterior" ${eMesAtual ? "disabled" : ""} aria-label="Mês anterior">&larr;</button></div>
-        <div class="cal-title">${NOMES_MESES[mes]} de ${ano}</div>
+        <div class="cal-nav"><button type="button" id="btn-cal-prof-anterior" aria-label="Mês anterior">&larr;</button></div>
+        <div class="cal-title">${NOMES_MESES[mes]} de ${ano}${eMesAtual ? "" : ` <button type="button" class="link-trocar" id="btn-cal-prof-hoje">voltar para hoje</button>`}</div>
         <div class="cal-nav"><button type="button" id="btn-cal-prof-proximo" aria-label="Próximo mês">&rarr;</button></div>
       </div>
       <div class="cal-dow">${NOMES_DIAS_SEMANA_CURTO.map((d) => `<span>${d}</span>`).join("")}</div>
@@ -2165,7 +2271,7 @@ function montarCalendarioProfessor() {
       <div class="cal-legend">
         <span><span class="dot dot-hoje"></span> Hoje</span>
         <span><span class="dot dot-atende"></span> Atende nesse dia</span>
-        <span><span class="dot dot-tem-aula"></span> Tem aula marcada</span>
+        <span><span class="dot dot-tem-aula"></span> Tem aula</span>
         <span><span class="dot dot-nao-atende"></span> Não atende</span>
         <span><span class="dot dot-ajustado"></span> Horário ajustado só nesse dia</span>
         <span><span class="legenda-nota">✎</span> Tem anotação</span>
@@ -2176,6 +2282,12 @@ function montarCalendarioProfessor() {
 
   document.getElementById("btn-cal-prof-anterior").onclick = () => {
     mesCalendarioProfessor = new Date(ano, mes - 1, 1);
+    diaSelecionadoProfessor = null;
+    montarCalendarioProfessor();
+  };
+  const voltarHoje = document.getElementById("btn-cal-prof-hoje");
+  if (voltarHoje) voltarHoje.onclick = () => {
+    mesCalendarioProfessor = new Date(hojeReal.getFullYear(), hojeReal.getMonth(), 1);
     diaSelecionadoProfessor = null;
     montarCalendarioProfessor();
   };

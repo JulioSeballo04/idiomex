@@ -51,7 +51,7 @@ function escutarNotificacoes(uid) {
 }
 
 const ICONES_NOTIFICACAO = { "credito-reposicao": "🎟️", "reposicao-aprovada": "✅", "reposicao-recusada": "❌",
-  "aula-nao-realizada": "🎟️", "aula-marcada": "📅" };
+  "aula-nao-realizada": "🎟️", "aula-marcada": "📅", "palavra-adicionada": "📖" };
 
 // Cada notificação é de um idioma: o sino mostra só as do idioma que o aluno está
 // estudando agora. As antigas, de antes de existir o campo, contam como do primeiro
@@ -495,6 +495,7 @@ function desenharPalavras(grade) {
       <button class="remover" title="Remover" onclick="removerPalavra('${p.id}')">✕</button>
       <div class="palavra-en">${escapeHtml(p.palavraEn)} <button class="btn-falar" type="button" title="Ouvir pronúncia" onclick="falarPalavra('${p.id}')">🔊</button></div>
       <div class="palavra-pt">${escapeHtml(p.traducaoPt)} <button class="btn-editar-traducao" type="button" title="Corrigir tradução" aria-label="Corrigir tradução" onclick="editarTraducao('${p.id}')">✎</button></div>
+      ${p.adicionadaPor ? `<span class="selo-palavra-professor">Adicionada pelo professor</span>` : ""}
       ${montarAvisoTraducao(p)}
       ${frases}
       ${blocoNota}
@@ -602,40 +603,22 @@ async function adicionarPalavra(palavraEn, traducaoPt, notaPessoal) {
   await gerarFrasesDaPalavra(ref.id, dadosPalavra.palavraEn, dadosPalavra.traducaoPt, dadosPalavra.idioma);
 }
 
-// Pede as 5 frases de exemplo à function do Vercel (a chave da IA fica só lá no servidor)
+// Pede as 5 frases de exemplo à function do Vercel e grava na palavra
 async function gerarFrasesDaPalavra(id, palavra, traducao, idioma) {
   const user = auth.currentUser;
   if (!user) return;
   const ref = db.collection("usuarios").doc(user.uid).collection("palavras").doc(id);
   frasesSendoGeradas.add(id);
   try {
-    // O token de login prova pro servidor que o pedido vem de um usuário do app
-    const token = await user.getIdToken();
-    const resposta = await fetch(AI_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-      body: JSON.stringify({ palavra, traducao, idioma })
+    const resultado = await pedirFrasesDaIA(palavra, traducao, idioma);
+    await ref.update(resultado.falhaAoGerarFrases ? resultado : {
+      frasesExemplo: resultado.frasesExemplo,
+      traducoesSugeridas: resultado.traducoesSugeridas.length ? resultado.traducoesSugeridas : firebase.firestore.FieldValue.delete(),
+      falhaAoGerarFrases: firebase.firestore.FieldValue.delete(),
+      motivoFalhaFrases: firebase.firestore.FieldValue.delete()
     });
-    const dados = await resposta.json().catch(() => ({}));
-    if (dados.frases && dados.frases.length > 0) {
-      const traducoes = Array.isArray(dados.traducoes) ? dados.traducoes.filter((t) => typeof t === "string" && t.trim()).slice(0, 3) : [];
-      await ref.update({
-        frasesExemplo: dados.frases,
-        traducoesSugeridas: traducoes.length ? traducoes : firebase.firestore.FieldValue.delete(),
-        falhaAoGerarFrases: firebase.firestore.FieldValue.delete(),
-        motivoFalhaFrases: firebase.firestore.FieldValue.delete()
-      });
-    } else {
-      // A IA respondeu mas não trouxe frases (quota, sobrecarga etc.) — marca a
-      // palavra para não ficar com "Gerando frases de exemplo..." pra sempre, e
-      // guarda o motivo, que aparece discreto no cartão (ajuda a achar o problema).
-      const motivo = String(dados.aviso || dados.erro || `servidor respondeu ${resposta.status}`).slice(0, 200);
-      console.warn("IA:", motivo);
-      await ref.update({ frasesExemplo: [], falhaAoGerarFrases: true, motivoFalhaFrases: motivo });
-    }
   } catch (e) {
-    console.warn("Não foi possível gerar as frases de exemplo agora:", e);
-    await ref.update({ frasesExemplo: [], falhaAoGerarFrases: true, motivoFalhaFrases: "sem conexão com o servidor da IA" }).catch(() => {});
+    console.warn("Não foi possível gravar as frases de exemplo:", e);
   } finally {
     frasesSendoGeradas.delete(id);
     renderizarPalavras();
