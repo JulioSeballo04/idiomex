@@ -907,3 +907,11 @@ html[data-tema="noturno"] .badge-status-concluida { background: rgba(80, 190, 12
 html[data-tema="noturno"] .badge-status-cancelada { background: rgba(255, 255, 255, 0.08); color: var(--ink-soft); }
 html[data-tema="noturno"] .btn-opcao-quiz.opcao-errada { background: rgba(214, 69, 69, 0.16); color: #F08A75; }
 html[data-tema="noturno"] .btn-opcao-quiz.opcao-certa { background: rgba(80, 190, 120, 0.16); color: #7FD69B; }
+
+/* Palavras que o professor adicionou ao vocabulário do aluno */
+.form-palavra-professor { margin-bottom: 0.6rem; }
+.form-palavra-professor select { padding: 0.55em 0.5em; border-radius: 6px; border: 1px solid var(--borda); color: var(--ink); }
+.selo-palavra-professor { display: inline-block; font-size: 0.72rem; font-weight: 600; color: var(--acento-forte); background: color-mix(in srgb, var(--acento) 14%, transparent); border-radius: 999px; padding: 0.1em 0.6em; margin: 0.2rem 0 0.3rem; }
+.cartao-palavra { position: relative; }
+.btn-remover-palavra-professor { position: absolute; top: 0.5rem; right: 0.6rem; background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 0.9rem; }
+.btn-remover-palavra-professor:hover { color: #b3412e; }

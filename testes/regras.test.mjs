@@ -150,6 +150,21 @@ await t("professor reuses a cancelled slot for another student", setDoc(doc(db("
 await t("notification with a language allowed", setDoc(doc(db("P1"), "usuarios/S1/notificacoes/n6"), notif({ idioma: "ja" })));
 await t("student without the app with a language", setDoc(doc(db("P1"), "usuarios/P1/alunosSemApp/z2"), { nome: "Ana", telefone: "", idioma: "ja", reposicoesConcedidas: 0, criadoEm: new Date() }));
 await t("lesson-booked notification allowed", setDoc(doc(db("P1"), "usuarios/S1/notificacoes/n5"), notif({ tipo: "aula-marcada" })));
+// Palavras adicionadas pelo professor ao vocabulário do aluno
+const palavraProf = (extra) => ({ palavraEn: "book", traducaoPt: "livro", idioma: "en", frasesExemplo: [{ en: "A book.", pt: "Um livro." }], criadoEm: new Date(), adicionadaPor: "P1", ...extra });
+await t("linked professor adds a word for the student", setDoc(doc(db("P1"), "usuarios/S1/palavras/w1"), palavraProf()));
+await t("professor adds a word with a note", setDoc(doc(db("P1"), "usuarios/S1/palavras/w2"), palavraProf({ notaPessoal: "usado em aula" })));
+await t("unlinked professor cannot add a word", assertFails(setDoc(doc(db("P0"), "usuarios/S1/palavras/w3"), palavraProf({ adicionadaPor: "P0" }))));
+await t("professor must sign the word as his", assertFails(setDoc(doc(db("P1"), "usuarios/S1/palavras/w4"), palavraProf({ adicionadaPor: "P0" }))));
+await t("professor word with extra fields rejected", assertFails(setDoc(doc(db("P1"), "usuarios/S1/palavras/w5"), palavraProf({ x: 1 }))));
+await t("professor word without translation rejected", assertFails(setDoc(doc(db("P1"), "usuarios/S1/palavras/w6"), palavraProf({ traducaoPt: "" }))));
+await t("professor cannot edit a student's word", assertFails(updateDoc(doc(db("P1"), "usuarios/S1/palavras/w1"), { traducaoPt: "x" })));
+await setDoc(doc(db("S1"), "usuarios/S1/palavras/w7"), { palavraEn: "own", traducaoPt: "próprio", idioma: "en", frasesExemplo: [], criadoEm: new Date() });
+await t("professor cannot delete a word the student added", assertFails(deleteDoc(doc(db("P1"), "usuarios/S1/palavras/w7"))));
+await t("professor deletes a word he added", deleteDoc(doc(db("P1"), "usuarios/S1/palavras/w2")));
+await t("student edits the note of a word the professor added", updateDoc(doc(db("S1"), "usuarios/S1/palavras/w1"), { notaPessoal: "minha nota" }));
+await t("student deletes a word the professor added", deleteDoc(doc(db("S1"), "usuarios/S1/palavras/w1")));
+await t("word-added notification allowed", setDoc(doc(db("P1"), "usuarios/S1/notificacoes/n7"), notif({ tipo: "palavra-adicionada" })));
 // Notificações do professor, criadas pelos alunos vinculados
 const notifProf = (extra) => ({ tipo: "aluno-marcou-aula", texto: "s1 marcou uma aula.", criadoEm: new Date(), lida: false, alunoId: "S1", idioma: "en", ...extra });
 await t("linked student notifies the professor", setDoc(doc(db("S1"), "usuarios/P1/notificacoes/p1"), notifProf()));

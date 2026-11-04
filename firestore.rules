@@ -179,12 +179,25 @@ service cloud.firestore {
 
       allow delete: if request.auth != null && request.auth.uid == userId;
 
-      // Palavras: só o próprio aluno pode ler/escrever suas palavras.
-      // O professor vinculado pode LER (para acompanhar o progresso), mas não editar.
+      // Palavras: o próprio aluno lê e escreve as suas. O professor vinculado LÊ (para
+      // acompanhar o progresso) e também ADICIONA palavras ao vocabulário do aluno
+      // (para quem não tem o costume de adicionar), marcadas com "adicionadaPor". O
+      // professor só apaga as que ele mesmo adicionou e não edita nenhuma.
       match /palavras/{palavraId} {
         allow read: if request.auth != null &&
           (request.auth.uid == userId || ehProfessorDoAluno(userId));
         allow write: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && ehProfessorDoAluno(userId) &&
+          request.resource.data.keys().hasOnly(["palavraEn", "traducaoPt", "idioma", "frasesExemplo",
+            "traducoesSugeridas", "falhaAoGerarFrases", "motivoFalhaFrases", "notaPessoal", "criadoEm", "adicionadaPor"]) &&
+          request.resource.data.adicionadaPor == request.auth.uid &&
+          request.resource.data.palavraEn is string && request.resource.data.palavraEn.size() > 0 &&
+          request.resource.data.palavraEn.size() <= 60 &&
+          request.resource.data.traducaoPt is string && request.resource.data.traducaoPt.size() > 0 &&
+          request.resource.data.traducaoPt.size() <= 60 &&
+          request.resource.data.get('notaPessoal', '') is string && request.resource.data.get('notaPessoal', '').size() <= 1000;
+        allow delete: if request.auth != null && ehProfessorDoAluno(userId) &&
+          resource.data.get('adicionadaPor', null) == request.auth.uid;
       }
 
       // Mensagens: o aluno só pode LER (e apagar, ao excluir a própria conta).
@@ -277,7 +290,7 @@ service cloud.firestore {
           (ehProfessorDoAluno(userId) &&
             request.resource.data.keys().hasOnly(["tipo", "texto", "criadoEm", "lida", "professorId", "idioma"]) &&
             request.resource.data.tipo in ["credito-reposicao", "reposicao-aprovada", "reposicao-recusada",
-              "aula-nao-realizada", "aula-marcada"] &&
+              "aula-nao-realizada", "aula-marcada", "palavra-adicionada"] &&
             request.resource.data.professorId == request.auth.uid) ||
 
           (souAlunoDesteProfessor(userId) &&

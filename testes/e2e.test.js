@@ -271,6 +271,38 @@ function dataDaqui(dias) {
     esperar(prof.ultimoDialogo, 'excluiu sem perguntar');
   });
 
+  await caso('professor adiciona uma palavra ao vocabulário do aluno (com frases da IA); o aluno vê e é avisado', async () => {
+    const bloco = '.aluno-bloco:has(.item-aluno:has-text("Bia"))';
+    await prof.click(`${bloco} .aba-detalhe:has-text("Vocabulário")`);
+    await prof.fill(`${bloco} input[id^="nova-palavra-"]`, 'bridge');
+    await prof.fill(`${bloco} input[id^="nova-traducao-"]`, 'ponte');
+    await prof.click(`${bloco} .form-palavra-professor button[type=submit]`);
+    await prof.waitForSelector(`${bloco} .cartao-palavra:has-text("bridge"):has-text("Adicionada por você")`, { timeout: 8000 });
+    esperar((await prof.inputValue(`${bloco} input[id^="nova-palavra-"]`)) === '', 'campo não foi limpo');
+    // A palavra do professor não acende a "novidade" para ele mesmo
+    esperar(!(await prof.$(`${bloco} .letra-tab-mini:has-text("B") .badge-novidade-letra`)), 'palavra do próprio professor marcada como novidade');
+    const salva = await aluno.waitForFunction(() => cacheDePalavras.find((p) => p.palavraEn === 'bridge'), null, { timeout: 5000 }).then((h) => h.jsonValue());
+    esperar(salva.traducaoPt === 'ponte' && salva.frasesExemplo.length === 2 && salva.adicionadaPor, 'palavra gravada sem frases ou sem marca do professor');
+    await aluno.waitForFunction(() => notificacoesCache.some((n) => n.tipo === 'palavra-adicionada' && /bridge/.test(n.texto)), null, { timeout: 5000 });
+    await aluno.click('.letra-tab:has-text("B")');
+    await aluno.waitForSelector('.cartao-palavra:has-text("bridge"):has-text("Adicionada pelo professor")', { timeout: 5000 });
+    // Palavra repetida é recusada
+    await prof.fill(`${bloco} input[id^="nova-palavra-"]`, 'Bridge');
+    await prof.fill(`${bloco} input[id^="nova-traducao-"]`, 'ponte');
+    await prof.click(`${bloco} .form-palavra-professor button[type=submit]`);
+    await prof.waitForSelector(`${bloco} .form-palavra-professor .status-msg:has-text("já está no vocabulário")`, { timeout: 3000 });
+  });
+
+  await caso('professor remove uma palavra que ele adicionou (e não vê o ✕ nas do aluno)', async () => {
+    const bloco = '.aluno-bloco:has(.item-aluno:has-text("Bia"))';
+    await prof.click(`${bloco} .cartao-palavra:has-text("bridge") .btn-remover-palavra-professor`);
+    await prof.waitForSelector(`${bloco} .cartao-palavra:has-text("bridge")`, { state: 'detached', timeout: 5000 });
+    await aluno.waitForFunction(() => !cacheDePalavras.some((p) => p.palavraEn === 'bridge'), null, { timeout: 5000 });
+    await prof.click(`${bloco} .letra-tab-mini:has-text("E")`);
+    await prof.waitForSelector(`${bloco} .cartao-palavra:has-text("egg")`, { timeout: 3000 });
+    esperar(!(await prof.$(`${bloco} .cartao-palavra:has-text("egg") .btn-remover-palavra-professor`)), 'professor pode remover palavra do aluno');
+  });
+
   console.log('\nSala de aula');
   await caso('professor deixa link e documento; aluno anota e o professor lê a anotação', async () => {
     await prof.click('.aba-detalhe:has-text("Sala de aula")');
@@ -600,6 +632,26 @@ function dataDaqui(dias) {
     await prof.click('#modal-marcar-aula button:has-text("Marcar aula")');
     await prof.waitForFunction(() => /já houve um agendamento/.test(document.getElementById('status-marcar-aula').textContent), null, { timeout: 3000 });
     await prof.click('#modal-marcar-aula .btn-fechar-modal');
+  });
+
+  await caso('calendário volta para os meses anteriores e mostra as aulas dadas', async () => {
+    const ze = await prof.evaluate(() => alunosSemAppCache.find((a) => a.nome === 'Seu Zé').id);
+    const dia = dataDaqui(-40);
+    await prof.evaluate(async ({ d, ze }) => {
+      const id = await agendarAula(professorIdAtual, d, '07:10', '08:00', 'online', ze, 'Seu Zé', false, 'en', 'agendada');
+      await db.collection('aulas').doc(id).update({ status: 'concluida' });
+    }, { d: dia, ze });
+    await prof.click('#btn-aba-agenda');
+    for (let i = 0; i < 3 && !(await prof.$(`[data-calday="${dia}"]`)); i++) {
+      esperar(!(await prof.isDisabled('#btn-cal-prof-anterior')), 'botão de mês anterior desativado');
+      await prof.click('#btn-cal-prof-anterior');
+    }
+    await prof.waitForSelector(`[data-calday="${dia}"].has-appts .cal-dot`, { timeout: 5000 });
+    await prof.click(`[data-calday="${dia}"]`);
+    await prof.waitForSelector('#lista-aulas-dia-professor .cartao-aula:has-text("Seu Zé"):has-text("Concluída")', { timeout: 3000 });
+    await prof.click('#btn-cal-prof-hoje');
+    await prof.waitForSelector(`[data-calday="${dataDaqui(0)}"]`, { timeout: 3000 });
+    esperar(!(await prof.$('#btn-cal-prof-hoje')), '"voltar para hoje" continua no mês atual');
   });
 
   await caso('professor marca aula para aluno com WhatsApp: abre a confirmação pronta para o aluno', async () => {
