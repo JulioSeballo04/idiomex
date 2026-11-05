@@ -1158,8 +1158,18 @@ async function salvarPerfil() {
   const user = auth.currentUser;
   if (!user) return;
   const statusEl = document.getElementById("status-perfil");
+  const nome = document.getElementById("perfil-nome").value.trim().replace(/\s+/g, " ");
   const emailContato = document.getElementById("perfil-email").value.trim();
   const telefone = document.getElementById("perfil-telefone").value.trim();
+
+  if (!nome) {
+    statusEl.textContent = "Digite seu nome.";
+    return;
+  }
+  if (nome.length > 100) {
+    statusEl.textContent = "Nome muito longo (máximo de 100 caracteres).";
+    return;
+  }
 
   const digitos = apenasDigitos(telefone);
   if (telefone && (digitos.length < 10 || digitos.length > 13)) {
@@ -1169,8 +1179,10 @@ async function salvarPerfil() {
 
   statusEl.textContent = "Salvando...";
   try {
-    await db.collection("usuarios").doc(user.uid).update({ emailContato, telefone });
-    perfilAlunoAtual = { ...perfilAlunoAtual, emailContato, telefone };
+    await db.collection("usuarios").doc(user.uid).update({ nome, emailContato, telefone });
+    perfilAlunoAtual = { ...perfilAlunoAtual, nome, emailContato, telefone };
+    nomeDoAlunoAtual = nome;
+    if (letraSelecionada === "INICIO") document.getElementById("titulo-topo").textContent = nome;
     statusEl.textContent = "Perfil salvo!";
     setTimeout(fecharPerfil, 700);
   } catch (e) {
