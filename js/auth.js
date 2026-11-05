@@ -214,7 +214,10 @@ async function excluirMinhaConta() {
     for (const aluno of alunos.docs) {
       await aluno.ref.update({ professorId: firebase.firestore.FieldValue.delete() });
     }
-    for (const sub of ["anotacoesAgenda", "agendaOverrides", "configuracaoAgenda", "visualizacoes", "alunosSemApp", "notificacoes"]) {
+    // Os arquivos dos Documentos de aula ficam em pedaços dentro de cada documento
+    const biblioteca = await perfilRef.collection("biblioteca").get();
+    for (const documento of biblioteca.docs) await apagarPartesDoDocumento(documento.ref);
+    for (const sub of ["anotacoesAgenda", "agendaOverrides", "configuracaoAgenda", "visualizacoes", "alunosSemApp", "notificacoes", "biblioteca"]) {
       await apagarSubcolecao(perfilRef.collection(sub));
     }
     if (perfil.codigoProfessor) {

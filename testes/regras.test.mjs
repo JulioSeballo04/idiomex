@@ -165,6 +165,28 @@ await t("professor deletes a word he added", deleteDoc(doc(db("P1"), "usuarios/S
 await t("student edits the note of a word the professor added", updateDoc(doc(db("S1"), "usuarios/S1/palavras/w1"), { notaPessoal: "minha nota" }));
 await t("student deletes a word the professor added", deleteDoc(doc(db("S1"), "usuarios/S1/palavras/w1")));
 await t("word-added notification allowed", setDoc(doc(db("P1"), "usuarios/S1/notificacoes/n7"), notif({ tipo: "palavra-adicionada" })));
+// Documentos de aula (biblioteca do professor)
+const docBib = (extra) => ({ titulo: "Aula 1", nomeArquivo: "a.mp4", tipoArquivo: "video/mp4", tamanho: 1000, partes: 1, paraTodos: true, alunos: [], criadoEm: new Date(), ...extra });
+await t("professor uploads a library part", setDoc(doc(db("P1"), "usuarios/P1/biblioteca/b1/partes/0"), { dados: Bytes.fromUint8Array(new Uint8Array([1, 2])), indice: 0 }));
+await t("professor creates a library document for everyone", setDoc(doc(db("P1"), "usuarios/P1/biblioteca/b1"), docBib()));
+await t("professor creates a document for chosen students", setDoc(doc(db("P1"), "usuarios/P1/biblioteca/b2"), docBib({ paraTodos: false, alunos: ["S2"] })));
+await setDoc(doc(db("P1"), "usuarios/P1/biblioteca/b2/partes/0"), { dados: Bytes.fromUint8Array(new Uint8Array([3])), indice: 0 });
+await t("library file over 25 MB rejected", assertFails(setDoc(doc(db("P1"), "usuarios/P1/biblioteca/b3"), docBib({ tamanho: 30000000 }))));
+await t("library document with extra fields rejected", assertFails(setDoc(doc(db("P1"), "usuarios/P1/biblioteca/b4"), docBib({ x: 1 }))));
+await t("student cannot write to the library", assertFails(setDoc(doc(db("S1"), "usuarios/P1/biblioteca/b5"), docBib())));
+await t("linked student reads a document for everyone", getDoc(doc(db("S1"), "usuarios/P1/biblioteca/b1")));
+await t("linked student reads its parts", getDocs(collection(db("S1"), "usuarios/P1/biblioteca/b1/partes")));
+await t("student lists the documents for everyone", getDocs(query(collection(db("S1"), "usuarios/P1/biblioteca"), where("paraTodos", "==", true))));
+await t("student lists the documents chosen for him", getDocs(query(collection(db("S1"), "usuarios/P1/biblioteca"), where("alunos", "array-contains", "S1"))));
+await t("student not chosen cannot read the document", assertFails(getDoc(doc(db("S1"), "usuarios/P1/biblioteca/b2"))));
+await t("student not chosen cannot read its parts", assertFails(getDocs(collection(db("S1"), "usuarios/P1/biblioteca/b2/partes"))));
+await t("student cannot list the whole library", assertFails(getDocs(collection(db("S1"), "usuarios/P1/biblioteca"))));
+await t("unlinked student cannot read the library", assertFails(getDoc(doc(db("S9"), "usuarios/P1/biblioteca/b1"))));
+await t("professor changes who sees a document", updateDoc(doc(db("P1"), "usuarios/P1/biblioteca/b2"), { alunos: ["S1", "S2"] }));
+await t("chosen student now reads the document", getDoc(doc(db("S1"), "usuarios/P1/biblioteca/b2")));
+await t("professor cannot change the file size afterwards", assertFails(updateDoc(doc(db("P1"), "usuarios/P1/biblioteca/b2"), { tamanho: 5 })));
+await t("document notification allowed", setDoc(doc(db("P1"), "usuarios/S1/notificacoes/n8"), notif({ tipo: "documento-aula" })));
+await t("professor deletes a library document", deleteDoc(doc(db("P1"), "usuarios/P1/biblioteca/b1")));
 // Notificações do professor, criadas pelos alunos vinculados
 const notifProf = (extra) => ({ tipo: "aluno-marcou-aula", texto: "s1 marcou uma aula.", criadoEm: new Date(), lida: false, alunoId: "S1", idioma: "en", ...extra });
 await t("linked student notifies the professor", setDoc(doc(db("S1"), "usuarios/P1/notificacoes/p1"), notifProf()));

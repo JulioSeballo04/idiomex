@@ -8,7 +8,7 @@
 // a cada atualização — só se mudar a lista ARQUIVOS_BASE.
 // ============================================================
 
-const VERSAO = "idiomex-v1";
+const VERSAO = "idiomex-v2";
 
 const ARQUIVOS_BASE = [
   "./",
@@ -19,10 +19,12 @@ const ARQUIVOS_BASE = [
   "css/novidades.css",
   "js/firebase-config.js",
   "js/util.js",
+  "js/documentos.js",
   "js/auth.js",
   "js/tema.js",
   "js/dicionario.js",
   "js/professor.js",
+  "js/sala-professor.js",
   "assets/logo.png",
   "assets/logo-noturno.png",
   "assets/icon-192.png",

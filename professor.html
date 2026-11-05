@@ -31,7 +31,8 @@
   <nav class="indice-letras">
     <img class="marca" src="assets/apple-touch-icon.png" alt="Idiomex">
     <div class="nav-lateral-professor">
-      <button class="nav-lateral-item ativa" id="navlat-agenda" onclick="mostrarAbaProfessor('agenda')" title="Agenda">📅</button>
+      <button class="nav-lateral-item ativa" id="navlat-sala" onclick="mostrarAbaProfessor('sala')" title="Sala de aula">🏫</button>
+      <button class="nav-lateral-item" id="navlat-agenda" onclick="mostrarAbaProfessor('agenda')" title="Agenda">📅</button>
       <button class="nav-lateral-item" id="navlat-alunos" onclick="mostrarAbaProfessor('alunos')" title="Meus Alunos">👥</button>
       <button class="nav-lateral-item" id="navlat-config" onclick="mostrarAbaProfessor('config')" title="Configurações">⚙️</button>
     </div>
@@ -74,13 +75,62 @@
     <div id="visao-geral-turma"></div>
 
     <div class="abas-tipo">
-      <button class="aba-tipo ativa" id="btn-aba-agenda" onclick="mostrarAbaProfessor('agenda')">Agenda</button>
+      <button class="aba-tipo ativa" id="btn-aba-sala" onclick="mostrarAbaProfessor('sala')">Sala de aula</button>
+      <button class="aba-tipo" id="btn-aba-agenda" onclick="mostrarAbaProfessor('agenda')">Agenda</button>
       <button class="aba-tipo" id="btn-aba-alunos" onclick="mostrarAbaProfessor('alunos')">Meus Alunos</button>
       <button class="aba-tipo" id="btn-aba-config" onclick="mostrarAbaProfessor('config')">Configurações</button>
     </div>
 
     <!-- AGENDA -->
-    <div id="painel-aba-agenda">
+    <!-- SALA DE AULA: Documentos de aula (biblioteca do professor) e Banco de dados -->
+    <div id="painel-aba-sala">
+      <div class="abas-detalhe abas-sala-professor" role="tablist">
+        <button class="aba-detalhe ativa" id="btn-janela-documentos" onclick="mostrarJanelaSala('documentos')">📚 Documentos de aula</button>
+        <button class="aba-detalhe" id="btn-janela-banco" onclick="mostrarJanelaSala('banco')">🗄️ Banco de dados</button>
+      </div>
+
+      <div id="janela-documentos">
+        <form class="sala-secao envio-biblioteca" id="form-biblioteca" onsubmit="event.preventDefault(); enviarParaBiblioteca();">
+          <h4>Enviar arquivo</h4>
+          <p class="dica-plano">PDF, imagem, vídeo, áudio ou texto, até 25 MB. Os alunos veem o arquivo dentro do app, sem botão de baixar.</p>
+          <div class="linha-sala">
+            <input type="text" id="titulo-biblioteca" maxlength="200" placeholder="Título (ex: Lesson 3 — Past simple)">
+          </div>
+          <div class="linha-sala">
+            <label class="btn btn-secundario btn-escolher-arquivo">Escolher arquivo
+              <input type="file" id="arquivo-biblioteca" hidden accept="application/pdf,image/*,video/*,audio/*,text/plain,.pdf,.txt,.mp3,.m4a,.mp4,.webm,.mov,.wav,.ogg" onchange="escolherArquivoBiblioteca(this.files[0])">
+            </label>
+            <span class="arquivo-escolhido" id="nome-arquivo-biblioteca" hidden></span>
+          </div>
+          <div class="quem-ve" id="quem-ve-envio"></div>
+          <button type="submit" class="btn btn-primario" id="btn-enviar-biblioteca">Enviar para Documentos de aula</button>
+          <p class="status-msg" id="status-biblioteca"></p>
+        </form>
+
+        <div class="sala-secao">
+          <h4>Meus documentos</h4>
+          <input type="text" class="busca-sala" id="busca-biblioteca" placeholder="🔎 Buscar por título ou nome do arquivo..." oninput="buscarNaBiblioteca(this.value)">
+          <div id="lista-biblioteca"></div>
+        </div>
+      </div>
+
+      <div id="janela-banco" hidden>
+        <div class="sala-secao">
+          <div class="cabecalho-banco">
+            <h4>Documentos nas janelas dos alunos</h4>
+            <button type="button" class="btn btn-secundario btn-mini" onclick="carregarBancoDeDados()">↻ Atualizar</button>
+          </div>
+          <p class="dica-plano">Tudo o que você deixou para os alunos: os arquivos e links da sala de cada aluno e os Documentos de aula que eles podem ver.</p>
+          <div class="filtros-banco">
+            <input type="text" class="busca-sala" id="busca-banco" placeholder="🔎 Buscar documento..." oninput="buscarNoBanco(this.value)">
+            <select id="filtro-aluno-banco" onchange="filtrarBancoPorAluno(this.value)" title="Filtrar por aluno"></select>
+          </div>
+          <div id="lista-banco"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="painel-aba-agenda" class="oculto">
       <div class="agenda-topo">
         <button class="btn btn-secundario" onclick="abrirConfigAgenda()">⚙️ Configurar disponibilidade</button>
         <button class="btn btn-secundario" onclick="abrirMarcarAula()">Marcar aula para um aluno</button>
@@ -273,12 +323,14 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="js/firebase-config.js"></script>
 <script src="js/util.js"></script>
+<script src="js/documentos.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/tema.js"></script>
 <script src="js/professor.js"></script>
+<script src="js/sala-professor.js"></script>
 <script>
 function mostrarAbaProfessor(aba) {
-  ["agenda", "alunos", "config"].forEach(function (nome) {
+  ["sala", "agenda", "alunos", "config"].forEach(function (nome) {
     document.getElementById("painel-aba-" + nome).classList.toggle("oculto", nome !== aba);
     document.getElementById("btn-aba-" + nome).classList.toggle("ativa", nome === aba);
     document.getElementById("navlat-" + nome).classList.toggle("ativa", nome === aba);

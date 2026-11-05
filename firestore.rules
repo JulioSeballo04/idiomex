@@ -97,6 +97,17 @@ service cloud.firestore {
       return titulo is string && titulo.size() > 0 && titulo.size() <= 200;
     }
 
+    // Quem vê um arquivo dos Documentos de aula: todos os alunos ou uma lista deles
+    function quemVeValido(d) {
+      return d.paraTodos is bool && d.alunos is list && d.alunos.size() <= 500;
+    }
+
+    // O aluno logado pode ver esse arquivo da biblioteca do professor?
+    function documentoDaBibliotecaVisivel(professorId, documentoId) {
+      let d = get(/databases/$(database)/documents/usuarios/$(professorId)/biblioteca/$(documentoId)).data;
+      return d.paraTodos == true || request.auth.uid in d.alunos;
+    }
+
     // Documento da aula: um link, ou um arquivo enviado pelo professor. O arquivo
     // fica guardado no próprio Firestore, em pedaços ("partes", até 10 MB no total) —
     // o Firebase Storage exigiria o plano pago (com cartão).
@@ -290,7 +301,7 @@ service cloud.firestore {
           (ehProfessorDoAluno(userId) &&
             request.resource.data.keys().hasOnly(["tipo", "texto", "criadoEm", "lida", "professorId", "idioma"]) &&
             request.resource.data.tipo in ["credito-reposicao", "reposicao-aprovada", "reposicao-recusada",
-              "aula-nao-realizada", "aula-marcada", "palavra-adicionada"] &&
+              "aula-nao-realizada", "aula-marcada", "palavra-adicionada", "documento-aula"] &&
             request.resource.data.professorId == request.auth.uid) ||
 
           (souAlunoDesteProfessor(userId) &&
@@ -335,6 +346,41 @@ service cloud.firestore {
           request.resource.data.nome.size() <= 100 &&
           request.resource.data.reposicoesConcedidas is int &&
           request.resource.data.reposicoesConcedidas >= 0 && request.resource.data.reposicoesConcedidas <= 1000;
+      }
+
+      // Documentos de aula do professor: a biblioteca de arquivos dele (PDF, imagem,
+      // vídeo, áudio, texto), guardados em pedaços como os da sala de aula, até ~25 MB.
+      // Cada arquivo diz quem vê: todos os alunos vinculados ("paraTodos") ou só os
+      // escolhidos ("alunos", lista de uids). O aluno só LÊ (o app mostra o arquivo
+      // num visualizador, sem botão de baixar); só o professor escreve.
+      match /biblioteca/{documentoId} {
+        allow read: if request.auth != null && (request.auth.uid == userId ||
+          (souAlunoDesteProfessor(userId) &&
+            (resource.data.paraTodos == true || request.auth.uid in resource.data.alunos)));
+        allow create: if request.auth != null && request.auth.uid == userId &&
+          request.resource.data.keys().hasOnly(["titulo", "nomeArquivo", "tipoArquivo", "tamanho", "partes", "paraTodos", "alunos", "criadoEm"]) &&
+          tituloDocumentoValido(request.resource.data.titulo) &&
+          request.resource.data.nomeArquivo is string && request.resource.data.nomeArquivo.size() > 0 &&
+          request.resource.data.nomeArquivo.size() <= 200 &&
+          request.resource.data.tipoArquivo is string && request.resource.data.tipoArquivo.size() <= 200 &&
+          request.resource.data.tamanho is int && request.resource.data.tamanho > 0 && request.resource.data.tamanho <= 26214400 &&
+          request.resource.data.partes is int && request.resource.data.partes >= 1 && request.resource.data.partes <= 30 &&
+          quemVeValido(request.resource.data);
+        allow update: if request.auth != null && request.auth.uid == userId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["titulo", "paraTodos", "alunos"]) &&
+          tituloDocumentoValido(request.resource.data.titulo) &&
+          quemVeValido(request.resource.data);
+        allow delete: if request.auth != null && request.auth.uid == userId;
+
+        match /partes/{parteId} {
+          allow read: if request.auth != null && (request.auth.uid == userId ||
+            (souAlunoDesteProfessor(userId) && documentoDaBibliotecaVisivel(userId, documentoId)));
+          allow create: if request.auth != null && request.auth.uid == userId &&
+            request.resource.data.keys().hasOnly(["dados", "indice"]) &&
+            request.resource.data.dados is bytes && request.resource.data.dados.size() <= 950000 &&
+            request.resource.data.indice is int && request.resource.data.indice >= 0 && request.resource.data.indice < 30;
+          allow delete: if request.auth != null && request.auth.uid == userId;
+        }
       }
 
       // Anotações privadas do professor sobre dias e aulas da agenda (calendário
