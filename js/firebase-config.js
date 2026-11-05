@@ -26,8 +26,9 @@ const db = firebase.firestore();
 
 // Endereço da function da Vercel que gera as frases de exemplo (api/gerar-frase.js).
 // A Vercel publica este repositório inteiro (projeto "idiomex"): quando o site é
-// aberto por um endereço da Vercel, a function está no mesmo endereço do site
-// (vale também para as prévias de cada mudança). Aberto pelo Firebase Hosting, o
-// site chama o endereço de produção do projeto na Vercel.
+// aberto por um endereço da Vercel — o .vercel.app, as prévias de cada mudança ou
+// um domínio próprio ligado ao projeto (ex: idiomex.com.br) — a function está no
+// mesmo endereço do site. Só aberto pelo Firebase Hosting (.web.app /
+// .firebaseapp.com) o site chama o endereço de produção do projeto na Vercel.
 const AI_ENDPOINT_VERCEL = "https://idiomex.vercel.app/api/gerar-frase";
-const AI_ENDPOINT = location.hostname.endsWith(".vercel.app") ? "/api/gerar-frase" : AI_ENDPOINT_VERCEL;
+const AI_ENDPOINT = /\.(web\.app|firebaseapp\.com)$/.test(location.hostname) ? AI_ENDPOINT_VERCEL : "/api/gerar-frase";

@@ -99,6 +99,24 @@ firebase init hosting   # escolha "usar pasta atual" como public
 firebase deploy
 ```
 
+## Domínio próprio (opcional)
+
+Para o site abrir num endereço como `idiomex.com.br`:
+
+1. Registre o domínio (`.com.br` no https://registro.br, `.com` em qualquer
+   registrador).
+2. Na Vercel: projeto → **Settings → Domains** → adicione o domínio (e o
+   `www.`, se quiser). A Vercel mostra os registros de DNS (A ou CNAME): crie-os
+   no registrador. O certificado HTTPS sai sozinho.
+3. No Firebase: **Authentication → Settings → Authorized domains** → adicione o
+   domínio novo — sem isso, o login com Google não abre nele.
+4. Se a chave do Firebase (`apiKey` em `js/firebase-config.js`) tiver restrição de
+   sites no Google Cloud (APIs e serviços → Credenciais), inclua o domínio novo lá.
+
+A IA funciona no domínio próprio sem mudar código: fora do Firebase Hosting, o site
+chama a function no mesmo endereço em que foi aberto. Para uso comercial (cobrar
+dos professores), a Vercel exige o plano Pro — o Hobby é só para uso pessoal.
+
 ## Testes automáticos
 
 A pasta `testes/` tem testes das regras do Firestore, do servidor da IA e do
