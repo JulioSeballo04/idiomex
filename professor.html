@@ -233,6 +233,16 @@
         <p class="status-msg" id="status-whatsapp-professor"></p>
       </form>
 
+      <details class="secao-mensagens-whatsapp">
+        <summary>Mensagens do WhatsApp</summary>
+        <p class="dica-whatsapp-professor">Os textos que abrem prontos no WhatsApp. Use os campos entre chaves:
+          <code>{aluno}</code> <code>{data}</code> <code>{horario}</code> <code>{modalidade}</code> <code>{idioma}</code> <code>{tipo}</code>.
+          Uma linha com um campo vazio some sozinha (ex: "Tipo: {tipo}" numa aula normal, que não é reposição).</p>
+        <div id="mensagens-whatsapp"></div>
+        <button type="button" class="btn btn-primario" onclick="salvarMensagensWhatsapp()">Salvar mensagens</button>
+        <p class="status-msg" id="status-mensagens-whatsapp"></p>
+      </details>
+
       <div class="secao-conta secao-perigo">
         <h4>Excluir minha conta</h4>
         <p class="dica-perfil">Apaga sua conta, sua agenda e suas anotações, e desvincula seus alunos (eles continuam com as contas e o vocabulário deles). Não pode ser desfeito.</p>

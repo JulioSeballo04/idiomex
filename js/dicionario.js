@@ -12,6 +12,7 @@ let notaPalavraEmEdicaoId = null;
 let traducoesReveladas = new Set();
 let perfilAlunoAtual = {}; // dados do próprio documento usuarios/{uid}
 let whatsappDoProfessor = ""; // número que o professor cadastrou na agenda (pra avisos de cancelamento)
+let mensagensDoProfessor = null; // {mensagensWhatsapp} — os textos que o professor configurou
 let idiomaDoAluno = IDIOMA_PADRAO; // idioma que o aluno está estudando agora (en, es, it, fr, ja, zh)
 let idiomasDoProfessorDoAluno = []; // idiomas que o professor vinculado ensina
 let idiomasDisponiveis = [IDIOMA_PADRAO]; // idiomas entre os quais o aluno pode alternar
@@ -87,6 +88,7 @@ function renderizarNotificacoes() {
         <div>${escapeHtml(n.texto)}</div>
         <span class="data-msg">${n.criadoEm ? escapeHtml(n.criadoEm.toDate().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })) : ""}</span>
       </div>
+      <button type="button" class="btn-visto" title="Visto — tirar da lista" aria-label="Visto: tirar a notificação da lista" onclick="dispensarNotificacao('${n.id}')">✓</button>
     </div>`).join("") : `<p class="vazio">Nenhuma notificação por enquanto.</p>`;
 }
 
@@ -100,6 +102,19 @@ async function abrirNotificacoes() {
   const lote = db.batch();
   naoLidas.forEach((n) => lote.update(db.collection("usuarios").doc(user.uid).collection("notificacoes").doc(n.id), { lida: true }));
   try { await lote.commit(); } catch (e) { console.warn("Não foi possível marcar as notificações como lidas:", e); }
+}
+
+// ✓ (visto): a notificação sai da lista
+async function dispensarNotificacao(id) {
+  const user = auth.currentUser;
+  if (!user) return;
+  notificacoesCache = notificacoesCache.filter((n) => n.id !== id); // some na hora
+  renderizarNotificacoes();
+  try {
+    await db.collection("usuarios").doc(user.uid).collection("notificacoes").doc(id).delete();
+  } catch (e) {
+    console.warn("Não foi possível tirar a notificação:", e);
+  }
 }
 
 function fecharNotificacoes() {
@@ -276,7 +291,7 @@ async function salvarEdicaoAnotacao(id) {
 async function excluirAnotacao(id) {
   const user = auth.currentUser;
   if (!user) return;
-  if (!confirm("Excluir essa anotação?")) return;
+  if (!(await confirmar("Excluir essa anotação?", { botao: "Excluir", perigo: true }))) return;
   try {
     await db.collection("usuarios").doc(user.uid).collection("anotacoes").doc(id).delete();
   } catch (e) {
@@ -532,7 +547,7 @@ async function salvarNotaPalavra(id) {
 async function removerNotaPalavra(id) {
   const user = auth.currentUser;
   if (!user) return;
-  if (!confirm("Excluir a anotação dessa palavra?")) return;
+  if (!(await confirmar("Excluir a anotação dessa palavra?", { botao: "Excluir", perigo: true }))) return;
   try {
     await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id)
       .update({ notaPessoal: firebase.firestore.FieldValue.delete() });
@@ -665,10 +680,10 @@ async function salvarTraducao(id, novaTraducao) {
   }
 }
 
-function editarTraducao(id) {
+async function editarTraducao(id) {
   const p = cacheDePalavras.find((x) => x.id === id);
   if (!p) return;
-  const nova = prompt(`Tradução de "${p.palavraEn}":`, p.traducaoPt || "");
+  const nova = await perguntar(`Tradução de "${p.palavraEn}":`, p.traducaoPt || "");
   if (nova !== null && nova.trim() && nova.trim() !== p.traducaoPt) salvarTraducao(id, nova);
 }
 
@@ -689,7 +704,7 @@ async function removerPalavra(id) {
   const user = auth.currentUser;
   if (!user) return;
   const p = cacheDePalavras.find((x) => x.id === id);
-  if (!confirm(`Remover "${p ? p.palavraEn : "essa palavra"}" do seu vocabulário?`)) return;
+  if (!(await confirmar(`Remover "${p ? p.palavraEn : "essa palavra"}" do seu vocabulário?`, { botao: "Remover", perigo: true }))) return;
   try {
     await db.collection("usuarios").doc(user.uid).collection("palavras").doc(id).delete();
   } catch (e) {
@@ -842,7 +857,7 @@ let documentosAulaCache = [];
 let notasDocumentoAbertas = new Set(); // ids dos documentos com o bloco de anotações aberto
 const statusNotasDocumento = {}; // {id: "Anotações salvas."} — sobrevive aos re-renders em tempo real
 let buscaDocumentos = "";
-let limiteDocumentos = DOCUMENTOS_POR_PAGINA;
+let paginaDocumentos = 1;
 let filtroTipoDocumentos = "";
 // Documentos de aula do professor que este aluno pode ver (para todos ou para ele)
 const bibliotecaPorConsulta = { todos: [], meus: [] };
@@ -885,7 +900,7 @@ function documentosDaSala() {
 
 function filtrarDocumentosPorTipo(tipo) {
   filtroTipoDocumentos = tipo;
-  limiteDocumentos = DOCUMENTOS_POR_PAGINA;
+  paginaDocumentos = 1;
   renderizarSalaDeAula();
 }
 
@@ -914,8 +929,8 @@ function desenharSalaDeAula(corpo) {
   const doTipo = filtroTipoDocumentos ? todos.filter((d) => categoriaDoDocumento(d) === filtroTipoDocumentos) : todos;
   const filtroTipos = todos.length > 1 ? montarFiltroDeTipos(todos, filtroTipoDocumentos, "filtrarDocumentosPorTipo('%s')") : "";
   const lista = filtroTipos + montarListaDocumentosAula(doTipo, {
-    busca: buscaDocumentos, limite: limiteDocumentos, idBusca: "busca-documentos-aluno",
-    aoBuscar: "buscarDocumentos(this.value)", aoMostrarMais: "mostrarMaisDocumentos()",
+    busca: buscaDocumentos, pagina: paginaDocumentos, idBusca: "busca-documentos-aluno",
+    aoBuscar: "buscarDocumentos(this.value)", aoMudarPagina: "irParaPaginaDocumentos(%n)",
     vazio: "Nenhum documento ainda. Os materiais que o professor usar em aula aparecem aqui.",
     item: (d) => {
         const icone = CATEGORIAS_ARQUIVO[categoriaDoDocumento(d)].icone;
@@ -960,12 +975,12 @@ function desenharSalaDeAula(corpo) {
 
 function buscarDocumentos(texto) {
   buscaDocumentos = texto;
-  limiteDocumentos = DOCUMENTOS_POR_PAGINA;
+  paginaDocumentos = 1;
   renderizarSalaDeAula();
 }
 
-function mostrarMaisDocumentos() {
-  limiteDocumentos += DOCUMENTOS_POR_PAGINA * 2;
+function irParaPaginaDocumentos(n) {
+  paginaDocumentos = n;
   renderizarSalaDeAula();
 }
 
@@ -1064,17 +1079,17 @@ function renderizarMinhasAulas() {
   `).join("");
 }
 
-// Guarda o WhatsApp do professor logo no início, pra o cancelamento poder abrir
-// a aba do WhatsApp na hora do clique (antes de qualquer await), sem bloqueio no celular.
-async function carregarWhatsappDoProfessor() {
+// Acompanha em tempo real o WhatsApp do professor e as mensagens que ele
+// configurou, pra o cancelamento já ter o link na hora do clique. Antes era lido
+// uma vez só, ao entrar: um número cadastrado depois só valia recarregando a página.
+function carregarWhatsappDoProfessor() {
   if (!professorIdDoAluno) return;
-  try {
-    const snap = await db.collection("usuarios").doc(professorIdDoAluno)
-      .collection("configuracaoAgenda").doc("dados").get();
-    whatsappDoProfessor = snap.exists ? (snap.data().whatsapp || "") : "";
-  } catch (e) {
-    console.warn("Não foi possível carregar o WhatsApp do professor:", e);
-  }
+  db.collection("usuarios").doc(professorIdDoAluno).collection("configuracaoAgenda").doc("dados")
+    .onSnapshot((snap) => {
+      const dados = snap.exists ? snap.data() : {};
+      whatsappDoProfessor = dados.whatsapp || "";
+      mensagensDoProfessor = { mensagensWhatsapp: dados.mensagensWhatsapp || null };
+    }, (e) => console.warn("Não foi possível carregar o WhatsApp do professor:", e));
 }
 
 // Avisa o professor no sino do painel dele (aula marcada, pedido de reposição,
@@ -1093,35 +1108,31 @@ function descricaoAulaParaProfessor(dataIso, hora, idioma) {
 }
 
 function mensagemCancelamentoPeloAluno(aula) {
-  return "Olá! Preciso cancelar minha aula:\n" +
-    `Aluno: ${nomeDoAlunoAtual}\n` +
-    `Data: ${formatarDataBR(aula.data)}\n` +
-    `Horário: ${aula.horaInicio}\n` +
-    `Modalidade: ${aula.modalidade === "online" ? "Online" : "Presencial"}`;
+  return preencherMensagemWhatsapp(modeloMensagemWhatsapp(mensagensDoProfessor, "cancelamento"), dadosDaMensagemWhatsapp({
+    aluno: nomeDoAlunoAtual, data: aula.data, hora: aula.horaInicio, modalidade: aula.modalidade,
+    idioma: aula.idioma, mostrarIdioma: idiomasParaAula().length > 1, reposicao: aula.reposicao
+  }));
 }
 
-async function cancelarMinhaAula(aulaId) {
-  if (!confirm("Cancelar essa aula?")) return;
-
+// Confirma na janela do app (o clique em "Cancelar aula" já abre o WhatsApp com o
+// aviso para o professor) e avisa o professor no sino dele
+function cancelarMinhaAula(aulaId) {
   const aula = minhasAulasCache.find((a) => a.id === aulaId);
-  const link = aula && whatsappDoProfessor
-    ? linkWhatsapp(whatsappDoProfessor, mensagemCancelamentoPeloAluno(aula))
-    : null;
-  // Aba aberta antes do await (senão o celular bloqueia o popup)
-  const abaWhatsapp = link ? window.open("", "_blank") : null;
-
-  try {
-    await db.collection("aulas").doc(aulaId).update({ status: "cancelada", canceladoPor: "aluno" });
-    if (abaWhatsapp) abaWhatsapp.location = link;
-    if (aula) {
+  if (!aula) return;
+  const oQue = aula.status === "pendente" ? "o pedido de reposição" : aula.reposicao ? "a reposição" : "a aula";
+  confirmarComWhatsapp({
+    titulo: aula.status === "pendente" ? "Cancelar pedido" : "Cancelar aula",
+    texto: `Cancelar ${oQue} de ${descricaoAulaParaProfessor(aula.data, aula.horaInicio, aula.idioma)}?`,
+    botao: aula.status === "pendente" ? "Cancelar pedido" : "Cancelar aula",
+    link: whatsappDoProfessor ? linkWhatsapp(whatsappDoProfessor, mensagemCancelamentoPeloAluno(aula)) : null,
+    feito: "Cancelado. Mande a mensagem no WhatsApp para o professor saber.",
+    semLink: "Seu professor foi avisado no app (ele ainda não cadastrou um WhatsApp).",
+    acao: async () => {
+      await db.collection("aulas").doc(aulaId).update({ status: "cancelada", canceladoPor: "aluno" });
       avisarProfessor("aluno-cancelou-aula",
-        `${nomeDoAlunoAtual} cancelou ${aula.reposicao ? "a reposição" : "a aula"} de ${descricaoAulaParaProfessor(aula.data, aula.horaInicio, aula.idioma)}.`, aula.idioma);
+        `${nomeDoAlunoAtual} cancelou ${oQue} de ${descricaoAulaParaProfessor(aula.data, aula.horaInicio, aula.idioma)}.`, aula.idioma);
     }
-  } catch (e) {
-    if (abaWhatsapp) abaWhatsapp.close();
-    alert("Não foi possível cancelar a aula agora. Tente novamente em instantes.");
-    console.error(e);
-  }
+  });
 }
 
 // -------------------- PERFIL DO ALUNO --------------------
@@ -1253,6 +1264,11 @@ function aulasFuturasDoAluno(idioma) {
 
 // Abre o modal de agendamento, carregando a configuração de agenda do professor vinculado
 async function abrirAgendamento() {
+  // Clicou antes de o app terminar de carregar o perfil: não é "sem professor"
+  if (!perfilAlunoAtual || !perfilAlunoAtual.tipo) {
+    alert("Carregando seus dados... tente de novo em instantes.");
+    return;
+  }
   if (!professorIdDoAluno) {
     alert("Sua conta não está vinculada a um professor. Vincule-se em \"Meu perfil\" para agendar aulas.");
     return;
@@ -1354,13 +1370,10 @@ function situacaoDoPlano(dataIso) {
 }
 
 function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade, reposicao, idiomaAula, pedido) {
-  return (pedido ? "Olá! Fiz um pedido de aula de reposição no Idiomex, pode aprovar?\n" : "Olá! Quero confirmar minha aula!\n") +
-    `Aluno: ${nomeDoAlunoAtual}\n` +
-    `Data: ${formatarDataBR(dataIso)}\n` +
-    `Horário: ${horaInicio}\n` +
-    `Modalidade: ${modalidade === "online" ? "Online" : "Presencial"}` +
-    (idiomasParaAula().length > 1 ? `\nIdioma: ${IDIOMAS[idiomaAula].nome}` : "") +
-    (reposicao ? "\nTipo: Reposição" : "");
+  return preencherMensagemWhatsapp(modeloMensagemWhatsapp(configAgendaProfessor, "confirmacao"), dadosDaMensagemWhatsapp({
+    aluno: nomeDoAlunoAtual, data: dataIso, hora: horaInicio, modalidade,
+    idioma: idiomaAula, mostrarIdioma: idiomasParaAula().length > 1, reposicao, pedido
+  }));
 }
 
 // Indicador de progresso 1 → 2 → 3, pra deixar claro em que ponto o aluno está

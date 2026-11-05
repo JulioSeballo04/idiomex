@@ -988,3 +988,59 @@ audio.player-documento { background: transparent; }
   .abas-tipo::-webkit-scrollbar { display: none; }
   .aba-tipo { flex: 1 0 auto; white-space: nowrap; padding-left: 0.7em; padding-right: 0.7em; }
 }
+
+/* ---------- Caixas de aviso do app (no lugar das do navegador) ---------- */
+#modal-caixa, #modal-confirmar-whatsapp {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 1300;
+}
+#modal-confirmar-whatsapp { z-index: 1250; }
+.caixa-do-app { max-width: 420px; }
+.texto-caixa, .texto-confirmar-whatsapp { white-space: pre-wrap; margin: 0 0 1.1rem; line-height: 1.5; }
+.campo-caixa { width: 100%; padding: 0.6em 0.7em; border-radius: 8px; border: 1px solid var(--borda); margin-bottom: 1rem; }
+.botoes-caixa, .acoes-confirmar-whatsapp { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+.acoes-confirmar-whatsapp .btn { text-decoration: none; }
+
+/* Mensagens do WhatsApp (Configurações do professor) */
+.secao-mensagens-whatsapp { margin: 0 0 1.8rem; border: 1px solid var(--borda); border-radius: 10px; padding: 0.8rem 1rem; background: var(--bg-cartao); }
+.secao-mensagens-whatsapp summary { cursor: pointer; font-weight: 600; }
+.secao-mensagens-whatsapp code { background: var(--bg); border-radius: 4px; padding: 0 0.3em; font-size: 0.85em; }
+.campo-mensagem-whatsapp { margin: 1rem 0; }
+.campo-mensagem-whatsapp label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--ink-soft); margin-bottom: 0.3rem; }
+.campo-mensagem-whatsapp textarea { width: 100%; padding: 0.6em 0.7em; border-radius: 8px; border: 1px solid var(--borda); font-family: inherit; }
+.acoes-mensagem-whatsapp { display: flex; justify-content: flex-end; }
+.previa-mensagem { font-size: 0.8rem; color: var(--ink-soft); }
+.previa-mensagem pre { white-space: pre-wrap; font-family: inherit; margin: 0.2rem 0 0; padding: 0.5rem 0.7rem; border-left: 3px solid #25D366; background: var(--bg); border-radius: 6px; }
+.rotulo-previa { font-weight: 600; }
+
+/* Notificação: ✓ (visto) tira da lista */
+.item-notificacao > div { flex: 1; min-width: 0; }
+.btn-visto {
+  flex-shrink: 0;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--borda);
+  background: var(--bg-cartao);
+  color: #2f9e57;
+  font-size: 1rem; font-weight: 700;
+  cursor: pointer;
+}
+.btn-visto:hover { background: #2f9e57; border-color: #2f9e57; color: #fff; }
+
+/* Páginas das listas de documentos (6 por página) */
+.paginacao { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; margin: 0.8rem 0 0.2rem; }
+.btn-pagina {
+  min-width: 34px; height: 34px; padding: 0 0.5em;
+  border-radius: 8px; border: 1px solid var(--borda);
+  background: var(--bg-cartao); color: var(--ink); cursor: pointer; font-weight: 600;
+}
+.btn-pagina.ativa { background: var(--acento); border-color: var(--acento); color: #fff; }
+.btn-pagina:disabled { opacity: 0.4; cursor: default; }
+.reticencias-pagina { padding: 0 0.2rem; color: var(--ink-soft); }
+.paginacao .data-msg { margin-left: 0.4rem; }

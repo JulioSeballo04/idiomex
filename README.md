@@ -22,6 +22,12 @@ na aba **Sala de aula**, com o link da aula e os documentos dele):
   da sala de cada aluno e os Documentos de aula que cada um vê), com filtro por
   aluno, por tipo e busca.
 
+As mensagens que abrem prontas no WhatsApp (confirmação e cancelamento de aula,
+do aluno para o professor e do professor para o aluno) podem ser editadas pelo
+professor em Configurações → Mensagens do WhatsApp, com campos como `{aluno}` e
+`{data}`. As listas de documentos mostram 6 por página, e cada notificação tem um
+✓ (visto) que a tira da lista.
+
 Cada aluno tem um **relatório mensal** (aulas, o que foi trabalhado, palavras
 novas e documentos), que só libera no dia 1º do mês seguinte.
 
@@ -163,6 +169,9 @@ usuarios/{professorId}/configuracaoAgenda/dados
                           -> idioma com configuração própria (os outros
                              usam a padrão)
   whatsapp, mesesLiberados -> valem para todos os idiomas
+  mensagensWhatsapp: {confirmacao, cancelamento, confirmacaoProfessor,
+    cancelamentoProfessor} -> textos próprios das mensagens do WhatsApp
+                             (sem o campo, vale o texto padrão)
 
 usuarios/{uid}/salaDeAula/link
   url, professorId, atualizadoEm

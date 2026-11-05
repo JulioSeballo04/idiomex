@@ -249,7 +249,7 @@ async function excluirMinhaConta() {
 // Fluxo de exclusão usado pelos botões "Excluir minha conta" (aluno e professor)
 async function confirmarExclusaoDaConta(statusId) {
   const statusEl = document.getElementById(statusId);
-  if (!confirm("Excluir sua conta de vez? Seus dados serão apagados e isso não pode ser desfeito.\n\nO Google vai pedir para confirmar a sua conta.")) return;
+  if (!(await confirmar("Excluir sua conta de vez? Seus dados serão apagados e isso não pode ser desfeito.\n\nO Google vai pedir para confirmar a sua conta.", { botao: "Excluir minha conta", perigo: true }))) return;
   statusEl.textContent = "Excluindo...";
   try {
     await excluirMinhaConta();
