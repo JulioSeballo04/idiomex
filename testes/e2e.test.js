@@ -461,6 +461,38 @@ function dataDaqui(dias) {
     await prof.click('#btn-janela-documentos');
   });
 
+  await caso('com muitos documentos, a lista vira páginas de 6 (professor e aluno)', async () => {
+    await prof.evaluate(async () => {
+      const col = db.collection('usuarios').doc(professorIdAtual).collection('biblioteca');
+      for (let i = 1; i <= 5; i++) {
+        const ref = col.doc();
+        await ref.collection('partes').doc('0').set({ dados: firebase.firestore.Blob.fromUint8Array(new TextEncoder().encode('texto ' + i)), indice: 0 });
+        await ref.set({ titulo: `Exercício ${i}`, nomeArquivo: `ex${i}.txt`, tipoArquivo: 'text/plain', tamanho: 7, partes: 1,
+          paraTodos: true, alunos: [], criadoEm: firebase.firestore.FieldValue.serverTimestamp() });
+      }
+    });
+    await prof.click('#btn-janela-documentos');
+    await prof.waitForFunction(() => bibliotecaCache.length >= 8, null, { timeout: 8000 });
+    const total = await prof.evaluate(() => bibliotecaCache.length);
+    esperar((await prof.$$('.item-biblioteca')).length === 6, 'primeira página sem 6 documentos');
+    await prof.waitForSelector('#lista-biblioteca .paginacao:has-text("Página 1 de 2")', { timeout: 3000 });
+    await prof.click('#lista-biblioteca .paginacao .btn-pagina:text-is("2")');
+    esperar((await prof.$$('.item-biblioteca')).length === total - 6, 'segunda página com a quantidade errada');
+    // A busca volta para a primeira página
+    await prof.fill('#busca-biblioteca', 'exerc');
+    await prof.waitForSelector('#lista-biblioteca .item-biblioteca:has-text("Exercício 5")', { timeout: 3000 });
+    esperar(!(await prof.$('#lista-biblioteca .paginacao')), 'paginação com só 5 resultados');
+    await prof.fill('#busca-biblioteca', ''); await prof.dispatchEvent('#busca-biblioteca', 'input');
+    // O aluno também vê em páginas
+    await aluno.waitForFunction(() => documentosDaSala().length > 6, null, { timeout: 8000 });
+    await aluno.click('#btn-sala-aula');
+    await aluno.waitForSelector('#corpo-sala-aula .paginacao', { timeout: 3000 });
+    esperar((await aluno.$$('#corpo-sala-aula .documento-aula')).length === 6, 'aluno vê mais de 6 por página');
+    await aluno.click('#corpo-sala-aula .paginacao [aria-label="Próxima página"]');
+    await aluno.waitForSelector('#corpo-sala-aula .paginacao:has-text("Página 2 de")', { timeout: 3000 });
+    await aluno.click('#modal-sala-aula .btn-fechar-modal');
+  });
+
   await caso('relatório do mês atual só libera no dia 1º do mês seguinte; o do mês passado abre', async () => {
     await prof.click('#btn-aba-alunos');
     const bloco = '.aluno-bloco:has(.item-aluno:has-text("Bia"))';
@@ -505,6 +537,7 @@ function dataDaqui(dias) {
 
   await caso('horários livres não aparecem repetidos quando os períodos se sobrepõem', async () => {
     await aluno.reload(); await aluno.waitForSelector('#input-palavra-en');
+    await aluno.waitForFunction(() => professorIdDoAluno, null, { timeout: 8000 }); // login carregado
     const hs = await horariosDoDia(aluno, dia);
     esperar(hs.length > 0, 'nenhum horário');
     esperar(new Set(hs).size === hs.length, 'repetidos: ' + hs.join(' '));
@@ -890,6 +923,9 @@ function dataDaqui(dias) {
   await caso('cancelar a aula de reposição devolve o crédito', async () => {
     const repo = await hugo.evaluate(() => minhasAulasCache.find((a) => a.reposicao && a.status === 'agendada').id);
     await hugo.evaluate((id) => cancelarMinhaAula(id), repo);
+    await hugo.click('#btn-confirmar-whatsapp');
+    await hugo.waitForSelector('#modal-confirmar-whatsapp:has-text("Cancelado")', { timeout: 5000 });
+    await hugo.click('#btn-fechar-confirmar-whatsapp');
     await hugo.waitForFunction(() => situacaoDoPlano(null).saldo === 1, null, { timeout: 5000 });
     await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("1")`, { timeout: 5000 });
     await prof.waitForFunction(() => notificacoesProfessorCache.some((n) => n.tipo === 'aluno-cancelou-aula' && /Hugo cancelou a reposição/.test(n.texto)), null, { timeout: 5000 });
@@ -1167,7 +1203,78 @@ function dataDaqui(dias) {
     esperar(await prof.isVisible('#config-whatsapp') && (await prof.inputValue('#config-whatsapp')) === '11 97777-6666', 'WhatsApp não aparece na configuração da agenda');
   });
 
+  await caso('professor configura a mensagem de cancelamento; aluno cancela e o WhatsApp abre com ela', async () => {
+    await prof.click('#modal-config-agenda .btn-fechar-modal').catch(() => {});
+    await prof.click('#btn-aba-config');
+    await prof.click('.secao-mensagens-whatsapp summary');
+    await prof.fill('#mensagem-cancelamento', 'Oi prof, não vou poder ir na aula de {data} às {horario}.\nTipo: {tipo}\n— {aluno}');
+    await prof.waitForFunction(() => /— Ana$/.test(document.getElementById('previa-cancelamento').textContent), null, { timeout: 3000 });
+    esperar(!/Tipo:/.test(await prof.textContent('#previa-cancelamento')), 'linha com campo vazio não sumiu na prévia');
+    await prof.click('.secao-mensagens-whatsapp button:has-text("Salvar mensagens")');
+    await prof.waitForSelector('#status-mensagens-whatsapp:has-text("salvas")', { timeout: 5000 });
+    const cfg = await prof.evaluate(async () => (await db.collection('usuarios').doc(professorIdAtual).collection('configuracaoAgenda').doc('dados').get()).data());
+    esperar(cfg.mensagensWhatsapp && /não vou poder ir/.test(cfg.mensagensWhatsapp.cancelamento) && !cfg.mensagensWhatsapp.confirmacao, 'mensagens gravadas erradas');
+    esperar(cfg.whatsapp && cfg.disponibilidade, 'salvar as mensagens apagou o resto da configuração');
+
+    // A Bia tem uma aula marcada e cancela: o WhatsApp do professor (cadastrado agora há
+    // pouco, sem a Bia recarregar a página) abre com a mensagem configurada
+    const dia = dataDaqui(9);
+    await aluno.evaluate(async (d) => { await agendarAula(professorIdDoAluno, d, '06:10', '07:00', 'online', auth.currentUser.uid, 'Bia', false, 'en', 'agendada'); }, dia);
+    await aluno.waitForSelector('#lista-minhas-aulas .cartao-aula:has-text("06:10")', { timeout: 5000 });
+    await aluno.click('#lista-minhas-aulas .cartao-aula:has-text("06:10") button:has-text("Cancelar")');
+    await aluno.waitForSelector('#modal-confirmar-whatsapp:not(.modal-oculto) #btn-confirmar-whatsapp:has-text("WhatsApp")', { timeout: 3000 });
+    const [aba] = await Promise.all([ctxA.waitForEvent('page', { timeout: 5000 }), aluno.click('#btn-confirmar-whatsapp')]);
+    await aba.waitForURL(/wa\.me/, { timeout: 5000 });
+    const url = decodeURIComponent(aba.url());
+    esperar(url.includes('wa.me/5511977776666') && url.includes('não vou poder ir na aula de ' + dia.split('-').reverse().join('/') + ' às 06:10') && url.includes('— Bia'), 'mensagem errada: ' + url);
+    esperar(!url.includes('Tipo:'), 'linha "Tipo:" de uma aula normal não sumiu');
+    await aba.close();
+    await aluno.waitForSelector('#modal-confirmar-whatsapp a.btn-abrir-whatsapp', { timeout: 3000 });
+    await aluno.click('#btn-fechar-confirmar-whatsapp');
+    await aluno.waitForFunction((d) => minhasAulasCache.some((a) => a.data === d && a.horaInicio === '06:10' && a.status === 'cancelada'), dia, { timeout: 5000 });
+  });
+
+  await caso('notificação: o ✓ (visto) tira a notificação da lista (aluno e professor)', async () => {
+    for (const [p, cache] of [[aluno, 'notificacoesCache'], [prof, 'notificacoesProfessorCache']]) {
+      const antes = await p.evaluate((c) => eval(c).length, cache);
+      esperar(antes > 0, 'sem notificação para testar');
+      await p.click('#btn-notificacoes');
+      const primeira = await p.evaluate((c) => eval(c)[0].id, cache);
+      await p.click('#lista-notificacoes .item-notificacao >> nth=0 >> .btn-visto');
+      await p.waitForFunction(({ c, n }) => eval(c).length === n - 1, { c: cache, n: antes }, { timeout: 5000 });
+      // Foi apagada de verdade, não só escondida
+      await p.waitForFunction(async (id) => !(await db.collection('usuarios').doc(auth.currentUser.uid).collection('notificacoes').doc(id).get()).exists, primeira, { timeout: 5000 });
+      await p.keyboard.press('Escape');
+    }
+  });
+
+  await caso('as caixas de aviso são do app (não as do navegador)', async () => {
+    let nativa = null;
+    const ouvir = (d) => { nativa = d.message(); };
+    prof.on('dialog', ouvir);
+    await prof.evaluate(() => { window.__caixasSalvas = window.__caixasDeTeste; window.__caixasDeTeste = null;
+      window.__respostaTeste = confirmar('Excluir isso?', { botao: 'Excluir', perigo: true }); });
+    await prof.waitForSelector('#modal-caixa:not(.modal-oculto) .texto-caixa:has-text("Excluir isso?")', { timeout: 3000 });
+    esperar(await prof.$('#modal-caixa .btn-perigo:has-text("Excluir")'), 'sem o botão vermelho "Excluir"');
+    await prof.click('#modal-caixa button:has-text("Voltar")');
+    esperar((await prof.evaluate(() => window.__respostaTeste)) === false, '"Voltar" não respondeu "não"');
+    await prof.evaluate(() => { window.__respostaTeste = perguntar('Novo nome:', 'Ana'); });
+    await prof.fill('#campo-caixa', 'Ana Paula');
+    await prof.keyboard.press('Enter');
+    esperar((await prof.evaluate(() => window.__respostaTeste)) === 'Ana Paula', 'Enter não salvou o texto digitado');
+    await prof.evaluate(() => alert('Aviso do app'));
+    await prof.waitForSelector('#modal-caixa:not(.modal-oculto) .texto-caixa:has-text("Aviso do app")', { timeout: 3000 });
+    await prof.keyboard.press('Escape');
+    await prof.waitForSelector('#modal-caixa.modal-oculto', { state: 'attached', timeout: 3000 });
+    await prof.evaluate(() => { window.__caixasDeTeste = window.__caixasSalvas; });
+    prof.off('dialog', ouvir);
+    esperar(nativa === null, 'apareceu uma caixa do navegador: ' + nativa);
+  });
+
   await caso('tema noturno: os campos da configuração têm fundo escuro (texto legível)', async () => {
+    await prof.click('#btn-aba-agenda');
+    await prof.click('button:has-text("Configurar disponibilidade")');
+    await prof.waitForSelector('#modal-config-agenda:not(.modal-oculto)', { timeout: 5000 });
     await prof.evaluate(() => aplicarTema('noturno'));
     const claros = await prof.evaluate(() => ['config-duracao-aula', 'config-intervalo-aula', 'config-whatsapp'].filter((id) => {
       const [r, g, b] = getComputedStyle(document.getElementById(id)).backgroundColor.match(/\d+/g).map(Number);

@@ -78,6 +78,14 @@ async function novoContexto(browser, opts = {}) {
   });
   // Links do WhatsApp abrem numa aba nova: responde ali mesmo, sem sair para a internet
   await ctx.route('https://wa.me/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: 'WhatsApp' }));
+  // As caixas de aviso do app (avisar/confirmar/perguntar) são registradas e respondidas
+  // sozinhas, como as do navegador: "confirmar" aceita, "perguntar" usa p.respostaPrompt
+  await ctx.addInitScript(() => {
+    window.__caixasDeTeste = {
+      registrar: (texto) => window.__registrarCaixaTeste(texto),
+      resposta: (inicial) => window.__respostaCaixaTeste(inicial)
+    };
+  });
   // Não deixa o service worker interferir nos testes
   await ctx.addInitScript(() => { try { Object.defineProperty(navigator, 'serviceWorker', { value: { register: () => Promise.resolve() } }); } catch (e) {} });
   return ctx;
@@ -87,6 +95,8 @@ async function novaPagina(ctx) {
   const p = await ctx.newPage();
   p.erros = [];
   p.on('pageerror', (e) => p.erros.push(e.message));
+  await p.exposeFunction('__registrarCaixaTeste', (texto) => { p.ultimoDialogo = texto; });
+  await p.exposeFunction('__respostaCaixaTeste', (inicial) => (p.respostaPrompt !== undefined ? p.respostaPrompt : inicial));
   p.on('dialog', (d) => { p.ultimoDialogo = d.message(); d.type() === 'prompt' && p.respostaPrompt !== undefined ? d.accept(p.respostaPrompt) : d.accept(); });
   return p;
 }

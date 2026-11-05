@@ -15,6 +15,7 @@ const TAMANHO_MAXIMO_BIBLIOTECA = 25 * 1024 * 1024; // 25 MB (até 28 pedaços d
 let bibliotecaCache = [];
 let filtroTipoBiblioteca = "";
 let buscaBiblioteca = "";
+let paginaBiblioteca = 1;
 let arquivoBiblioteca = null;      // escolhido e ainda não enviado
 let enviandoBiblioteca = false;
 // "Quem vê": o do formulário de envio e o do arquivo em edição
@@ -164,11 +165,18 @@ function avisarAlunosDoDocumento(d, soEstes) {
 
 function buscarNaBiblioteca(texto) {
   buscaBiblioteca = texto;
+  paginaBiblioteca = 1;
   renderizarBiblioteca();
 }
 
 function filtrarBibliotecaPorTipo(tipo) {
   filtroTipoBiblioteca = tipo;
+  paginaBiblioteca = 1;
+  renderizarBiblioteca();
+}
+
+function irParaPaginaBiblioteca(n) {
+  paginaBiblioteca = n;
   renderizarBiblioteca();
 }
 
@@ -179,7 +187,13 @@ function renderizarBiblioteca() {
     lista.innerHTML = `<p class="vazio">Nenhum documento ainda. Envie o primeiro acima.</p>`;
     return;
   }
-  const visiveis = filtrarDocumentos(bibliotecaCache, filtroTipoBiblioteca, buscaBiblioteca);
+  const encontrados = filtrarDocumentos(bibliotecaCache, filtroTipoBiblioteca, buscaBiblioteca);
+  // O arquivo com "quem vê" aberto fica na página em que está
+  if (edicaoQuemVe && encontrados.some((d) => d.id === edicaoQuemVe.id)) {
+    paginaBiblioteca = Math.floor(encontrados.findIndex((d) => d.id === edicaoQuemVe.id) / DOCUMENTOS_POR_PAGINA) + 1;
+  }
+  const { itens: visiveis, pagina, total } = paginar(encontrados, paginaBiblioteca);
+  paginaBiblioteca = pagina;
   lista.innerHTML = montarFiltroDeTipos(bibliotecaCache, filtroTipoBiblioteca, "filtrarBibliotecaPorTipo('%s')") +
     (visiveis.length ? visiveis.map((d) => {
       const cat = CATEGORIAS_ARQUIVO[categoriaDoArquivo(d.tipoArquivo, d.nomeArquivo)];
@@ -208,7 +222,8 @@ function renderizarBiblioteca() {
               </div>
             </div>` : ""}
         </div>`;
-    }).join("") : `<p class="vazio">Nenhum documento encontrado.</p>`);
+    }).join("") : `<p class="vazio">Nenhum documento encontrado.</p>`) +
+    montarPaginacao(pagina, total, "irParaPaginaBiblioteca(%n)");
 }
 
 function abrirDaBiblioteca(id) {
@@ -252,7 +267,7 @@ async function salvarQuemVe() {
 
 async function excluirDaBiblioteca(id) {
   const d = bibliotecaCache.find((x) => x.id === id);
-  if (!d || !confirm(`Excluir "${d.titulo}"? Os alunos deixam de vê-lo.`)) return;
+  if (!d || !(await confirmar(`Excluir "${d.titulo}"? Os alunos deixam de vê-lo.`, { botao: "Excluir", perigo: true }))) return;
   try {
     const ref = db.collection("usuarios").doc(professorIdAtual).collection("biblioteca").doc(id);
     await apagarPartesDoDocumento(ref);
@@ -272,6 +287,7 @@ let carregandoBanco = false;
 let filtroAlunoBanco = "";
 let filtroTipoBanco = "";
 let buscaBanco = "";
+let paginaBanco = 1;
 
 async function carregarBancoDeDados() {
   if (carregandoBanco) return;
@@ -303,9 +319,10 @@ function linhasDoBanco() {
   return linhas.sort((x, y) => ((y.d.criadoEm && y.d.criadoEm.toMillis()) || 0) - ((x.d.criadoEm && x.d.criadoEm.toMillis()) || 0));
 }
 
-function buscarNoBanco(texto) { buscaBanco = texto; renderizarBanco(); }
-function filtrarBancoPorAluno(id) { filtroAlunoBanco = id; renderizarBanco(); }
-function filtrarBancoPorTipo(tipo) { filtroTipoBanco = tipo; renderizarBanco(); }
+function buscarNoBanco(texto) { buscaBanco = texto; paginaBanco = 1; renderizarBanco(); }
+function filtrarBancoPorAluno(id) { filtroAlunoBanco = id; paginaBanco = 1; renderizarBanco(); }
+function filtrarBancoPorTipo(tipo) { filtroTipoBanco = tipo; paginaBanco = 1; renderizarBanco(); }
+function irParaPaginaBanco(n) { paginaBanco = n; renderizarBanco(); }
 
 function renderizarBanco() {
   const lista = document.getElementById("lista-banco");
@@ -322,9 +339,11 @@ function renderizarBanco() {
     return;
   }
   const termo = semAcentos(buscaBanco).trim();
-  const visiveis = doAluno.filter((l) =>
+  const encontrados = doAluno.filter((l) =>
     (!filtroTipoBanco || categoriaDoDocumento(l.d) === filtroTipoBanco) &&
     (!termo || semAcentos(`${l.d.titulo} ${l.d.nomeArquivo || ""} ${l.aluno ? l.aluno.nome : "todos os alunos"}`).includes(termo)));
+  const { itens: visiveis, pagina, total } = paginar(encontrados, paginaBanco);
+  paginaBanco = pagina;
   const alunosComDocumento = new Set(doAluno.filter((l) => l.aluno).map((l) => l.alunoId));
   lista.innerHTML = `
     ${montarFiltroDeTipos(doAluno.map((l) => l.d), filtroTipoBanco, "filtrarBancoPorTipo('%s')")}
@@ -349,7 +368,8 @@ function renderizarBanco() {
             <div class="aula-acoes">${acao}</div>
           </div>`;
       }).join("") : `<p class="vazio">Nenhum documento encontrado.</p>`}
-    </div>`;
+    </div>
+    ${montarPaginacao(pagina, total, "irParaPaginaBanco(%n)")}`;
 }
 
 function abrirDoBanco(origem, alunoId, id) {

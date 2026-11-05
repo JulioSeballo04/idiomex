@@ -68,6 +68,7 @@ auth.onAuthStateChanged(async (user) => {
   mesCalendarioProfessor = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   await carregarConfigAgenda();
   preencherWhatsappConfiguracoes();
+  montarMensagensWhatsapp(); // só aqui: redesenhar apagaria um texto ainda não salvo
 
   carregarAlunos(user.uid);
   escutarAlunosSemApp(user.uid);
@@ -108,6 +109,7 @@ function renderizarNotificacoesProfessor() {
         <div>${escapeHtml(n.texto)}</div>
         <span class="data-msg">${n.criadoEm ? escapeHtml(n.criadoEm.toDate().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })) : ""}</span>
       </div>
+      <button type="button" class="btn-visto" title="Visto — tirar da lista" aria-label="Visto: tirar a notificação da lista" onclick="dispensarNotificacaoProfessor('${n.id}')">✓</button>
     </div>`).join("") : `<p class="vazio">Nenhuma notificação por enquanto. Aqui aparecem as aulas que os alunos marcarem ou cancelarem.</p>`;
 }
 
@@ -119,6 +121,17 @@ async function abrirNotificacoesProfessor() {
   const lote = db.batch();
   naoLidas.forEach((n) => lote.update(db.collection("usuarios").doc(professorIdAtual).collection("notificacoes").doc(n.id), { lida: true }));
   try { await lote.commit(); } catch (e) { console.warn("Não foi possível marcar as notificações como lidas:", e); }
+}
+
+// ✓ (visto): a notificação sai da lista
+async function dispensarNotificacaoProfessor(id) {
+  notificacoesProfessorCache = notificacoesProfessorCache.filter((n) => n.id !== id); // some na hora
+  renderizarNotificacoesProfessor();
+  try {
+    await db.collection("usuarios").doc(professorIdAtual).collection("notificacoes").doc(id).delete();
+  } catch (e) {
+    console.warn("Não foi possível tirar a notificação:", e);
+  }
 }
 
 function fecharNotificacoesProfessor() {
@@ -233,7 +246,7 @@ function garantirEstado(alunoId) {
       documentosAula: [],
       notasDocumentoAbertas: new Set(), // ids dos documentos com o bloco de anotações aberto
       buscaDocumentos: "",
-      limiteDocumentos: DOCUMENTOS_POR_PAGINA,
+      paginaDocumentos: 1,
       unsubPalavras: null,
       unsubMensagens: null,
       unsubRelatorios: null,
@@ -497,7 +510,7 @@ function desenharListaAlunos(lista) {
 async function removerAlunoDoProfessor(alunoId) {
   const aluno = alunosCache.find((a) => a.id === alunoId);
   const nome = aluno ? aluno.nome : "esse aluno";
-  if (!confirm(`Remover ${nome} da sua lista de alunos?\n\nVocê deixa de ver o vocabulário, recados e relatórios dele(a). O aluno mantém a conta e precisaria digitar seu código de novo pra se vincular novamente.`)) return;
+  if (!(await confirmar(`Remover ${nome} da sua lista de alunos?\n\nVocê deixa de ver o vocabulário, recados e relatórios dele(a). O aluno mantém a conta e precisaria digitar seu código de novo pra se vincular novamente.`, { botao: "Remover aluno", perigo: true }))) return;
 
   try {
     await db.collection("usuarios").doc(alunoId).update({ professorId: firebase.firestore.FieldValue.delete() });
@@ -884,7 +897,7 @@ async function adicionarPalavraParaAluno(alunoId) {
 
 async function removerPalavraDoAluno(alunoId, palavraId) {
   const palavra = estadoAlunos[alunoId].palavras.find((p) => p.id === palavraId);
-  if (!palavra || !confirm(`Remover "${palavra.palavraEn}" do vocabulário do aluno?`)) return;
+  if (!palavra || !(await confirmar(`Remover "${palavra.palavraEn}" do vocabulário do aluno?`, { botao: "Remover", perigo: true }))) return;
   try {
     await db.collection("usuarios").doc(alunoId).collection("palavras").doc(palavraId).delete();
   } catch (e) {
@@ -982,7 +995,7 @@ async function salvarEdicaoMensagem(alunoId, msgId) {
 }
 
 async function excluirMensagem(alunoId, msgId) {
-  if (!confirm("Excluir esse recado? O aluno deixa de vê-lo.")) return;
+  if (!(await confirmar("Excluir esse recado? O aluno deixa de vê-lo.", { botao: "Excluir", perigo: true }))) return;
   try {
     await db.collection("usuarios").doc(alunoId).collection("mensagens").doc(msgId).delete();
   } catch (e) {
@@ -1050,7 +1063,7 @@ function adicionarRelatorio(alunoId) {
 }
 
 async function excluirRelatorio(alunoId, relatorioId) {
-  if (!confirm("Excluir esse registro de aula?")) return;
+  if (!(await confirmar("Excluir esse registro de aula?", { botao: "Excluir", perigo: true }))) return;
   try {
     await db.collection("usuarios").doc(alunoId).collection("relatorios").doc(relatorioId).delete();
   } catch (e) {
@@ -1087,8 +1100,8 @@ function montarAbaSalaDeAula(alunoId) {
     </div>`;
 
   const lista = montarListaDocumentosAula(documentos, {
-    busca: estado.buscaDocumentos, limite: estado.limiteDocumentos, idBusca: `busca-documentos-${alunoId}`,
-    aoBuscar: `buscarDocumentosAluno('${alunoId}', this.value)`, aoMostrarMais: `mostrarMaisDocumentosAluno('${alunoId}')`,
+    busca: estado.buscaDocumentos, pagina: estado.paginaDocumentos, idBusca: `busca-documentos-${alunoId}`,
+    aoBuscar: `buscarDocumentosAluno('${alunoId}', this.value)`, aoMudarPagina: `irParaPaginaDocumentosAluno('${alunoId}', %n)`,
     vazio: "Nenhum documento adicionado ainda.",
     item: (d) => {
         const aberto = estado.notasDocumentoAbertas.has(d.id);
@@ -1160,7 +1173,7 @@ async function salvarLinkAula(alunoId) {
 }
 
 async function removerLinkAula(alunoId) {
-  if (!confirm("Remover o link da aula? O aluno deixa de vê-lo.")) return;
+  if (!(await confirmar("Remover o link da aula? O aluno deixa de vê-lo.", { botao: "Remover", perigo: true }))) return;
   try {
     await db.collection("usuarios").doc(alunoId).collection("salaDeAula").doc("link").delete();
     const campo = document.getElementById(`input-link-aula-${alunoId}`);
@@ -1247,7 +1260,7 @@ async function adicionarDocumentoAula(alunoId) {
 }
 
 async function removerDocumentoAula(alunoId, documentoId) {
-  if (!confirm("Excluir esse documento? O aluno deixa de vê-lo, junto com as anotações dele sobre o documento.")) return;
+  if (!(await confirmar("Excluir esse documento? O aluno deixa de vê-lo, junto com as anotações dele sobre o documento.", { botao: "Excluir", perigo: true }))) return;
   try {
     const ref = db.collection("usuarios").doc(alunoId).collection("documentosAula").doc(documentoId);
     await apagarPartesDoDocumento(ref);
@@ -1260,12 +1273,12 @@ async function removerDocumentoAula(alunoId, documentoId) {
 
 function buscarDocumentosAluno(alunoId, texto) {
   estadoAlunos[alunoId].buscaDocumentos = texto;
-  estadoAlunos[alunoId].limiteDocumentos = DOCUMENTOS_POR_PAGINA;
+  estadoAlunos[alunoId].paginaDocumentos = 1;
   renderizarListaAlunos();
 }
 
-function mostrarMaisDocumentosAluno(alunoId) {
-  estadoAlunos[alunoId].limiteDocumentos += DOCUMENTOS_POR_PAGINA * 2;
+function irParaPaginaDocumentosAluno(alunoId, n) {
+  estadoAlunos[alunoId].paginaDocumentos = n;
   renderizarListaAlunos();
 }
 
@@ -1570,7 +1583,7 @@ async function aprovarPedidoReposicao(aulaId) {
 async function recusarPedidoReposicao(aulaId) {
   const aula = aulasCache.find((a) => a.id === aulaId);
   if (!aula) return;
-  if (!confirm(`Recusar o pedido de reposição de ${aula.alunoNome} (${descricaoAula(aula)})? O horário volta a ficar livre.`)) return;
+  if (!(await confirmar(`Recusar o pedido de reposição de ${aula.alunoNome} (${descricaoAula(aula)})? O horário volta a ficar livre.`, { botao: "Recusar pedido", perigo: true }))) return;
   const lote = db.batch();
   lote.update(db.collection("aulas").doc(aulaId), { status: "recusada" });
   if (alunosCache.some((a) => a.id === aula.alunoId)) {
@@ -1647,7 +1660,7 @@ function cancelarEscolhaNaoRealizada() {
   renderizarHojeProfessor();
 }
 
-function marcarAulaNaoRealizada(aulaId) {
+async function marcarAulaNaoRealizada(aulaId) {
   const aula = aulasCache.find((a) => a.id === aulaId);
   if (!aula) return;
   // Aula que já era reposição: o crédito usado volta sozinho, no idioma dela
@@ -1656,7 +1669,7 @@ function marcarAulaNaoRealizada(aulaId) {
     renderizarHojeProfessor();
     return;
   }
-  if (!confirm(`A aula de ${aula.alunoNome} (${descricaoAula(aula)}) não foi realizada?\n\nO aluno ganha 1 reposição para marcar outra aula.`)) return;
+  if (!(await confirmar(`A aula de ${aula.alunoNome} (${descricaoAula(aula)}) não foi realizada?\n\nO aluno ganha 1 reposição para marcar outra aula.`, { botao: "Não foi realizada" }))) return;
   registrarAulaNaoRealizada(aula, idiomaValido(aula.idioma));
 }
 
@@ -2093,6 +2106,8 @@ async function salvarConfigAgenda() {
     if (!idiomasAtuaisProfessor.includes(id)) porIdioma[id] = configAgendaAtual.porIdioma[id];
   });
   const dados = { ...rascunhosConfig.padrao, whatsapp, mesesLiberados, porIdioma };
+  // Grava o documento inteiro: as mensagens do WhatsApp (salvas em Configurações) vão junto
+  if (configAgendaAtual && configAgendaAtual.mensagensWhatsapp) dados.mensagensWhatsapp = configAgendaAtual.mensagensWhatsapp;
   try {
     await db.collection("usuarios").doc(professorIdAtual)
       .collection("configuracaoAgenda").doc("dados").set(dados);
@@ -2119,6 +2134,59 @@ const AVISO_WHATSAPP_INVALIDO = "WhatsApp inválido — use DDD + número (ex: 1
 function whatsappValido(texto) {
   const digitos = apenasDigitos(texto);
   return !texto || (digitos.length >= 10 && digitos.length <= 13);
+}
+
+// -------------------- MENSAGENS DO WHATSAPP --------------------
+// O professor troca o texto de cada mensagem pronta (ver MENSAGENS_WHATSAPP em
+// util.js). Campo vazio = volta ao texto padrão.
+
+const EXEMPLO_MENSAGEM = { aluno: "Ana", data: "2026-11-10", hora: "14:00", modalidade: "online", idioma: "en", reposicao: false };
+
+function montarMensagensWhatsapp() {
+  const area = document.getElementById("mensagens-whatsapp");
+  if (!area) return;
+  area.innerHTML = Object.keys(MENSAGENS_WHATSAPP).map((tipo) => `
+    <div class="campo-mensagem-whatsapp">
+      <label for="mensagem-${tipo}">${MENSAGENS_WHATSAPP[tipo].nome}</label>
+      <textarea id="mensagem-${tipo}" data-tipo="${tipo}" rows="8" oninput="mostrarPreviaMensagem('${tipo}')">${escapeHtml(modeloMensagemWhatsapp(configAgendaAtual, tipo))}</textarea>
+      <div class="acoes-mensagem-whatsapp">
+        <button type="button" class="link-trocar" onclick="restaurarMensagemPadrao('${tipo}')">Voltar ao texto padrão</button>
+      </div>
+      <div class="previa-mensagem"><span class="rotulo-previa">Exemplo:</span><pre id="previa-${tipo}"></pre></div>
+    </div>`).join("");
+  Object.keys(MENSAGENS_WHATSAPP).forEach(mostrarPreviaMensagem);
+}
+
+function mostrarPreviaMensagem(tipo) {
+  const campo = document.getElementById(`mensagem-${tipo}`);
+  document.getElementById(`previa-${tipo}`).textContent = preencherMensagemWhatsapp(campo.value || MENSAGENS_WHATSAPP[tipo].padrao,
+    dadosDaMensagemWhatsapp({ ...EXEMPLO_MENSAGEM, mostrarIdioma: idiomasAtuaisProfessor.length > 1 }));
+}
+
+function restaurarMensagemPadrao(tipo) {
+  document.getElementById(`mensagem-${tipo}`).value = MENSAGENS_WHATSAPP[tipo].padrao;
+  mostrarPreviaMensagem(tipo);
+}
+
+async function salvarMensagensWhatsapp() {
+  const status = document.getElementById("status-mensagens-whatsapp");
+  const mensagensWhatsapp = {};
+  Object.keys(MENSAGENS_WHATSAPP).forEach((tipo) => {
+    const texto = document.getElementById(`mensagem-${tipo}`).value.trim().slice(0, 1000);
+    // Igual ao padrão (ou vazio) não é guardado: se o padrão melhorar, o professor ganha junto
+    if (texto && texto !== MENSAGENS_WHATSAPP[tipo].padrao) mensagensWhatsapp[tipo] = texto;
+  });
+  try {
+    // Sem "merge" no campo: o mapa inteiro é trocado (um texto que voltou ao padrão sai)
+    await db.collection("usuarios").doc(professorIdAtual).collection("configuracaoAgenda").doc("dados")
+      .set({ mensagensWhatsapp }, { mergeFields: ["mensagensWhatsapp"] });
+    configAgendaAtual = { ...configAgendaAtual, mensagensWhatsapp };
+    status.textContent = "Mensagens salvas!";
+    setTimeout(() => (status.textContent = ""), 2000);
+  } catch (e) {
+    console.error(e);
+    status.textContent = "Não foi possível salvar agora. Tente novamente.";
+  }
 }
 
 function preencherWhatsappConfiguracoes() {
@@ -2591,7 +2659,7 @@ async function salvarOverrideDia() {
 }
 
 async function restaurarOverrideDia() {
-  if (!confirm("Restaurar o horário padrão desse dia? Isso remove o ajuste feito só pra ele.")) return;
+  if (!(await confirmar("Restaurar o horário padrão desse dia? Isso remove o ajuste feito só pra ele.", { botao: "Restaurar" }))) return;
   try {
     await db.collection("usuarios").doc(professorIdAtual)
       .collection("agendaOverrides").doc(diaSelecionadoProfessor).delete();
@@ -2602,32 +2670,27 @@ async function restaurarOverrideDia() {
 }
 
 function mensagemCancelamentoPeloProfessor(aula, nomeAluno) {
-  return `Olá ${nomeAluno}! Infelizmente precisei cancelar sua aula:\n` +
-    `Data: ${formatarDataBR(aula.data)}\n` +
-    `Horário: ${aula.horaInicio}\n` +
-    "Vamos combinar um novo horário quando for melhor pra você. Desculpa o transtorno!";
+  return preencherMensagemWhatsapp(modeloMensagemWhatsapp(configAgendaAtual, "cancelamentoProfessor"), dadosDaMensagemWhatsapp({
+    aluno: nomeAluno, data: aula.data, hora: aula.horaInicio, modalidade: aula.modalidade,
+    idioma: aula.idioma, mostrarIdioma: idiomasAtuaisProfessor.length > 1, reposicao: aula.reposicao
+  }));
 }
 
-async function cancelarAulaComoProfessor(aulaId) {
-  if (!confirm("Cancelar essa aula? O horário volta a ficar livre.\n\nPara o aluno repor essa aula, dê 1 crédito de reposição para ele em \"Meus Alunos\".")) return;
-
-  // Se o aluno cadastrou telefone no perfil, abre o WhatsApp já com o aviso pronto.
-  // A aba é aberta antes do await (senão o celular bloqueia o popup).
+// Confirma na janela do app. Se o aluno tem telefone (no perfil, ou no cadastro do
+// aluno sem app), o clique em "Cancelar aula" já abre o WhatsApp com o aviso pronto.
+function cancelarAulaComoProfessor(aulaId) {
   const aula = aulasCache.find((a) => a.id === aulaId);
-  const aluno = aula && alunosCache.find((a) => a.id === aula.alunoId);
-  const link = aluno && aluno.telefone
-    ? linkWhatsapp(aluno.telefone, mensagemCancelamentoPeloProfessor(aula, aluno.nome))
-    : null;
-  const abaWhatsapp = link ? window.open("", "_blank") : null;
-
-  try {
-    await db.collection("aulas").doc(aulaId).update({ status: "cancelada", canceladoPor: "professor" });
-    if (abaWhatsapp) abaWhatsapp.location = link;
-  } catch (e) {
-    if (abaWhatsapp) abaWhatsapp.close();
-    alert("Não foi possível cancelar a aula agora. Tente novamente em instantes.");
-    console.error(e);
-  }
+  if (!aula) return;
+  const telefone = telefoneDoAluno(aula.alunoId);
+  confirmarComWhatsapp({
+    titulo: "Cancelar aula",
+    texto: `Cancelar a aula de ${aula.alunoNome} (${descricaoAula(aula)})? O horário volta a ficar livre.\n\nPara o aluno repor essa aula, dê 1 crédito de reposição para ele em "Meus Alunos".`,
+    botao: "Cancelar aula",
+    link: telefone ? linkWhatsapp(telefone, mensagemCancelamentoPeloProfessor(aula, aula.alunoNome)) : null,
+    feito: "Aula cancelada. Mande a mensagem no WhatsApp para o aluno saber.",
+    semLink: "O aluno não tem WhatsApp cadastrado: avise de outro jeito.",
+    acao: () => db.collection("aulas").doc(aulaId).update({ status: "cancelada", canceladoPor: "professor" })
+  });
 }
 
 async function concluirAula(aulaId) {
@@ -2635,7 +2698,7 @@ async function concluirAula(aulaId) {
   const agora = new Date();
   const aindaNaoComecou = aula && (aula.data > dataDeHojeISO() ||
     (aula.data === dataDeHojeISO() && minutosDoHorario(aula.horaInicio) > agora.getHours() * 60 + agora.getMinutes()));
-  if (aindaNaoComecou && !confirm("Essa aula ainda não aconteceu. Marcar como concluída mesmo assim?")) return;
+  if (aindaNaoComecou && !(await confirmar("Essa aula ainda não aconteceu. Marcar como concluída mesmo assim?", { botao: "Marcar como concluída" }))) return;
   try {
     await db.collection("aulas").doc(aulaId).update({ status: "concluida" });
   } catch (e) {
@@ -2781,7 +2844,7 @@ async function ajustarReposicoesSemApp(alunoId, delta) {
 async function removerAlunoSemApp(alunoId) {
   const aluno = alunosSemAppCache.find((a) => a.id === alunoId);
   if (!aluno) return;
-  if (!confirm(`Remover ${aluno.nome}? As próximas aulas marcadas para ele(a) são canceladas.`)) return;
+  if (!(await confirmar(`Remover ${aluno.nome}? As próximas aulas marcadas para ele(a) são canceladas.`, { botao: "Remover", perigo: true }))) return;
   const agora = new Date();
   const lote = db.batch();
   aulasCache
@@ -2971,13 +3034,9 @@ function atualizarWhatsappMarcarAula() {
 }
 
 function mensagemConfirmacaoPeloProfessor(nomeAluno, dataIso, hora, modalidade, idioma, reposicao) {
-  return `Olá ${nomeAluno}! Sua aula está marcada:\n` +
-    `Data: ${formatarDataBR(dataIso)}\n` +
-    `Horário: ${hora}\n` +
-    `Modalidade: ${legendaModalidade(modalidade)}` +
-    (idiomasAtuaisProfessor.length > 1 ? `\nIdioma: ${IDIOMAS[idiomaValido(idioma)].nome}` : "") +
-    (reposicao ? "\nTipo: Reposição" : "") +
-    "\nAté lá!";
+  return preencherMensagemWhatsapp(modeloMensagemWhatsapp(configAgendaAtual, "confirmacaoProfessor"), dadosDaMensagemWhatsapp({
+    aluno: nomeAluno, data: dataIso, hora, modalidade, idioma, mostrarIdioma: idiomasAtuaisProfessor.length > 1, reposicao
+  }));
 }
 
 // A opção "reposição" só aparece se o aluno escolhido tem crédito no idioma da aula
