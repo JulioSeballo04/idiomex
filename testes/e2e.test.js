@@ -359,12 +359,21 @@ function dataDaqui(dias) {
   });
 
   console.log('\nSala de aula do professor (Documentos de aula e Banco de dados)');
-  await caso('o painel do professor abre na Sala de aula (primeira aba)', async () => {
+  await caso('o painel abre na Agenda; no aluno, a primeira aba é a Sala de aula (e o Vocabulário vai para o fim)', async () => {
     await prof.reload();
     await prof.waitForFunction(() => /^PROF-/.test(document.getElementById('codigo-professor').textContent), null, { timeout: 10000 });
-    esperar((await prof.textContent('.abas-tipo .aba-tipo >> nth=0')).trim() === 'Sala de aula', 'Sala de aula não é a primeira aba');
-    esperar(await prof.isVisible('#painel-aba-sala') && await prof.isVisible('#janela-documentos'), 'não abriu na Sala de aula');
-    esperar(await prof.isHidden('#painel-aba-agenda'), 'a Agenda continua aberta');
+    esperar((await prof.textContent('.abas-tipo .aba-tipo >> nth=0')).trim().startsWith('Agenda'), 'Agenda não é a primeira aba');
+    esperar(await prof.isVisible('#painel-aba-agenda') && await prof.isHidden('#painel-aba-sala'), 'não abriu na Agenda');
+    await prof.click('#btn-aba-alunos');
+    await prof.click('.item-aluno:has-text("Bia")');
+    const bloco = '.aluno-bloco:has(.item-aluno:has-text("Bia"))';
+    const abas = await prof.$$eval(`${bloco} .aba-detalhe`, (bs) => bs.map((b) => b.textContent.trim()));
+    esperar(abas[0] === 'Sala de aula' && abas[abas.length - 1] === 'Vocabulário', 'ordem das abas: ' + abas.join(', '));
+    esperar((await prof.textContent(`${bloco} .aba-detalhe.ativa`)).trim() === 'Sala de aula', 'aluno não abriu na Sala de aula');
+    await prof.waitForSelector(`${bloco} input[id^="input-link-aula-"]`, { timeout: 3000 });
+    await prof.click(`${bloco} .item-aluno`); // fecha o aluno
+    await prof.click('#btn-aba-sala');
+    await prof.waitForSelector('#janela-documentos', { state: 'visible', timeout: 3000 });
   });
 
   await caso('Documentos de aula: vídeo para todos os alunos; o aluno assiste no player, sem botão de baixar', async () => {
@@ -1167,6 +1176,23 @@ function dataDaqui(dias) {
     await prof.evaluate(() => aplicarTema('classico'));
     await prof.click('#modal-config-agenda .btn-fechar-modal');
     esperar(claros.length === 0, 'campos com fundo claro no tema noturno: ' + claros.join(', '));
+  });
+
+  console.log('\nLista de alunos');
+  await caso('alunos em ordem alfabética; abrir um aluno fecha o que estava aberto', async () => {
+    await prof.click('#btn-aba-alunos');
+    const emOrdem = (lista) => JSON.stringify(lista) === JSON.stringify([...lista].sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' })));
+    const nomes = await prof.$$eval('#lista-alunos .item-aluno .nome-aluno', (els) => els.map((e) => e.textContent.trim()));
+    esperar(nomes.length >= 3, 'poucos alunos para testar: ' + nomes.join(', '));
+    esperar(emOrdem(nomes), 'fora de ordem: ' + nomes.join(', '));
+    const semApp = await prof.$$eval('#lista-alunos-sem-app .cartao-aluno-sem-app .aula-info > strong', (els) => els.map((e) => e.textContent.trim()));
+    esperar(emOrdem(semApp), 'alunos sem app fora de ordem: ' + semApp.join(', '));
+    // Fecha o que estiver aberto, abre o primeiro e depois o segundo
+    for (const aberto of await prof.$$('#lista-alunos .item-aluno.aberto')) await aberto.click();
+    await prof.click('#lista-alunos .aluno-bloco >> nth=0 >> .item-aluno');
+    await prof.click('#lista-alunos .aluno-bloco >> nth=1 >> .item-aluno');
+    const abertos = await prof.$$eval('#lista-alunos .item-aluno.aberto .nome-aluno', (els) => els.map((e) => e.textContent.trim()));
+    esperar(abertos.length === 1 && abertos[0] === nomes[1], 'abertos: ' + abertos.join(', '));
   });
 
   console.log('\nCelular (375 px)');

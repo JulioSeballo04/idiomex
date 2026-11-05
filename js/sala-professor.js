@@ -1,5 +1,5 @@
 // ============================================================
-// SALA DE AULA DO PROFESSOR — Documentos de aula, Banco de dados e relatórios
+// ABA DOCUMENTOS DO PROFESSOR — Documentos de aula, Banco de dados e relatórios
 // ============================================================
 // - Documentos de aula: a biblioteca de arquivos do professor
 //   (usuarios/{professor}/biblioteca). Cada arquivo diz quem vê: todos os alunos

@@ -223,7 +223,7 @@ function garantirEstado(alunoId) {
   if (!estadoAlunos[alunoId]) {
     estadoAlunos[alunoId] = {
       aberto: false,
-      abaAtiva: "vocabulario",       // vocabulario | recados | relatorio | aulas | sala
+      abaAtiva: "sala",              // sala | recados | relatorio | aulas | vocabulario
       letraSelecionada: "TODAS",
       idiomaFiltro: null,            // idioma do vocabulário em exibição (só importa se o aluno estuda mais de um)
       palavras: [],
@@ -281,7 +281,7 @@ function carregarAlunos(professorId) {
         return;
       }
 
-      alunosCache = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      alunosCache = ordenarPorNome(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
       limparEstadosDeAlunosRemovidos(alunosCache.map((a) => a.id));
 
       for (const aluno of alunosCache) {
@@ -507,13 +507,25 @@ async function removerAlunoDoProfessor(alunoId) {
   }
 }
 
+// Ordem alfabética, sem diferença entre maiúsculas e minúsculas nem acentos
+// (o Firestore ordena "Zé" antes de "ana" e "Álvaro" depois de "Zé")
+function ordenarPorNome(lista) {
+  return lista.sort((a, b) => String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR", { sensitivity: "base" }));
+}
+
 // -------------------- ABRIR / FECHAR (ACORDEÃO) --------------------
 
+// Um aluno aberto de cada vez: abrir outro fecha o que estava aberto
 async function alternarAluno(alunoId) {
   const estado = garantirEstado(alunoId);
   estado.aberto = !estado.aberto;
 
   if (estado.aberto) {
+    Object.keys(estadoAlunos).forEach((outroId) => {
+      if (outroId === alunoId || !estadoAlunos[outroId].aberto) return;
+      estadoAlunos[outroId].aberto = false;
+      desativarListenersDetalheAluno(outroId);
+    });
     ativarListenersDetalheAluno(alunoId);
   } else {
     desativarListenersDetalheAluno(alunoId);
@@ -577,16 +589,16 @@ function montarHtmlDetalheAluno(alunoId) {
 
   const abas = `
     <div class="abas-detalhe">
-      <button class="aba-detalhe ${estado.abaAtiva === "vocabulario" ? "ativa" : ""}"
-        onclick="mudarAbaAluno('${alunoId}','vocabulario')">Vocabulário</button>
+      <button class="aba-detalhe ${estado.abaAtiva === "sala" ? "ativa" : ""}"
+        onclick="mudarAbaAluno('${alunoId}','sala')">Sala de aula</button>
       <button class="aba-detalhe ${estado.abaAtiva === "recados" ? "ativa" : ""}"
         onclick="mudarAbaAluno('${alunoId}','recados')">Recados</button>
       <button class="aba-detalhe ${estado.abaAtiva === "relatorio" ? "ativa" : ""}"
         onclick="mudarAbaAluno('${alunoId}','relatorio')">Relatório de aulas</button>
       <button class="aba-detalhe ${estado.abaAtiva === "aulas" ? "ativa" : ""}"
         onclick="mudarAbaAluno('${alunoId}','aulas')">Aulas marcadas</button>
-      <button class="aba-detalhe ${estado.abaAtiva === "sala" ? "ativa" : ""}"
-        onclick="mudarAbaAluno('${alunoId}','sala')">Sala de aula</button>
+      <button class="aba-detalhe ${estado.abaAtiva === "vocabulario" ? "ativa" : ""}"
+        onclick="mudarAbaAluno('${alunoId}','vocabulario')">Vocabulário</button>
     </div>
   `;
 
@@ -2666,7 +2678,7 @@ function montarAbaAulas(alunoId) {
 function escutarAlunosSemApp(uid) {
   db.collection("usuarios").doc(uid).collection("alunosSemApp").orderBy("nome")
     .onSnapshot((snap) => {
-      alunosSemAppCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      alunosSemAppCache = ordenarPorNome(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       renderizarAlunosSemApp();
       renderizarHojeProfessor();
     }, (erro) => console.warn("Não foi possível carregar os alunos sem app:", erro));
