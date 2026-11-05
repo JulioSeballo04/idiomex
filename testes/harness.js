@@ -71,6 +71,11 @@ async function novoContexto(browser, opts = {}) {
       { en: `I like the ${p} a lot.`, pt: 'Eu gosto muito.' }, { en: `This ${p} is new.`, pt: 'Isso é novo.' }],
       traducoes: (TRADUCOES_SIMULADAS[p.toLowerCase()] || [corpo.traducao]) }) });
   });
+  // pdf.js (visualizador de PDF) vem do cdnjs: nos testes, sai da mesma versão instalada aqui
+  await ctx.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/**', (r) => {
+    const nome = r.request().url().split('/').pop();
+    r.fulfill({ path: path.join(__dirname, 'node_modules/pdfjs-dist/build', nome), contentType: 'application/javascript' });
+  });
   // Links do WhatsApp abrem numa aba nova: responde ali mesmo, sem sair para a internet
   await ctx.route('https://wa.me/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: 'WhatsApp' }));
   // Não deixa o service worker interferir nos testes

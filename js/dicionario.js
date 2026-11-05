@@ -51,7 +51,7 @@ function escutarNotificacoes(uid) {
 }
 
 const ICONES_NOTIFICACAO = { "credito-reposicao": "🎟️", "reposicao-aprovada": "✅", "reposicao-recusada": "❌",
-  "aula-nao-realizada": "🎟️", "aula-marcada": "📅", "palavra-adicionada": "📖" };
+  "aula-nao-realizada": "🎟️", "aula-marcada": "📅", "palavra-adicionada": "📖", "documento-aula": "📚" };
 
 // Cada notificação é de um idioma: o sino mostra só as do idioma que o aluno está
 // estudando agora. As antigas, de antes de existir o campo, contam como do primeiro
@@ -843,6 +843,9 @@ let notasDocumentoAbertas = new Set(); // ids dos documentos com o bloco de anot
 const statusNotasDocumento = {}; // {id: "Anotações salvas."} — sobrevive aos re-renders em tempo real
 let buscaDocumentos = "";
 let limiteDocumentos = DOCUMENTOS_POR_PAGINA;
+let filtroTipoDocumentos = "";
+// Documentos de aula do professor que este aluno pode ver (para todos ou para ele)
+const bibliotecaPorConsulta = { todos: [], meus: [] };
 
 function escutarSalaDeAula(uid) {
   const ref = db.collection("usuarios").doc(uid);
@@ -854,11 +857,36 @@ function escutarSalaDeAula(uid) {
     documentosAulaCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderizarSalaDeAula();
   });
+  if (!professorIdDoAluno) return;
+  // Duas consultas (o Firestore não junta "para todos" OU "para mim" numa só)
+  const biblioteca = db.collection("usuarios").doc(professorIdDoAluno).collection("biblioteca");
+  const escutar = (chave, consulta) => consulta.onSnapshot((snap) => {
+    bibliotecaPorConsulta[chave] = snap.docs.map((d) => ({ id: d.id, ...d.data(), origem: "biblioteca" }));
+    renderizarSalaDeAula();
+  }, (e) => console.warn("Não foi possível carregar os Documentos de aula:", e));
+  escutar("todos", biblioteca.where("paraTodos", "==", true));
+  escutar("meus", biblioteca.where("alunos", "array-contains", uid));
 }
 
-// Só o que foi deixado pelo professor atual (o aluno pode ter trocado de professor)
+function documentosDaBiblioteca() {
+  const porId = new Map();
+  [...bibliotecaPorConsulta.todos, ...bibliotecaPorConsulta.meus].forEach((d) => porId.set(d.id, d));
+  return [...porId.values()];
+}
+
+// Só o que foi deixado pelo professor atual (o aluno pode ter trocado de professor),
+// junto com os Documentos de aula que ele compartilhou, do mais novo para o mais antigo
 function documentosDaSala() {
-  return documentosAulaCache.filter((d) => d.professorId === professorIdDoAluno);
+  const momento = (d) => (d.criadoEm ? d.criadoEm.toMillis() : Date.now());
+  return documentosAulaCache.filter((d) => d.professorId === professorIdDoAluno)
+    .concat(documentosDaBiblioteca())
+    .sort((a, b) => momento(b) - momento(a));
+}
+
+function filtrarDocumentosPorTipo(tipo) {
+  filtroTipoDocumentos = tipo;
+  limiteDocumentos = DOCUMENTOS_POR_PAGINA;
+  renderizarSalaDeAula();
 }
 
 function abrirSalaDeAula() {
@@ -882,11 +910,20 @@ function desenharSalaDeAula(corpo) {
     ? `<a class="btn btn-primario btn-entrar-aula" href="${escapeHtml(link)}" target="_blank" rel="noopener">Entrar na aula</a>`
     : `<p class="vazio">Seu professor ainda não deixou o link da aula.</p>`;
 
-  const lista = montarListaDocumentosAula(documentosDaSala(), {
+  const todos = documentosDaSala();
+  const doTipo = filtroTipoDocumentos ? todos.filter((d) => categoriaDoDocumento(d) === filtroTipoDocumentos) : todos;
+  const filtroTipos = todos.length > 1 ? montarFiltroDeTipos(todos, filtroTipoDocumentos, "filtrarDocumentosPorTipo('%s')") : "";
+  const lista = filtroTipos + montarListaDocumentosAula(doTipo, {
     busca: buscaDocumentos, limite: limiteDocumentos, idBusca: "busca-documentos-aluno",
     aoBuscar: "buscarDocumentos(this.value)", aoMostrarMais: "mostrarMaisDocumentos()",
     vazio: "Nenhum documento ainda. Os materiais que o professor usar em aula aparecem aqui.",
     item: (d) => {
+        const icone = CATEGORIAS_ARQUIVO[categoriaDoDocumento(d)].icone;
+        if (d.origem === "biblioteca") return `
+          <div class="documento-aula">
+            <button class="titulo-documento link-arquivo" onclick="abrirDocumentoDaBiblioteca('${d.id}')">${icone} ${escapeHtml(d.titulo)}</button>
+            <span class="data-msg">${CATEGORIAS_ARQUIVO[categoriaDoDocumento(d)].nome} · ${formatarTamanhoArquivo(d.tamanho)}</span>
+          </div>`;
         const aberto = notasDocumentoAbertas.has(d.id);
         const nota = aberto ? `
           <div class="bloco-notas-documento">
@@ -899,8 +936,8 @@ function desenharSalaDeAula(corpo) {
         return `
           <div class="documento-aula">
             ${d.url
-              ? `<a class="titulo-documento" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${escapeHtml(d.titulo)}</a>`
-              : `<button class="titulo-documento link-arquivo" onclick="abrirArquivoDocumento('${d.id}')">${escapeHtml(d.titulo)}</button>
+              ? `<a class="titulo-documento" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${icone} ${escapeHtml(d.titulo)}</a>`
+              : `<button class="titulo-documento link-arquivo" onclick="abrirArquivoDocumento('${d.id}')">${icone} ${escapeHtml(d.titulo)}</button>
                  <span class="data-msg">${escapeHtml(d.nomeArquivo)} · ${formatarTamanhoArquivo(d.tamanho)}</span>`}
             <button class="btn-notas-documento ${d.anotacao ? "tem-nota" : ""}" onclick="alternarNotasDocumento('${d.id}')">
               ${aberto ? "Fechar anotações" : d.anotacao ? "Ver anotações" : "Fazer anotações"}
@@ -916,7 +953,7 @@ function desenharSalaDeAula(corpo) {
       ${blocoLink}
     </div>
     <div class="sala-secao">
-      <h4>Documentos da aula</h4>
+      <h4>Documentos de aula</h4>
       ${lista}
     </div>`;
 }
@@ -932,9 +969,22 @@ function mostrarMaisDocumentos() {
   renderizarSalaDeAula();
 }
 
+// Arquivos que abrem dentro do app vão para o visualizador (sem botão de baixar);
+// os outros (ex: Word, enviados antes) continuam abrindo como antes
 function abrirArquivoDocumento(id) {
   const documento = documentosAulaCache.find((d) => d.id === id);
-  if (documento && auth.currentUser) abrirArquivoDaAula(auth.currentUser.uid, documento);
+  const user = auth.currentUser;
+  if (!documento || !user) return;
+  if (arquivoVisualizavel(documento.tipoArquivo, documento.nomeArquivo)) {
+    abrirVisualizador(db.collection("usuarios").doc(user.uid).collection("documentosAula").doc(id), documento, false);
+  } else {
+    abrirArquivoDaAula(user.uid, documento);
+  }
+}
+
+function abrirDocumentoDaBiblioteca(id) {
+  const documento = documentosDaBiblioteca().find((d) => d.id === id);
+  if (documento) abrirVisualizador(db.collection("usuarios").doc(professorIdDoAluno).collection("biblioteca").doc(id), documento, false);
 }
 
 function alternarNotasDocumento(id) {

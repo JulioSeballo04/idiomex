@@ -461,12 +461,8 @@ function arquivoAbreNoNavegador(tipo) {
 }
 
 // Junta os pedaços de volta num arquivo (Blob)
-async function baixarArquivoDaAula(alunoId, documento) {
-  const snap = await db.collection("usuarios").doc(alunoId).collection("documentosAula").doc(documento.id)
-    .collection("partes").orderBy("indice").get();
-  if (snap.size !== documento.partes) throw new Error("arquivo incompleto");
-  return new Blob(snap.docs.map((d) => d.data().dados.toUint8Array()),
-    { type: documento.tipoArquivo || "application/octet-stream" });
+function baixarArquivoDaAula(alunoId, documento) {
+  return juntarPartesDoArquivo(db.collection("usuarios").doc(alunoId).collection("documentosAula").doc(documento.id), documento);
 }
 
 // Abre (PDF, imagem...) ou baixa o arquivo. A aba nova é aberta ANTES do "await"

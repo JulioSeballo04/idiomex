@@ -11,6 +11,19 @@ um) e gerencia a agenda de aulas — confirma se cada aula foi realizada (se
 não foi, o aluno ganha uma reposição) e marca aulas para alunos, inclusive
 os que não usam o app (com confirmação e cancelamento por WhatsApp).
 
+O painel do professor abre na **Sala de aula**:
+- **Documentos de aula** — a biblioteca do professor: ele envia PDF, imagem,
+  vídeo, áudio ou texto (até 25 MB), escolhe quem vê (todos os alunos ou
+  alguns) e encontra tudo por tipo e por busca. O aluno abre os arquivos
+  dentro do app (player de vídeo/áudio, PDF desenhado página por página), sem
+  botão de baixar — isso desestimula o download, mas não impede quem grava a tela.
+- **Banco de dados** — tudo o que está nas janelas dos alunos (arquivos e links
+  da sala de cada aluno e os Documentos de aula que cada um vê), com filtro por
+  aluno, por tipo e busca.
+
+Cada aluno tem um **relatório mensal** (aulas, o que foi trabalhado, palavras
+novas e documentos), que só libera no dia 1º do mês seguinte.
+
 **Custo: R$ 0,00.** Firebase no plano Spark (grátis, sem cartão) +
 Vercel no plano Hobby (grátis, sem cartão) + Gemini API (camada
 gratuita, sem cartão).
@@ -172,6 +185,12 @@ aulas/{professorId_data_hora}
                                 "nao-realizada" = o professor confirmou que
                                 a aula não aconteceu (o aluno ganha 1 reposição)
                              alunoId pode ser um aluno sem app (abaixo)
+
+usuarios/{professorId}/biblioteca/{id}
+  titulo, nomeArquivo, tipoArquivo, tamanho, partes, paraTodos, alunos, criadoEm
+                          -> Documentos de aula: arquivo em pedaços em
+                             biblioteca/{id}/partes/{n}; "paraTodos" ou a lista
+                             "alunos" (uids) dizem quem vê
 
 usuarios/{professorId}/alunosSemApp/{id}
   nome, telefone, idioma, reposicoesConcedidas (nesse idioma), criadoEm

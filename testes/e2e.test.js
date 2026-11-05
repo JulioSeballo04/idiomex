@@ -347,7 +347,7 @@ function dataDaqui(dias) {
     await prof.setInputFiles('input[id^="input-arquivo-documento-"]', { name: 'grande.pdf', mimeType: 'application/pdf', buffer: Buffer.alloc(11 * 1024 * 1024) });
     await dormir(500);
     esperar(prof.ultimoDialogo && /10 MB/.test(prof.ultimoDialogo), 'aceitou arquivo grande');
-    esperar(!(await prof.$('.arquivo-escolhido')), 'arquivo grande ficou escolhido');
+    esperar(!(await prof.$('#lista-alunos .arquivo-escolhido')), 'arquivo grande ficou escolhido');
   });
 
   await caso('link que não é http(s) é recusado', async () => {
@@ -356,6 +356,118 @@ function dataDaqui(dias) {
     await prof.click('button:has-text("Salvar link")');
     await dormir(500);
     esperar(prof.ultimoDialogo && /link válido/.test(prof.ultimoDialogo), 'aceitou link javascript:');
+  });
+
+  console.log('\nSala de aula do professor (Documentos de aula e Banco de dados)');
+  await caso('o painel do professor abre na Sala de aula (primeira aba)', async () => {
+    await prof.reload();
+    await prof.waitForFunction(() => /^PROF-/.test(document.getElementById('codigo-professor').textContent), null, { timeout: 10000 });
+    esperar((await prof.textContent('.abas-tipo .aba-tipo >> nth=0')).trim() === 'Sala de aula', 'Sala de aula não é a primeira aba');
+    esperar(await prof.isVisible('#painel-aba-sala') && await prof.isVisible('#janela-documentos'), 'não abriu na Sala de aula');
+    esperar(await prof.isHidden('#painel-aba-agenda'), 'a Agenda continua aberta');
+  });
+
+  await caso('Documentos de aula: vídeo para todos os alunos; o aluno assiste no player, sem botão de baixar', async () => {
+    await prof.fill('#titulo-biblioteca', 'Aula 1 em vídeo');
+    await prof.setInputFiles('#arquivo-biblioteca', { name: 'aula1.mp4', mimeType: 'video/mp4', buffer: Buffer.alloc(2048, 1) });
+    await prof.click('#btn-enviar-biblioteca');
+    await prof.waitForSelector('.item-biblioteca:has-text("Aula 1 em vídeo"):has-text("Todos os alunos")', { timeout: 10000 });
+    await aluno.waitForFunction(() => documentosDaBiblioteca().some((d) => d.titulo === 'Aula 1 em vídeo'), null, { timeout: 5000 });
+    await aluno.waitForFunction(() => notificacoesCache.some((n) => n.tipo === 'documento-aula' && /Aula 1 em vídeo/.test(n.texto)), null, { timeout: 5000 });
+    await aluno.click('#btn-sala-aula');
+    await aluno.click('#corpo-sala-aula button:has-text("Aula 1 em vídeo")');
+    await aluno.waitForSelector('#modal-visualizador:not(.modal-oculto) video.player-documento', { timeout: 8000 });
+    esperar(/nodownload/.test(await aluno.getAttribute('#modal-visualizador video', 'controlslist')), 'player sem "nodownload"');
+    esperar(!(await aluno.$('#modal-visualizador a[download]')), 'aluno tem botão de baixar');
+    await aluno.click('#modal-visualizador .btn-fechar-modal');
+    await aluno.click('#modal-sala-aula .btn-fechar-modal');
+    // O professor (dono do arquivo) pode baixar
+    await prof.click('.item-biblioteca:has-text("Aula 1 em vídeo") .titulo-documento');
+    await prof.waitForSelector('#modal-visualizador:not(.modal-oculto) a[download]', { timeout: 8000 });
+    await prof.click('#modal-visualizador .btn-fechar-modal');
+  });
+
+  await caso('PDF aparece desenhado dentro do app (sem o leitor do navegador)', async () => {
+    const pdf = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
+      '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n' +
+      '4 0 obj<</Length 44>>stream\nBT /F1 24 Tf 40 100 Td (Lesson 3 PDF) Tj ET\nendstream endobj\n' +
+      '5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF');
+    await prof.fill('#titulo-biblioteca', 'Apostila em PDF');
+    await prof.setInputFiles('#arquivo-biblioteca', { name: 'apostila.pdf', mimeType: 'application/pdf', buffer: pdf });
+    await prof.click('#btn-enviar-biblioteca');
+    await aluno.waitForFunction(() => documentosDaBiblioteca().some((d) => d.titulo === 'Apostila em PDF'), null, { timeout: 10000 });
+    await aluno.click('#btn-sala-aula');
+    await aluno.click('#corpo-sala-aula button:has-text("Apostila em PDF")');
+    await aluno.waitForSelector('#modal-visualizador .paginas-pdf canvas', { timeout: 15000 });
+    esperar(!(await aluno.$('#modal-visualizador iframe, #modal-visualizador embed, #modal-visualizador a[download]')), 'PDF aberto com o leitor do navegador ou com download');
+    await aluno.click('#modal-visualizador .btn-fechar-modal');
+    await aluno.click('#modal-sala-aula .btn-fechar-modal');
+  });
+
+  await caso('Documentos de aula recusa tipo que não abre no app (ex: Word)', async () => {
+    await prof.setInputFiles('#arquivo-biblioteca', { name: 'apostila.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: Buffer.alloc(100) });
+    await prof.waitForSelector('#status-biblioteca:has-text("PDF")', { timeout: 3000 });
+    esperar(await prof.isHidden('#nome-arquivo-biblioteca'), 'aceitou o Word');
+  });
+
+  await caso('"Só alguns alunos": quem não foi escolhido não vê; filtro por tipo e busca', async () => {
+    await prof.fill('#titulo-biblioteca', 'Pronúncia do th');
+    await prof.setInputFiles('#arquivo-biblioteca', { name: 'th.mp3', mimeType: 'audio/mpeg', buffer: Buffer.alloc(1024, 2) });
+    await prof.check('#quem-ve-envio input[type=radio] >> nth=1');
+    await prof.click('#btn-enviar-biblioteca');
+    await prof.waitForSelector('#status-biblioteca:has-text("pelo menos um aluno")', { timeout: 3000 });
+    await prof.check('#quem-ve-envio .alunos-quem-ve label:has-text("Caio") input');
+    await prof.click('#btn-enviar-biblioteca');
+    await prof.waitForSelector('.item-biblioteca:has-text("Pronúncia do th"):has-text("Caio")', { timeout: 10000 });
+    await dormir(1500);
+    esperar(!(await aluno.evaluate(() => documentosDaBiblioteca().some((d) => d.titulo === 'Pronúncia do th'))), 'Bia vê um arquivo que é só do Caio');
+    // Filtro por tipo e busca
+    await prof.click('#lista-biblioteca .filtro-tipos-documento [data-tipo="audio"]');
+    esperar((await prof.$$('.item-biblioteca')).length === 1, 'filtro de áudio mostrou outros tipos');
+    await prof.click('#lista-biblioteca .filtro-tipos-documento [data-tipo=""]');
+    await prof.fill('#busca-biblioteca', 'pronuncia');
+    esperar((await prof.$$('.item-biblioteca')).length === 1, 'busca (sem acento) não achou só o áudio');
+    await prof.fill('#busca-biblioteca', '');
+    await prof.dispatchEvent('#busca-biblioteca', 'input');
+    // Passa a valer para a Bia também: ela vê e é avisada
+    await prof.click('.item-biblioteca:has-text("Pronúncia do th") button:has-text("Quem vê")');
+    await prof.check('.editor-quem-ve .alunos-quem-ve label:has-text("Bia") input');
+    await prof.click('.editor-quem-ve button:has-text("Salvar")');
+    await aluno.waitForFunction(() => documentosDaBiblioteca().some((d) => d.titulo === 'Pronúncia do th'), null, { timeout: 5000 });
+  });
+
+  await caso('Banco de dados mostra os documentos nas janelas dos alunos, com filtro por aluno', async () => {
+    await prof.click('#btn-janela-banco');
+    await prof.waitForSelector('#lista-banco .linha-banco:has-text("Lesson 1"):has-text("Sala do aluno")', { timeout: 8000 });
+    await prof.waitForSelector('#lista-banco .linha-banco:has-text("Aula 1 em vídeo"):has-text("Todos os alunos")', { timeout: 3000 });
+    await prof.waitForSelector('#lista-banco .linha-banco:has-text("Pronúncia do th"):has-text("Caio")', { timeout: 3000 });
+    const bia = await prof.evaluate(() => alunosCache.find((a) => a.nome === 'Bia').id);
+    await prof.selectOption('#filtro-aluno-banco', bia);
+    esperar(!(await prof.$('#lista-banco .linha-banco:has-text("Caio")')), 'filtro da Bia mostrou linha do Caio');
+    await prof.waitForSelector('#lista-banco .linha-banco:has-text("Pronúncia do th"):has-text("Bia")', { timeout: 3000 });
+    await prof.fill('#busca-banco', 'lesson 1');
+    esperar((await prof.$$('#lista-banco .linha-banco')).length === 1, 'busca no banco não filtrou');
+    await prof.fill('#busca-banco', ''); await prof.dispatchEvent('#busca-banco', 'input');
+    await prof.selectOption('#filtro-aluno-banco', '');
+    await prof.click('#btn-janela-documentos');
+  });
+
+  await caso('relatório do mês atual só libera no dia 1º do mês seguinte; o do mês passado abre', async () => {
+    await prof.click('#btn-aba-alunos');
+    const bloco = '.aluno-bloco:has(.item-aluno:has-text("Bia"))';
+    if (!(await prof.$(`${bloco} .relatorio-mensal`))) await prof.click(`${bloco} .item-aluno`);
+    const [atual, passado] = await prof.evaluate(() => mesesDoRelatorio().slice(0, 2));
+    await prof.selectOption(`${bloco} .relatorio-mensal select`, atual);
+    esperar(await prof.isDisabled(`${bloco} .btn-emitir-relatorio`), 'relatório do mês atual liberado');
+    const libera = await prof.evaluate((m) => diaQueLibera(m), atual);
+    esperar(libera.startsWith('01/'), `dia de liberar: ${libera}`);
+    await prof.waitForSelector(`${bloco} .relatorio-mensal:has-text("libera em ${libera}")`, { timeout: 3000 });
+    await prof.selectOption(`${bloco} .relatorio-mensal select`, passado);
+    esperar(!(await prof.isDisabled(`${bloco} .btn-emitir-relatorio`)), 'relatório do mês passado bloqueado');
+    const [aba] = await Promise.all([ctxP.waitForEvent('page', { timeout: 5000 }), prof.click(`${bloco} .btn-emitir-relatorio`)]);
+    await aba.waitForSelector('h1:has-text("Relatório mensal")', { timeout: 8000 });
+    esperar(/Bia/.test(await aba.textContent('body')), 'relatório sem o nome do aluno');
+    await aba.close();
   });
 
   console.log('\nAgendamento');
@@ -649,6 +761,15 @@ function dataDaqui(dias) {
     await prof.waitForSelector(`[data-calday="${dia}"].has-appts .cal-dot`, { timeout: 5000 });
     await prof.click(`[data-calday="${dia}"]`);
     await prof.waitForSelector('#lista-aulas-dia-professor .cartao-aula:has-text("Seu Zé"):has-text("Concluída")', { timeout: 3000 });
+    // O relatório do mês dessa aula (já terminado) mostra a aula
+    await prof.click('#btn-aba-alunos');
+    const card = '.cartao-aluno-sem-app:has-text("Seu Zé")';
+    await prof.selectOption(`${card} .relatorio-mensal select`, dia.slice(0, 7));
+    const [rel] = await Promise.all([ctxP.waitForEvent('page', { timeout: 5000 }), prof.click(`${card} .btn-emitir-relatorio`)]);
+    await rel.waitForSelector(`td:has-text("${dia.split('-').reverse().join('/')}")`, { timeout: 8000 });
+    esperar(/Concluída/.test(await rel.textContent('table')), 'relatório sem a aula concluída');
+    await rel.close();
+    await prof.click('#btn-aba-agenda');
     await prof.click('#btn-cal-prof-hoje');
     await prof.waitForSelector(`[data-calday="${dataDaqui(0)}"]`, { timeout: 3000 });
     esperar(!(await prof.$('#btn-cal-prof-hoje')), '"voltar para hoje" continua no mês atual');

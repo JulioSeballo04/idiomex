@@ -75,6 +75,7 @@ auth.onAuthStateChanged(async (user) => {
   escutarOverridesAgenda(user.uid);
   escutarAnotacoesAgenda(user.uid);
   escutarNotificacoesProfessor(user.uid);
+  escutarBiblioteca(user.uid);
   montarCalendarioProfessor();
 });
 
@@ -451,6 +452,7 @@ function renderizarListaAlunos() {
   // aluno, aula marcada...) — preserva o recado/relatório que estiver sendo digitado
   const lista = document.getElementById("lista-alunos");
   redesenharPreservandoCampos(lista, () => desenharListaAlunos(lista));
+  renderizarSalaProfessor(); // os nomes dos alunos aparecem em "quem vê" e no Banco de dados
 }
 
 function desenharListaAlunos(lista) {
@@ -595,7 +597,7 @@ function montarHtmlDetalheAluno(alunoId) {
   else if (estado.abaAtiva === "sala") conteudo = montarAbaSalaDeAula(alunoId);
   else conteudo = montarAbaVocabulario(alunoId);
 
-  return montarContatoAluno(alunoId) + montarPlanoAluno(alunoId) + abas + conteudo;
+  return montarContatoAluno(alunoId) + montarPlanoAluno(alunoId) + montarRelatorioMensal(alunoId) + abas + conteudo;
 }
 
 // -------------------- PLANO DO ALUNO (aulas por semana e reposições) --------------------
@@ -1183,15 +1185,11 @@ function escolherArquivoDocumento(alunoId, arquivo) {
 // um documento com o arquivo pela metade
 async function enviarArquivoDocumento(alunoId, titulo, arquivo) {
   const docRef = db.collection("usuarios").doc(alunoId).collection("documentosAula").doc();
-  const bytes = new Uint8Array(await arquivo.arrayBuffer());
-  const partes = Math.max(1, Math.ceil(bytes.length / TAMANHO_PARTE_ARQUIVO));
   try {
-    for (let i = 0; i < partes; i++) {
-      envioEmAndamento[alunoId] = `Enviando ${Math.round((i / partes) * 100)}%...`;
+    const partes = await enviarPartesDoArquivo(docRef, arquivo, (pct) => {
+      envioEmAndamento[alunoId] = `Enviando ${pct}%...`;
       renderizarListaAlunos();
-      const pedaco = bytes.slice(i * TAMANHO_PARTE_ARQUIVO, (i + 1) * TAMANHO_PARTE_ARQUIVO);
-      await docRef.collection("partes").doc(String(i)).set({ dados: firebase.firestore.Blob.fromUint8Array(pedaco), indice: i });
-    }
+    });
     await docRef.set({
       titulo, professorId: professorIdAtual, criadoEm: firebase.firestore.FieldValue.serverTimestamp(),
       nomeArquivo: arquivo.name.slice(0, 200), tipoArquivo: (arquivo.type || "").slice(0, 200),
@@ -1261,7 +1259,7 @@ function mostrarMaisDocumentosAluno(alunoId) {
 
 function abrirArquivoDocumentoProfessor(alunoId, documentoId) {
   const documento = estadoAlunos[alunoId].documentosAula.find((d) => d.id === documentoId);
-  if (documento) abrirArquivoDaAula(alunoId, documento);
+  if (documento) abrirVisualizador(db.collection("usuarios").doc(alunoId).collection("documentosAula").doc(documentoId), documento, true);
 }
 
 function alternarNotasDocumentoProfessor(alunoId, documentoId) {
@@ -2728,6 +2726,7 @@ function renderizarAlunosSemApp() {
           <button class="btn btn-primario btn-mini" onclick="abrirMarcarAula('${aluno.id}')">Marcar aula</button>
           <button class="excluir" onclick="removerAlunoSemApp('${aluno.id}')">Remover</button>
         </div>
+        ${montarRelatorioMensal(aluno.id)}
       </div>`;
   }).join("");
 }

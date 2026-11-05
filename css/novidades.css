@@ -915,3 +915,68 @@ html[data-tema="noturno"] .btn-opcao-quiz.opcao-certa { background: rgba(80, 190
 .cartao-palavra { position: relative; }
 .btn-remover-palavra-professor { position: absolute; top: 0.5rem; right: 0.6rem; background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 0.9rem; }
 .btn-remover-palavra-professor:hover { color: #b3412e; }
+
+/* ---------- Visualizador de documentos (vídeo, áudio, imagem, PDF, texto) ---------- */
+#modal-visualizador {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 1100;
+}
+.modal-conteudo.modal-visualizador { max-width: 960px; max-height: 92vh; display: flex; flex-direction: column; }
+.corpo-visualizador {
+  overflow: auto;
+  min-height: 120px;
+  display: flex;
+  justify-content: center;
+  /* sem selecionar e arrastar o conteúdo para fora */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.player-documento { width: 100%; max-height: 70vh; border-radius: 8px; background: #000; }
+audio.player-documento { background: transparent; }
+.player-audio { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 1rem; padding: 1.5rem 0; }
+.icone-audio { font-size: 3rem; }
+.imagem-documento { max-width: 100%; max-height: 72vh; object-fit: contain; border-radius: 6px; pointer-events: none; }
+.texto-documento { white-space: pre-wrap; width: 100%; margin: 0; font-family: inherit; font-size: 0.92rem; }
+.paginas-pdf { display: flex; flex-direction: column; align-items: center; gap: 0.8rem; }
+.paginas-pdf canvas { max-width: 100%; height: auto; box-shadow: 0 2px 10px var(--sombra); background: #fff; }
+.rodape-visualizador:empty { display: none; }
+.rodape-visualizador { margin-top: 0.8rem; display: flex; justify-content: flex-end; }
+
+/* Filtro por tipo de documento */
+.filtro-tipos-documento { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.4rem 0 0.8rem; }
+.contagem-tipo { font-size: 0.75rem; opacity: 0.7; margin-left: 0.15rem; }
+
+/* ---------- Sala de aula do professor: Documentos de aula e Banco de dados ---------- */
+.abas-sala-professor { margin-bottom: 1rem; }
+.busca-sala { width: 100%; padding: 0.6em 0.8em; border-radius: 8px; border: 1px solid var(--borda); margin-bottom: 0.4rem; }
+.quem-ve { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 1rem; font-size: 0.88rem; margin: 0.2rem 0 0.9rem; }
+.quem-ve label { display: inline-flex; align-items: center; gap: 0.35em; }
+.rotulo-quem-ve { font-weight: 600; color: var(--ink-soft); }
+.alunos-quem-ve { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; padding: 0.5rem 0.7rem; border: 1px dashed var(--borda); border-radius: 8px; }
+.editor-quem-ve { margin: 0.7rem 0 0; padding-top: 0.7rem; border-top: 1px dashed var(--borda); }
+.linha-item-biblioteca, .linha-banco { display: flex; align-items: center; gap: 0.7rem; }
+.linha-banco { padding: 0.6rem 0; border-bottom: 1px solid var(--borda); }
+.linha-banco:last-child { border-bottom: none; }
+.icone-tipo-documento { font-size: 1.4rem; flex-shrink: 0; }
+.info-item-biblioteca { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem; }
+.info-item-biblioteca .titulo-documento { text-align: left; overflow-wrap: anywhere; }
+.cabecalho-banco { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.filtros-banco { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-start; }
+.filtros-banco .busca-sala { flex: 1; min-width: 200px; }
+.filtros-banco select { padding: 0.6em 0.5em; border-radius: 8px; border: 1px solid var(--borda); color: var(--ink); }
+
+/* Relatório mensal do aluno */
+.relatorio-mensal { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.8rem; font-size: 0.88rem; margin: 0.3rem 0 0.9rem; }
+.relatorio-mensal select { margin-left: 0.4rem; padding: 0.35em 0.5em; border-radius: 8px; border: 1px solid var(--borda); color: var(--ink); }
+.relatorio-mensal .dica-plano { margin: 0; }
+.cartao-aluno-sem-app .relatorio-mensal { flex-basis: 100%; margin-bottom: 0; }
+@media (max-width: 720px) {
+  .linha-item-biblioteca, .linha-banco { flex-wrap: wrap; }
+}
