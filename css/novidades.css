@@ -980,3 +980,11 @@ audio.player-documento { background: transparent; }
 @media (max-width: 720px) {
   .linha-item-biblioteca, .linha-banco { flex-wrap: wrap; }
 }
+
+/* Celular: as abas do topo (Agenda, Meus Alunos, Documentos, Configurações) não
+   cabem lado a lado — a fileira rola para o lado, sem alargar a página */
+@media (max-width: 720px) {
+  .abas-tipo { overflow-x: auto; scrollbar-width: none; }
+  .abas-tipo::-webkit-scrollbar { display: none; }
+  .aba-tipo { flex: 1 0 auto; white-space: nowrap; padding-left: 0.7em; padding-right: 0.7em; }
+}

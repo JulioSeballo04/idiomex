@@ -11,7 +11,8 @@ um) e gerencia a agenda de aulas — confirma se cada aula foi realizada (se
 não foi, o aluno ganha uma reposição) e marca aulas para alunos, inclusive
 os que não usam o app (com confirmação e cancelamento por WhatsApp).
 
-O painel do professor abre na **Sala de aula**:
+Na aba **Documentos** do painel do professor (em "Meus Alunos", cada aluno abre
+na aba **Sala de aula**, com o link da aula e os documentos dele):
 - **Documentos de aula** — a biblioteca do professor: ele envia PDF, imagem,
   vídeo, áudio ou texto (até 25 MB), escolhe quem vê (todos os alunos ou
   alguns) e encontra tudo por tipo e por busca. O aluno abre os arquivos

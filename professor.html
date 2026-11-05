@@ -31,9 +31,9 @@
   <nav class="indice-letras">
     <img class="marca" src="assets/apple-touch-icon.png" alt="Idiomex">
     <div class="nav-lateral-professor">
-      <button class="nav-lateral-item ativa" id="navlat-sala" onclick="mostrarAbaProfessor('sala')" title="Sala de aula">🏫</button>
-      <button class="nav-lateral-item" id="navlat-agenda" onclick="mostrarAbaProfessor('agenda')" title="Agenda">📅</button>
+      <button class="nav-lateral-item ativa" id="navlat-agenda" onclick="mostrarAbaProfessor('agenda')" title="Agenda">📅</button>
       <button class="nav-lateral-item" id="navlat-alunos" onclick="mostrarAbaProfessor('alunos')" title="Meus Alunos">👥</button>
+      <button class="nav-lateral-item" id="navlat-sala" onclick="mostrarAbaProfessor('sala')" title="Documentos de aula e Banco de dados">📚</button>
       <button class="nav-lateral-item" id="navlat-config" onclick="mostrarAbaProfessor('config')" title="Configurações">⚙️</button>
     </div>
   </nav>
@@ -75,15 +75,15 @@
     <div id="visao-geral-turma"></div>
 
     <div class="abas-tipo">
-      <button class="aba-tipo ativa" id="btn-aba-sala" onclick="mostrarAbaProfessor('sala')">Sala de aula</button>
-      <button class="aba-tipo" id="btn-aba-agenda" onclick="mostrarAbaProfessor('agenda')">Agenda</button>
+      <button class="aba-tipo ativa" id="btn-aba-agenda" onclick="mostrarAbaProfessor('agenda')">Agenda</button>
       <button class="aba-tipo" id="btn-aba-alunos" onclick="mostrarAbaProfessor('alunos')">Meus Alunos</button>
+      <button class="aba-tipo" id="btn-aba-sala" onclick="mostrarAbaProfessor('sala')">Documentos</button>
       <button class="aba-tipo" id="btn-aba-config" onclick="mostrarAbaProfessor('config')">Configurações</button>
     </div>
 
     <!-- AGENDA -->
-    <!-- SALA DE AULA: Documentos de aula (biblioteca do professor) e Banco de dados -->
-    <div id="painel-aba-sala">
+    <!-- DOCUMENTOS: Documentos de aula (biblioteca do professor) e Banco de dados -->
+    <div id="painel-aba-sala" class="oculto">
       <div class="abas-detalhe abas-sala-professor" role="tablist">
         <button class="aba-detalhe ativa" id="btn-janela-documentos" onclick="mostrarJanelaSala('documentos')">📚 Documentos de aula</button>
         <button class="aba-detalhe" id="btn-janela-banco" onclick="mostrarJanelaSala('banco')">🗄️ Banco de dados</button>
@@ -130,7 +130,7 @@
       </div>
     </div>
 
-    <div id="painel-aba-agenda" class="oculto">
+    <div id="painel-aba-agenda">
       <div class="agenda-topo">
         <button class="btn btn-secundario" onclick="abrirConfigAgenda()">⚙️ Configurar disponibilidade</button>
         <button class="btn btn-secundario" onclick="abrirMarcarAula()">Marcar aula para um aluno</button>
