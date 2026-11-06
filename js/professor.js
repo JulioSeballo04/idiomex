@@ -1372,9 +1372,21 @@ function linhaAulaPainel(a, mostrarData) {
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
         ${badgeIdiomaAula(a)}
+        ${aulaEmAndamento(a) ? '<span class="badge-status badge-status-em-andamento">Em andamento</span>' : ""}
       </div>
       <div class="aula-acoes">${acoes}</div>
     </div>`;
+}
+
+// Aula que o professor registrou enquanto acontecia: no fim do horário vira concluída
+const aulasSendoConcluidas = new Set();
+function concluirAulasQueTerminaram(agora) {
+  aulasCache.filter((a) => a.status === "agendada" && a.concluirAoTerminar && fimDaAula(a) <= agora && !aulasSendoConcluidas.has(a.id))
+    .forEach((a) => {
+      aulasSendoConcluidas.add(a.id);
+      db.collection("aulas").doc(a.id).update({ status: "concluida", concluirAoTerminar: firebase.firestore.FieldValue.delete() })
+        .catch((e) => { aulasSendoConcluidas.delete(a.id); console.warn("Não foi possível concluir a aula:", e); });
+    });
 }
 
 function renderizarHojeProfessor() {
@@ -1391,7 +1403,8 @@ function renderizarHojeProfessor() {
 
   if (idiomaAtivoProfessor && !idiomasAtuaisProfessor.includes(idiomaAtivoProfessor)) idiomaAtivoProfessor = null;
   // Avisos de todos os idiomas: o contador da aba e os números do filtro contam tudo
-  const todasAtrasadas = aulasCache.filter((a) => a.status === "agendada" && fimDaAula(a) <= agora);
+  concluirAulasQueTerminaram(agora);
+  const todasAtrasadas = aulasCache.filter((a) => a.status === "agendada" && fimDaAula(a) <= agora && !a.concluirAoTerminar);
   const todosPedidos = aulasCache.filter((a) => a.status === "pendente");
   const todosLembretes = lembretesAlunosSemApp();
   atualizarContadorPedidos(todasAtrasadas.length + todosPedidos.length + todosLembretes.length);
@@ -1725,7 +1738,8 @@ async function desfazerAulaNaoRealizada(aulaId) {
 
 async function desfazerConclusaoAula(aulaId) {
   try {
-    await db.collection("aulas").doc(aulaId).update({ status: "agendada" });
+    // Sem o "concluir no fim": senão a aula voltaria a ser concluída sozinha
+    await db.collection("aulas").doc(aulaId).update({ status: "agendada", concluirAoTerminar: firebase.firestore.FieldValue.delete() });
   } catch (e) {
     console.error(e);
     alert("Não foi possível desfazer agora. Tente novamente em instantes.");
@@ -2223,7 +2237,19 @@ function legendaModalidade(modalidade) {
   return modalidade === "online" ? "Online" : "Presencial";
 }
 
+// "Em andamento": aula agendada entre o início e o fim do horário dela
+function aulaEmAndamento(a, agora) {
+  const momento = agora || new Date();
+  return a.status === "agendada" && inicioDaAula(a) <= momento && fimDaAula(a) > momento;
+}
+
+// Status para mostrar na tela (com o "em andamento", que não é gravado)
+function statusExibido(a) {
+  return aulaEmAndamento(a) ? "em-andamento" : a.status;
+}
+
 function legendaStatusAula(status) {
+  if (status === "em-andamento") return "Em andamento";
   if (status === "concluida") return "Concluída";
   if (status === "cancelada") return "Cancelada";
   if (status === "pendente") return "Aguardando aprovação";
@@ -2561,7 +2587,7 @@ function montarListaAulasDia(dataIso) {
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
         ${badgeIdiomaAula(a)}
-        <span class="badge-status badge-status-${a.status}">${legendaStatusAula(a.status)}</span>
+        <span class="badge-status badge-status-${statusExibido(a)}">${legendaStatusAula(statusExibido(a))}</span>
       </div>
       ${acoesAulaHtml(a)}
     </div>
@@ -2725,7 +2751,7 @@ function montarAbaAulas(alunoId) {
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
         ${badgeIdiomaAula(a)}
-        <span class="badge-status badge-status-${a.status}">${legendaStatusAula(a.status)}</span>
+        <span class="badge-status badge-status-${statusExibido(a)}">${legendaStatusAula(statusExibido(a))}</span>
       </div>
       ${acoesAulaHtml(a)}
     </div>
@@ -2970,10 +2996,10 @@ function renderizarHorariosMarcarAula() {
   const algumPassou = horarios.some((h) => horarioJaPassou(data, h));
   container.innerHTML = `<div class="slots-grade">${horarios.map((h) => `
     <button type="button" class="btn-slot-horario${h === horarioEscolhidoMarcar && !horarioManualMarcar ? " escolhido" : ""}${horarioJaPassou(data, h) ? " slot-passado" : ""}"
-      ${horarioJaPassou(data, h) ? 'title="Já passou: a aula fica registrada como realizada"' : ""}
+      ${horarioJaPassou(data, h) ? `title="${horarioJaPassou(data, somarMinutos(h, duracao)) ? "Já terminou: a aula fica registrada como concluída" : "Está acontecendo agora: a aula fica em andamento e é concluída no fim do horário"}"` : ""}
       aria-pressed="${h === horarioEscolhidoMarcar && !horarioManualMarcar}" onclick="escolherHorarioMarcarAula('${h}')">${faixaHorario(h, somarMinutos(h, duracao))}</button>`).join("")}
   </div>
-  ${algumPassou ? `<p class="dica-plano">Horários que já passaram (mais claros) servem para registrar uma aula que aconteceu: ela entra como realizada.</p>` : ""}`;
+  ${algumPassou ? `<p class="dica-plano">Horários que já começaram (mais claros) servem para registrar uma aula: se já terminou, entra como concluída; se está acontecendo agora, fica em andamento e é concluída sozinha no fim do horário.</p>` : ""}`;
 }
 
 function selecionarDiaMarcarAula() {
@@ -3066,8 +3092,12 @@ async function confirmarMarcarAula() {
   if (!data || !hora) { status.textContent = "Escolha o dia e o horário."; return; }
   const duracao = duracaoDasAulas(idiomaValido(idioma));
   const horaFim = somarMinutos(hora, duracao);
-  // Horário que já passou: o professor está registrando uma aula que aconteceu
-  const realizada = horarioJaPassou(data, hora);
+  // Horário que já começou: o professor está registrando uma aula que aconteceu
+  // (já terminou: entra concluída) ou que está acontecendo agora (fica em andamento
+  // até o fim do horário e então é concluída sozinha)
+  const jaComecou = horarioJaPassou(data, hora);
+  const realizada = jaComecou && horarioJaPassou(data, horaFim);
+  const emAndamentoAgora = jaComecou && !realizada;
 
   const inicio = minutosDoHorario(hora), fim = inicio + duracao;
   const choque = aulasQueOcupam(data, hora).find((a) =>
@@ -3081,14 +3111,14 @@ async function confirmarMarcarAula() {
 
   // Confirmação pelo WhatsApp do aluno: a aba é aberta antes do "await" (senão o
   // celular bloqueia o popup) e só recebe o endereço depois de a aula ser gravada
-  const enviarWhatsapp = !realizada && !document.getElementById("marcar-whatsapp-wrap").hidden &&
+  const enviarWhatsapp = !jaComecou && !document.getElementById("marcar-whatsapp-wrap").hidden &&
     document.getElementById("marcar-whatsapp").checked;
   const linkConfirmacao = enviarWhatsapp
     ? linkWhatsapp(telefoneDoAluno(aluno.id), mensagemConfirmacaoPeloProfessor(aluno.nome, data, hora, modalidade, idioma, reposicao))
     : null;
   const abaWhatsapp = linkConfirmacao ? window.open("", "_blank") : null;
 
-  status.textContent = realizada ? "Registrando..." : "Marcando...";
+  status.textContent = jaComecou ? "Registrando..." : "Marcando...";
   let aulaId;
   try {
     aulaId = await agendarAula(professorIdAtual, data, hora, horaFim, modalidade, aluno.id, aluno.nome, reposicao, idioma, "agendada");
@@ -3105,11 +3135,14 @@ async function confirmarMarcarAula() {
     // confirmar", onde o professor confirma com um clique.
     await db.collection("aulas").doc(aulaId).update({ status: "concluida" })
       .catch((e) => console.warn("Não foi possível marcar a aula como realizada:", e));
+  } else if (emAndamentoAgora) {
+    await db.collection("aulas").doc(aulaId).update({ concluirAoTerminar: true })
+      .catch((e) => console.warn("Não foi possível marcar a aula para concluir no fim:", e));
   }
   if (alunosCache.some((a) => a.id === aluno.id)) {
     const oQue = reposicao ? "uma reposição" : "uma aula";
-    const texto = realizada
-      ? `Seu professor registrou ${oQue} de ${IDIOMAS[idiomaValido(idioma)].nome} realizada em ${formatarDataBR(data)} às ${hora}.`
+    const texto = jaComecou
+      ? `Seu professor registrou ${oQue} de ${IDIOMAS[idiomaValido(idioma)].nome} ${realizada ? "realizada" : "em andamento"} em ${formatarDataBR(data)} às ${hora}.`
       : `Seu professor marcou ${oQue} de ${IDIOMAS[idiomaValido(idioma)].nome} para você: ${formatarDataBR(data)} às ${hora}.`;
     db.collection("usuarios").doc(aluno.id).collection("notificacoes")
       .add(notificacaoParaAluno("aula-marcada", texto, idioma))

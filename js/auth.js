@@ -88,6 +88,11 @@ async function cadastrar(nome, tipo, codigoProfessor, idiomas) {
   }
   if (tipo === "aluno" && !normalizarCodigo(codigoProfessor)) {
     statusEl.textContent = "Informe o código do professor para vincular sua conta.";
+    const campo = document.getElementById("campo-codigo");
+    if (campo) {
+      campo.classList.add("faltando");
+      document.getElementById("cadCodigo").focus();
+    }
     return;
   }
 

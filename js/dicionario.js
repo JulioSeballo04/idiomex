@@ -508,7 +508,8 @@ function desenharPalavras(grade) {
 
     cartao.innerHTML = `
       <button class="remover" title="Remover" onclick="removerPalavra('${p.id}')">✕</button>
-      <div class="palavra-en">${escapeHtml(p.palavraEn)} <button class="btn-falar" type="button" title="Ouvir pronúncia" onclick="falarPalavra('${p.id}')">🔊</button></div>
+      <div class="palavra-en">${escapeHtml(p.palavraEn)} <button class="btn-falar" type="button" title="Ouvir pronúncia" onclick="falarPalavra('${p.id}')">🔊</button>
+        <button class="btn-editar-palavra" type="button" title="Corrigir a palavra" aria-label="Corrigir a palavra" onclick="editarPalavra('${p.id}')">✎</button></div>
       <div class="palavra-pt">${escapeHtml(p.traducaoPt)} <button class="btn-editar-traducao" type="button" title="Corrigir tradução" aria-label="Corrigir tradução" onclick="editarTraducao('${p.id}')">✎</button></div>
       ${p.adicionadaPor ? `<span class="selo-palavra-professor">Adicionada pelo professor</span>` : ""}
       ${montarAvisoTraducao(p)}
@@ -685,6 +686,47 @@ async function editarTraducao(id) {
   if (!p) return;
   const nova = await perguntar(`Tradução de "${p.palavraEn}":`, p.traducaoPt || "");
   if (nova !== null && nova.trim() && nova.trim() !== p.traducaoPt) salvarTraducao(id, nova);
+}
+
+// Corrige a própria palavra (erro de digitação, maiúscula/minúscula...). Se a palavra
+// mudou de verdade (não só maiúsculas), as frases de exemplo são geradas de novo,
+// porque as antigas usavam a palavra errada.
+async function editarPalavra(id) {
+  const user = auth.currentUser;
+  const p = cacheDePalavras.find((x) => x.id === id);
+  if (!user || !p) return;
+  const digitada = await perguntar("Corrigir a palavra:", p.palavraEn);
+  const nova = (digitada || "").trim();
+  if (!nova || nova === p.palavraEn) return;
+  const repetida = palavrasDoIdiomaAtual().some((x) => x.id !== id && x.palavraEn.trim().toLowerCase() === nova.toLowerCase());
+  if (repetida) {
+    avisar(`"${nova}" já está no seu vocabulário.`);
+    return;
+  }
+  const mudouAPalavra = nova.toLowerCase() !== p.palavraEn.trim().toLowerCase();
+  const ref = db.collection("usuarios").doc(user.uid).collection("palavras").doc(id);
+  try {
+    await ref.update(mudouAPalavra
+      ? { palavraEn: nova, frasesExemplo: [], traducoesSugeridas: firebase.firestore.FieldValue.delete(),
+          falhaAoGerarFrases: firebase.firestore.FieldValue.delete(), motivoFalhaFrases: firebase.firestore.FieldValue.delete() }
+      : { palavraEn: nova });
+  } catch (e) {
+    console.error(e);
+    avisar("Não foi possível corrigir a palavra. Tente novamente.");
+    return;
+  }
+  // A palavra pode ter mudado de letra: vai junto para a letra nova
+  const letra = letraInicial(nova);
+  if (letraSelecionada !== "INICIO" && letraSelecionada !== letra) {
+    letraSelecionada = letra;
+    montarIndiceLetras();
+    renderizarTela();
+  }
+  if (mudouAPalavra) {
+    frasesSendoGeradas.add(id);
+    renderizarPalavras();
+    gerarFrasesDaPalavra(id, nova, p.traducaoPt, idiomaDaPalavra(p));
+  }
 }
 
 function usarTraducaoSugerida(id, indice) {
@@ -1072,6 +1114,7 @@ function renderizarMinhasAulas() {
         <span class="badge-modalidade badge-${a.modalidade}">${a.modalidade === "online" ? "Online" : "Presencial"}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
         ${a.status === "pendente" ? '<span class="badge-status badge-status-pendente">Aguardando aprovação</span>' : ""}
+        ${a.status === "agendada" && a.data === hojeIso && minutosDoHorario(a.horaInicio) <= minutosAgora ? '<span class="badge-status badge-status-em-andamento">Em andamento</span>' : ""}
         ${idiomasParaAula().length > 1 ? `<span class="badge-idioma" style="background:${IDIOMAS[idiomaValido(a.idioma)].cor}">${IDIOMAS[idiomaValido(a.idioma)].nome}</span>` : ""}
       </div>
       <button class="excluir" onclick="cancelarMinhaAula('${a.id}')">${a.status === "pendente" ? "Cancelar pedido" : "Cancelar"}</button>

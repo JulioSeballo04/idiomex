@@ -18,6 +18,8 @@ na aba **Sala de aula**, com o link da aula e os documentos dele):
   alguns) e encontra tudo por tipo e por busca. O aluno abre os arquivos
   dentro do app (player de vídeo/áudio, PDF desenhado página por página), sem
   botão de baixar — isso desestimula o download, mas não impede quem grava a tela.
+  Imagens, PDFs e textos têm zoom; imagens e vídeos abrem numa janela flutuante,
+  por cima das outras, para o aluno continuar usando o app.
 - **Banco de dados** — tudo o que está nas janelas dos alunos (arquivos e links
   da sala de cada aluno e os Documentos de aula que cada um vê), com filtro por
   aluno, por tipo e busca.
@@ -27,6 +29,10 @@ do aluno para o professor e do professor para o aluno) podem ser editadas pelo
 professor em Configurações → Mensagens do WhatsApp, com campos como `{aluno}` e
 `{data}`. As listas de documentos mostram 6 por página, e cada notificação tem um
 ✓ (visto) que a tira da lista.
+
+Uma aula registrada pelo professor enquanto acontece fica **em andamento** e
+vira concluída sozinha no fim do horário. O aluno corrige a própria palavra (✎),
+e as frases de exemplo são geradas de novo quando a palavra muda.
 
 Cada aluno tem um **relatório mensal** (aulas, o que foi trabalhado, palavras
 novas e documentos), que só libera no dia 1º do mês seguinte.
