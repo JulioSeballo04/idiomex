@@ -75,6 +75,9 @@ await t("professor sets a plan per language", updateDoc(doc(db("P1"), "usuarios/
 await t("unknown language in the plan rejected", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), planoIdiomas({ xx: { aulasPorSemana: 1, reposicoesConcedidas: 0 } }))));
 await t("invalid per-language values rejected", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), planoIdiomas({ ja: { aulasPorSemana: 99, reposicoesConcedidas: 0 } }))));
 await t("extra fields in a language plan rejected", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), planoIdiomas({ ja: { aulasPorSemana: 1, reposicoesConcedidas: 0, x: 1 } }))));
+await t("professor sets make-up minutes per language", updateDoc(doc(db("P1"), "usuarios/S1"), planoIdiomas({ en: { aulasPorSemana: 2, reposicoesConcedidas: 1, minutosReposicao: 165 } })));
+await t("negative make-up minutes rejected", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), planoIdiomas({ en: { aulasPorSemana: 2, reposicoesConcedidas: 1, minutosReposicao: -15 } }))));
+await t("non-integer make-up minutes rejected", assertFails(updateDoc(doc(db("P1"), "usuarios/S1"), planoIdiomas({ en: { aulasPorSemana: 2, reposicoesConcedidas: 1, minutosReposicao: 12.5 } }))));
 await t("student cannot change own plan", assertFails(updateDoc(doc(db("S1"), "usuarios/S1"), plano("P1", 7, 99))));
 await t("student still edits own contact with a plan set", updateDoc(doc(db("S1"), "usuarios/S1"), { telefone: "11977776666" }));
 await t("student cannot create profile with a plan", assertFails(setDoc(doc(db("S7"), "usuarios/S7"), { tipo: "aluno", nome: "s7", email: "s7@x", professorId: "P1", codigoVinculo: "PROF-BBBB", ...plano("P1", 7, 99) })));
@@ -144,6 +147,8 @@ await t("professor cannot book for an unknown student", assertFails(setDoc(doc(d
 await t("professor cannot book in another professor's agenda", assertFails(setDoc(doc(db("P1"), "aulas/P0_2030-02-01_1300"), aula({ professorId: "P0", data: "2030-02-01", horaInicio: "13:00" }))));
 await t("professor marks a lesson as not held", updateDoc(doc(db("P1"), "aulas/P1_2030-02-01_1000"), { status: "nao-realizada", reposicaoGerada: true }));
 await t("professor updates credits of a student without the app", updateDoc(doc(db("P1"), "usuarios/P1/alunosSemApp/z1"), { reposicoesConcedidas: 1 }));
+await t("professor sets make-up minutes of a student without the app", updateDoc(doc(db("P1"), "usuarios/P1/alunosSemApp/z1"), { minutosReposicao: 75 }));
+await t("negative make-up minutes of a student without the app rejected", assertFails(updateDoc(doc(db("P1"), "usuarios/P1/alunosSemApp/z1"), { minutosReposicao: -1 })));
 await t("negative credits rejected", assertFails(updateDoc(doc(db("P1"), "usuarios/P1/alunosSemApp/z1"), { reposicoesConcedidas: -1 })));
 await updateDoc(doc(db("P1"), "aulas/P1_2030-02-01_1100"), { status: "cancelada" });
 await t("professor reuses a cancelled slot for another student", setDoc(doc(db("P1"), "aulas/P1_2030-02-01_1100"), aula({ alunoId: "z1", alunoNome: "Zé", data: "2030-02-01", horaInicio: "11:00" })));

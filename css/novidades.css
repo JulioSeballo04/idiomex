@@ -1089,3 +1089,10 @@ html[data-tema="noturno"] .badge-status-em-andamento { background: rgba(127, 166
 /* ✎ para corrigir a palavra (mesmo jeito do ✎ da tradução) */
 .btn-editar-palavra { background: none; border: none; padding: 0 0.2rem; font-size: 0.85rem; color: var(--ink-soft); cursor: pointer; opacity: 0.6; vertical-align: middle; }
 .btn-editar-palavra:hover { opacity: 1; color: var(--acento-forte); }
+
+/* Reposição em minutos */
+.campo-reposicao-minutos .btn-contador { min-width: 40px; padding: 0 0.4em; font-size: 0.82rem; }
+.campo-reposicao-minutos .saldo-reposicoes { min-width: 3.4em; text-align: center; }
+.minutos-reposicao { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.35rem; }
+.minutos-reposicao input { width: 4.2em; padding: 0.35em 0.4em; border-radius: 6px; border: 1px solid var(--borda); text-align: center; }
+.campo-duracao-marcar input { width: 100%; }

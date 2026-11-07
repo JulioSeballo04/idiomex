@@ -58,7 +58,13 @@ service cloud.firestore {
     // professorId junto: se o aluno trocar de professor, o plano antigo não vale mais.
     //
     // O plano é por idioma ("porIdioma": {en: {...}, ja: {...}}); os campos de fora
-    // são do plano antigo, de antes de ser por idioma.
+    // são do plano antigo, de antes de ser por idioma. A reposição é em minutos
+    // ("minutosReposicao", concedidos); planos antigos só têm "reposicoesConcedidas".
+    function minutosValidos(d) {
+      return !("minutosReposicao" in d) ||
+        (d.minutosReposicao is int && d.minutosReposicao >= 0 && d.minutosReposicao <= 100000);
+    }
+
     function numerosDoPlanoValidos(p) {
       return p.aulasPorSemana is int && p.aulasPorSemana >= 0 && p.aulasPorSemana <= 14 &&
         p.reposicoesConcedidas is int && p.reposicoesConcedidas >= 0 && p.reposicoesConcedidas <= 1000;
@@ -67,8 +73,8 @@ service cloud.firestore {
     function planoDoIdiomaValido(porIdioma, idioma) {
       return !(idioma in porIdioma) || (
         porIdioma[idioma] is map &&
-        porIdioma[idioma].keys().hasOnly(["aulasPorSemana", "reposicoesConcedidas"]) &&
-        numerosDoPlanoValidos(porIdioma[idioma]));
+        porIdioma[idioma].keys().hasOnly(["aulasPorSemana", "reposicoesConcedidas", "minutosReposicao"]) &&
+        numerosDoPlanoValidos(porIdioma[idioma]) && minutosValidos(porIdioma[idioma]));
     }
 
     function porIdiomaValido(porIdioma) {
@@ -341,7 +347,8 @@ service cloud.firestore {
       match /alunosSemApp/{alunoSemAppId} {
         allow read, delete: if request.auth != null && request.auth.uid == userId;
         allow create, update: if request.auth != null && request.auth.uid == userId &&
-          request.resource.data.keys().hasOnly(["nome", "telefone", "idioma", "reposicoesConcedidas", "criadoEm"]) &&
+          request.resource.data.keys().hasOnly(["nome", "telefone", "idioma", "reposicoesConcedidas", "minutosReposicao", "criadoEm"]) &&
+          minutosValidos(request.resource.data) &&
           request.resource.data.nome is string && request.resource.data.nome.size() > 0 &&
           request.resource.data.nome.size() <= 100 &&
           request.resource.data.reposicoesConcedidas is int &&
