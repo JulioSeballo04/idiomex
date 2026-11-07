@@ -1408,6 +1408,12 @@ function duracaoDoAgendamento() {
   return (configAgendaProfessor && configDoAgendamento().duracaoAulaMinutos) || 50;
 }
 
+// A reposição fica confirmada sozinha com pelo menos 1 crédito (60 min) e com
+// minutos para cobrir a aula inteira; senão, vira pedido para o professor
+function reposicaoCabeNoSaldo(plano) {
+  return creditosDeReposicao(plano.saldo) >= 1 && plano.saldo >= plano.duracao;
+}
+
 function situacaoDoPlano(dataIso) {
   const idioma = idiomaDoAgendamento();
   const plano = planoDoAluno(perfilAlunoAtual, professorIdDoAluno, idioma, idiomasParaAula()[0]);
@@ -1506,14 +1512,14 @@ function renderizarAgendamento() {
   // Com a semana cheia, a aula só pode ser reposição: com crédito, usa o crédito;
   // sem crédito, vira um pedido para o professor aprovar
   if (plano.semanaCheia) agendamento.reposicao = true;
-  const pedido = agendamento.reposicao && plano.saldo < plano.duracao;
+  const pedido = agendamento.reposicao && !reposicaoCabeNoSaldo(plano);
   const linhasPlano = [];
   if (plano.limite > 0) {
     linhasPlano.push(agendamento.data
       ? `Semana de ${escapeHtml(formatarDataBR(inicioDaSemanaISO(agendamento.data)).slice(0, 5))}: <strong>${plano.naSemana} de ${plano.limite}</strong> aula${plano.limite > 1 ? "s" : ""} do seu plano`
       : `Seu plano: <strong>${plano.limite}</strong> aula${plano.limite > 1 ? "s" : ""} por semana`);
   }
-  linhasPlano.push(`Reposição${escolheIdiomaNoAgendamento() ? ` de ${IDIOMAS[idiomaDoAgendamento()].nome}` : ""} disponível: <strong>${formatarMinutos(plano.saldo)}</strong>`);
+  linhasPlano.push(`Reposição${escolheIdiomaNoAgendamento() ? ` de ${IDIOMAS[idiomaDoAgendamento()].nome}` : ""}: <strong>${formatarCreditos(plano.saldo)}</strong>`);
 
   const cartaoConfirmar = `
     <div class="cartao-passo${dataHoraEscolhidas ? "" : " passo-bloqueado"}">
@@ -1529,7 +1535,7 @@ function renderizarAgendamento() {
       <div class="campo-agendamento campo-reposicao">
         <label class="rotulo-reposicao"><input type="checkbox" id="chk-reposicao" ${agendamento.reposicao ? "checked" : ""} ${plano.semanaCheia ? "disabled" : ""} onchange="agendamento.reposicao = this.checked; renderizarAgendamento()"> Esta aula é uma reposição</label>
         ${agendamento.reposicao && !pedido ? `<p class="dica-reposicao">${plano.semanaCheia ? "As aulas do seu plano nessa semana já estão marcadas — e" : "E"}sta aula vai usar ${formatarMinutos(plano.duracao)} da sua reposição e já fica confirmada.</p>` : ""}
-        ${pedido ? `<p class="dica-reposicao aviso-pedido">${plano.semanaCheia ? "As aulas do seu plano nessa semana já estão marcadas e v" : "V"}ocê ${plano.saldo ? `tem só ${formatarMinutos(plano.saldo)} de reposição (a aula tem ${formatarMinutos(plano.duracao)})` : "não tem tempo de reposição"}: esta aula vai como <strong>pedido de reposição</strong>. O horário fica reservado e seu professor precisa aprovar.</p>` : ""}
+        ${pedido ? `<p class="dica-reposicao aviso-pedido">${plano.semanaCheia ? "As aulas do seu plano nessa semana já estão marcadas e v" : "V"}ocê ${!plano.saldo ? "não tem crédito de reposição" : creditosDeReposicao(plano.saldo) < 1 ? `ainda não tem um crédito completo (tem ${formatarMinutos(plano.saldo)}; faltam ${faltaParaProximoCredito(plano.saldo)} — a cada 60 min de reposição você ganha 1 crédito)` : `tem só ${formatarMinutos(plano.saldo)} de reposição (a aula tem ${formatarMinutos(plano.duracao)})`}: esta aula vai como <strong>pedido de reposição</strong>. O horário fica reservado e seu professor precisa aprovar.</p>` : ""}
       </div>
       ${agendamento.erro ? `<p class="erro-agendamento" role="alert">${escapeHtml(agendamento.erro)}</p>` : ""}
       <button type="button" class="btn btn-primario btn-confirmar-agendamento" id="btn-confirmar-agendamento" onclick="confirmarAgendamento()" ${dataHoraEscolhidas && !agendamento.salvando ? "" : "disabled"}>
@@ -1742,7 +1748,7 @@ async function confirmarAgendamento() {
     return;
   }
   const plano = situacaoDoPlano(agendamento.data);
-  const pedido = agendamento.reposicao && plano.saldo < plano.duracao; // sem tempo de reposição suficiente: espera aprovação
+  const pedido = agendamento.reposicao && !reposicaoCabeNoSaldo(plano); // sem crédito (ou tempo) suficiente: espera aprovação
   if (!agendamento.reposicao && plano.semanaCheia) {
     agendamento.erro = `Você já marcou as ${plano.limite} aula${plano.limite > 1 ? "s" : ""} do seu plano nessa semana.`;
     renderizarAgendamento();

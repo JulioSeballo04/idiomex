@@ -400,6 +400,23 @@ function minutosConcedidos(p) {
   return (p.reposicoesConcedidas || 0) * MINUTOS_POR_CREDITO;
 }
 
+// A cada 60 minutos de reposição, 1 crédito: com ele o aluno marca uma aula extra
+// como reposição. Os minutos que sobram esperam completar o próximo crédito.
+function creditosDeReposicao(minutos) {
+  return Math.floor(Math.max(0, minutos || 0) / MINUTOS_POR_CREDITO);
+}
+
+// "2 créditos (2h45)", "1 crédito (1h)", "0 créditos (45 min)"
+function formatarCreditos(minutos) {
+  const n = creditosDeReposicao(minutos);
+  return `${n} ${n === 1 ? "crédito" : "créditos"} (${formatarMinutos(minutos)})`;
+}
+
+// Quanto falta para o próximo crédito: "15 min"
+function faltaParaProximoCredito(minutos) {
+  return formatarMinutos(MINUTOS_POR_CREDITO - (Math.max(0, minutos || 0) % MINUTOS_POR_CREDITO));
+}
+
 // "3h", "1h15", "45 min", "0 min"
 function formatarMinutos(total) {
   const m = Math.max(0, Math.round(total || 0));

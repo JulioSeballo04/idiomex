@@ -662,7 +662,7 @@ function montarPlanoAluno(alunoId) {
   return `
     <div class="plano-aluno">
       ${linhas}
-      <p class="dica-plano">A reposição é contada em minutos${varios ? ", por idioma" : ""}: cada crédito vale 1 hora. Uma aula de reposição desconta a duração dela; numa aula esticada (ex: 1h15), desconte só os minutos a mais.</p>
+      <p class="dica-plano">A reposição é contada em minutos${varios ? ", por idioma" : ""}: a cada 60 min, o aluno ganha 1 crédito para marcar uma aula extra como reposição. Uma aula de reposição desconta a duração dela; numa aula esticada (ex: 1h15), desconte só os minutos a mais.</p>
     </div>`;
 }
 
@@ -698,6 +698,7 @@ function montarControleReposicao(alunoId, idioma) {
         <strong class="saldo-reposicoes">${formatarMinutos(saldo)}</strong>
         <button type="button" class="btn-contador" aria-label="Dar 1 hora de reposição" onclick="ajustarMinutosReposicao('${alunoId}', '${idioma}', ${MINUTOS_POR_CREDITO})">+1h</button>
       </div>
+      <span class="creditos-reposicao" title="A cada 60 min de reposição, 1 crédito para marcar uma aula extra">= ${creditosDeReposicao(saldo)} ${creditosDeReposicao(saldo) === 1 ? "crédito" : "créditos"}${saldo % MINUTOS_POR_CREDITO ? ` · faltam ${faltaParaProximoCredito(saldo)} para o próximo` : ""}</span>
       <div class="minutos-reposicao">
         <input type="text" inputmode="numeric" id="${campo}" maxlength="3" placeholder="min" aria-label="Minutos de reposição">
         <button type="button" class="btn btn-secundario btn-mini" onclick="ajustarMinutosDoCampo('${alunoId}', '${idioma}', -1)" ${saldo === 0 ? "disabled" : ""}>Descontar</button>
@@ -727,8 +728,8 @@ async function ajustarMinutosReposicao(alunoId, idioma, delta) {
   if (alunosCache.some((a) => a.id === alunoId)) {
     const nome = IDIOMAS[idioma].nome;
     const texto = delta > 0
-      ? `Você recebeu ${formatarMinutos(novoSaldo - saldo)} de reposição de ${nome}. Agora tem ${formatarMinutos(novoSaldo)} para usar ao marcar aulas de ${nome}.`
-      : `Foram descontados ${formatarMinutos(saldo - novoSaldo)} da sua reposição de ${nome}. Agora tem ${formatarMinutos(novoSaldo)}.`;
+      ? `Você recebeu ${formatarMinutos(novoSaldo - saldo)} de reposição de ${nome}. Agora tem ${formatarCreditos(novoSaldo)}: cada crédito marca uma aula extra de ${nome}.`
+      : `Foram descontados ${formatarMinutos(saldo - novoSaldo)} da sua reposição de ${nome}. Agora tem ${formatarCreditos(novoSaldo)}.`;
     lote.set(db.collection("usuarios").doc(alunoId).collection("notificacoes").doc(), notificacaoParaAluno("credito-reposicao", texto, idioma));
   }
   try {
@@ -2823,7 +2824,9 @@ function lembretesAlunosSemApp() {
     const motivos = [];
     if (idiomasAtuaisProfessor.length > 1) motivos.push(IDIOMAS[idioma].nome);
     if (!proximaAulaDoAluno(aluno.id, idioma)) motivos.push("nenhuma aula marcada");
-    if (saldo > 0) motivos.push(`${formatarMinutos(saldo)} de reposição para marcar`);
+    // Só com um crédito inteiro (60 min) há uma aula extra para marcar
+    const creditos = creditosDeReposicao(saldo);
+    if (creditos > 0) motivos.push(`${creditos} ${creditos === 1 ? "crédito" : "créditos"} de reposição para marcar (${formatarMinutos(saldo)})`);
     return motivos.length ? { aluno, idioma, motivo: motivos.join(" · ") } : null;
   }).filter(Boolean);
 }
@@ -3085,9 +3088,9 @@ function atualizarReposicaoMarcarAula() {
   const wrap = document.getElementById("marcar-reposicao-wrap");
   const chk = document.getElementById("marcar-reposicao");
   wrap.hidden = saldo === 0;
-  chk.checked = saldo > 0 && alunosSemAppCache.some((a) => a.id === alunoId) && !proximaAulaDoAluno(alunoId, idioma);
+  chk.checked = creditosDeReposicao(saldo) >= 1 && alunosSemAppCache.some((a) => a.id === alunoId) && !proximaAulaDoAluno(alunoId, idioma);
   document.getElementById("marcar-reposicao-saldo").textContent =
-    `${formatarMinutos(saldo)} disponíveis${idiomasAtuaisProfessor.length > 1 ? ` em ${IDIOMAS[idioma].nome}` : ""}`;
+    `${formatarCreditos(saldo)}${idiomasAtuaisProfessor.length > 1 ? ` em ${IDIOMAS[idioma].nome}` : ""}`;
 }
 
 async function confirmarMarcarAula() {

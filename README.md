@@ -144,7 +144,8 @@ usuarios/{uid}
   plano                  -> só em alunos, definido pelo professor, POR IDIOMA:
                             {professorId, porIdioma: {en: {aulasPorSemana
                              (0 = sem limite), minutosReposicao}, ...}}
-                            (a reposição é em minutos: cada crédito vale 1h e
+                            (a reposição é em minutos: a cada 60 min, 1 crédito
+                             para marcar uma aula extra como reposição;
                              cada aula de reposição desconta a duração dela;
                              sem "minutosReposicao", vale reposicoesConcedidas × 60)
                             (aulasPorSemana/reposicoesConcedidas fora de
