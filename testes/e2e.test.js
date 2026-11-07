@@ -1006,7 +1006,7 @@ function dataDaqui(dias) {
     await hugo.waitForFunction(() => notificacoesCache.some((n) => n.tipo === 'credito-reposicao' && !n.lida), null, { timeout: 5000 });
     esperar((await contadorSino(hugo)) === '1', 'aluno não foi notificado do crédito');
     await confirmarPrimeiroHorario(hugo);
-    await hugo.waitForSelector('.plano-agendamento:has-text("Reposição disponível: 1h")', { timeout: 3000 });
+    await hugo.waitForSelector('.plano-agendamento:has-text("Reposição: 1 crédito (1h)")', { timeout: 3000 });
     esperar(await hugo.isChecked('#chk-reposicao'), 'não usou a reposição automaticamente com a semana cheia');
     await hugo.click('#btn-confirmar-agendamento');
     await hugo.waitForSelector('.agendamento-sucesso:has-text("Reposição")', { timeout: 8000 });
@@ -1042,12 +1042,22 @@ function dataDaqui(dias) {
     await prof.click(`${blocoHugo} .minutos-reposicao button:has-text("Descontar")`);
     await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("2h45")`, { timeout: 5000 });
     esperar((await prof.inputValue(`${blocoHugo} .minutos-reposicao input`)) === '', 'o campo de minutos não foi limpo');
-    await hugo.waitForFunction(() => notificacoesCache.some((n) => /descontados 15 min/.test(n.texto)), null, { timeout: 5000 });
+    await hugo.waitForFunction(() => notificacoesCache.some((n) => /descontados 15 min.*2 créditos \(2h45\)/.test(n.texto)), null, { timeout: 5000 });
+    await prof.waitForSelector(`${blocoHugo} .creditos-reposicao:has-text("2 créditos · faltam 15 min")`, { timeout: 3000 });
     const plano = await hugo.evaluate(async () => (await db.collection('usuarios').doc(auth.currentUser.uid).get()).data().plano);
     // Gravado em minutos (o concedido inclui os minutos das reposições já usadas)
     esperar(Object.values(plano.porIdioma).some((p) => Number.isInteger(p.minutosReposicao) && p.minutosReposicao >= 165), 'minutos não gravados no plano');
+    // Com 45 min (menos de 1 crédito), a reposição do aluno vira pedido
+    await prof.fill(`${blocoHugo} .minutos-reposicao input`, '120');
+    await prof.click(`${blocoHugo} .minutos-reposicao button:has-text("Descontar")`);
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("45 min")`, { timeout: 5000 });
+    await confirmarPrimeiroHorario(hugo);
+    await hugo.check('#chk-reposicao').catch(() => {});
+    await hugo.waitForSelector('.aviso-pedido:has-text("faltam 15 min")', { timeout: 3000 });
+    esperar(await hugo.$('#btn-confirmar-agendamento:has-text("Pedir reposição")'), 'com 45 min a reposição não virou pedido');
+    await hugo.keyboard.press('Escape');
     // Volta ao zero para os próximos testes
-    await prof.fill(`${blocoHugo} .minutos-reposicao input`, '165');
+    await prof.fill(`${blocoHugo} .minutos-reposicao input`, '45');
     await prof.click(`${blocoHugo} .minutos-reposicao button:has-text("Descontar")`);
     await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("0 min")`, { timeout: 5000 });
   });

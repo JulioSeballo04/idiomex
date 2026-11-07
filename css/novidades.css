@@ -1096,3 +1096,4 @@ html[data-tema="noturno"] .badge-status-em-andamento { background: rgba(127, 166
 .minutos-reposicao { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.35rem; }
 .minutos-reposicao input { width: 4.2em; padding: 0.35em 0.4em; border-radius: 6px; border: 1px solid var(--borda); text-align: center; }
 .campo-duracao-marcar input { width: 100%; }
+.creditos-reposicao { display: block; font-size: 0.78rem; color: var(--ink-soft); margin-top: 0.2rem; }
