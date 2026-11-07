@@ -159,6 +159,43 @@ document.addEventListener("keydown", (evento) => {
   if (fechar) fechar.click();
 });
 
+// Frase de boas-vindas no idioma estudado (aluno) ou ensinado (professor), sorteada
+// ao abrir a página. Fica a mesma até recarregar, pra não trocar a cada atualização.
+const FRASES_BOAS_VINDAS = {
+  aluno: {
+    en: ["Welcome back!", "Great to see you!", "Ready to learn something new?", "Let's keep going!",
+      "Nice to have you back!", "Every word counts!", "Let's make today count!", "Keep up the great work!",
+      "Hello there!", "Time to practice!", "You're doing great!", "Small steps, big progress!"],
+    es: ["¡Bienvenido de nuevo!", "¡Qué bueno verte!", "¿Listo para aprender algo nuevo?", "¡Sigamos adelante!", "¡Cada palabra cuenta!"],
+    it: ["Bentornato!", "Che bello rivederti!", "Pronto a imparare qualcosa di nuovo?", "Andiamo avanti!", "Ogni parola conta!"],
+    fr: ["Bon retour !", "Ravi de te revoir !", "Prêt à apprendre quelque chose de nouveau ?", "On continue !", "Chaque mot compte !"],
+    de: ["Willkommen zurück!", "Schön, dich zu sehen!", "Bereit, etwas Neues zu lernen?", "Weiter geht's!", "Jedes Wort zählt!"],
+    ja: ["おかえりなさい！", "今日もがんばろう！", "新しい言葉を学ぼう！", "一歩ずつ進もう！"],
+    zh: ["欢迎回来！", "很高兴见到你！", "准备好学点新东西了吗？", "继续加油！"],
+    ko: ["다시 오신 것을 환영해요!", "만나서 반가워요!", "오늘도 힘내요!", "새로운 단어를 배워 봐요!"]
+  },
+  professor: {
+    en: ["Welcome back, teacher!", "Ready to inspire today?", "Great to see you!", "Your students are lucky to have you!",
+      "Let's make today a great class!", "Teaching is a superpower!", "Hello, teacher!", "Another day, another breakthrough!",
+      "Thanks for all you do!", "Let's get your week organized!"],
+    es: ["¡Bienvenido de nuevo, profe!", "¿Listo para inspirar hoy?", "¡Qué bueno verte!", "¡Tus alumnos tienen suerte de tenerte!"],
+    it: ["Bentornato, prof!", "Pronto a ispirare oggi?", "Che bello rivederti!", "I tuoi studenti sono fortunati ad averti!"],
+    fr: ["Bon retour, prof !", "Prêt à inspirer aujourd'hui ?", "Ravi de te revoir !", "Tes élèves ont de la chance de t'avoir !"],
+    de: ["Willkommen zurück!", "Bereit, heute zu inspirieren?", "Schön, dich zu sehen!", "Deine Schüler haben Glück mit dir!"],
+    ja: ["おかえりなさい、先生！", "今日も素敵な授業を！", "お疲れさまです！"],
+    zh: ["欢迎回来，老师！", "今天也要精彩上课！", "老师辛苦了！"],
+    ko: ["다시 오신 것을 환영해요, 선생님!", "오늘도 멋진 수업 해요!", "선생님, 수고 많으세요!"]
+  }
+};
+const frasesSorteadas = {};
+function fraseDeBoasVindas(idioma, quem = "aluno") {
+  const lista = FRASES_BOAS_VINDAS[quem] || FRASES_BOAS_VINDAS.aluno;
+  const frases = lista[idioma] || lista.en;
+  const chave = `${quem}:${idioma}`;
+  if (!(chave in frasesSorteadas)) frasesSorteadas[chave] = frases[Math.floor(Math.random() * frases.length)];
+  return frasesSorteadas[chave];
+}
+
 // Lê um texto em voz alta usando a Web Speech API do navegador (sem custo,
 // sem depender de nenhuma API externa). Se o navegador não suportar, não faz nada.
 function falar(texto, idioma) {

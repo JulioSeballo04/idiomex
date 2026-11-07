@@ -62,9 +62,12 @@ auth.onAuthStateChanged(async (user) => {
   document.getElementById("nome-usuario").textContent = perfil.nome;
   document.getElementById("codigo-professor").textContent = perfil.codigoProfessor;
   document.getElementById("codigo-topo").textContent = perfil.codigoProfessor || "—";
-  document.getElementById("eyebrow-professor").textContent = `${saudacaoDoPeriodoProfessor()} · Painel do professor`;
   garantirCodigoNoIndice(user.uid, perfil.codigoProfessor);
   prepararSeletorIdioma(perfil);
+  // Boas-vindas no idioma que ensina (no escolhido no topo; ensinando vários, um deles sorteado)
+  const idiomaDaSaudacao = idiomasAtuaisProfessor.includes(idiomaAtivoProfessor) ? idiomaAtivoProfessor :
+    idiomasAtuaisProfessor[Math.floor(Math.random() * idiomasAtuaisProfessor.length)];
+  document.getElementById("eyebrow-professor").textContent = fraseDeBoasVindas(idiomaDaSaudacao, "professor");
 
   const hoje = new Date();
   mesCalendarioProfessor = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
@@ -1368,13 +1371,6 @@ function escutarAulasDoProfessor(uid) {
 
 const DIAS_PAINEL_HOJE = 7;
 const NOMES_DIAS_CURTOS_PROF = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-
-function saudacaoDoPeriodoProfessor() {
-  const hora = new Date().getHours();
-  if (hora >= 5 && hora < 12) return "Bom dia";
-  if (hora >= 12 && hora < 18) return "Boa tarde";
-  return "Boa noite";
-}
 
 // Iniciais do nome para o círculo ao lado do aluno ("Beatriz Souza" → "BS")
 function iniciaisDoNome(nome) {

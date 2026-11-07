@@ -358,7 +358,7 @@ function renderizarTela() {
   document.body.classList.toggle("tela-letra", !noInicio);
 
   if (noInicio) {
-    eyebrowTopo.textContent = fraseDeBoasVindas(idiomaDoAluno);
+    eyebrowTopo.textContent = fraseDeBoasVindas(idiomaDoAluno, "aluno");
     tituloTopo.textContent = nomeDoAlunoAtual || "Olá!";
     renderizarProgresso();
     renderizarPalavrasRecentes();
@@ -367,27 +367,6 @@ function renderizarTela() {
     tituloTopo.textContent = `Palavras aprendidas com a inicial "${letraSelecionada}"`;
   }
   renderizarPalavras();
-}
-
-// Frase de boas-vindas no idioma que o aluno estuda, sorteada ao abrir a página
-// (fica a mesma até recarregar, pra não trocar a cada atualização da tela)
-const FRASES_BOAS_VINDAS = {
-  en: ["Welcome back!", "Great to see you!", "Ready to learn something new?", "Let's keep going!",
-    "Nice to have you back!", "Every word counts!", "Let's make today count!", "Keep up the great work!",
-    "Hello there!", "Time to practice!", "You're doing great!", "Small steps, big progress!"],
-  es: ["¡Bienvenido de nuevo!", "¡Qué bueno verte!", "¿Listo para aprender algo nuevo?", "¡Sigamos adelante!", "¡Cada palabra cuenta!"],
-  it: ["Bentornato!", "Che bello rivederti!", "Pronto a imparare qualcosa di nuovo?", "Andiamo avanti!", "Ogni parola conta!"],
-  fr: ["Bon retour !", "Ravi de te revoir !", "Prêt à apprendre quelque chose de nouveau ?", "On continue !", "Chaque mot compte !"],
-  de: ["Willkommen zurück!", "Schön, dich zu sehen!", "Bereit, etwas Neues zu lernen?", "Weiter geht's!", "Jedes Wort zählt!"],
-  ja: ["おかえりなさい！", "今日もがんばろう！", "新しい言葉を学ぼう！", "一歩ずつ進もう！"],
-  zh: ["欢迎回来！", "很高兴见到你！", "准备好学点新东西了吗？", "继续加油！"],
-  ko: ["다시 오신 것을 환영해요!", "만나서 반가워요!", "오늘도 힘내요!", "새로운 단어를 배워 봐요!"]
-};
-const frasesSorteadas = {};
-function fraseDeBoasVindas(idioma) {
-  const frases = FRASES_BOAS_VINDAS[idioma] || FRASES_BOAS_VINDAS.en;
-  if (!(idioma in frasesSorteadas)) frasesSorteadas[idioma] = frases[Math.floor(Math.random() * frases.length)];
-  return frasesSorteadas[idioma];
 }
 
 function irParaLetra(letra) {
