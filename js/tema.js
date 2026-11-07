@@ -145,7 +145,7 @@ function montarMenuTemaDoIdioma(menu) {
     const botao = document.createElement("button");
     botao.type = "button";
     botao.className = "opcao-tema" + (item.ativa ? " ativa" : "");
-    botao.innerHTML = item.html + (item.ativa ? '<span class="marca-ativa">✓</span>' : "");
+    botao.innerHTML = item.html + (item.ativa ? `<span class="marca-ativa">${icone("check")}</span>` : "");
     botao.onclick = () => {
       item.aoClicar();
       montarMenuTema();
@@ -161,7 +161,7 @@ function montarMenuTemaDoIdioma(menu) {
   const bloco = document.createElement("div");
   bloco.className = "personalizar-tema" + (pref.modo === "custom" ? " ativa" : "");
   bloco.innerHTML = `
-    <div class="personalizar-titulo">🎨 Personalizar${pref.modo === "custom" ? ' <span class="marca-ativa">✓</span>' : ""}</div>
+    <div class="personalizar-titulo">${icone("palette")} Personalizar${pref.modo === "custom" ? ` <span class="marca-ativa">${icone("check")}</span>` : ""}</div>
     <label>Cor principal <input type="color" id="cor-principal-tema" value="${principal}"></label>
     <label>Cor de destaque <input type="color" id="cor-destaque-tema" value="${destaque}"></label>
   `;
@@ -189,7 +189,7 @@ function montarMenuTema() {
     item.innerHTML = `
       <span class="amostra-tema" style="background:linear-gradient(135deg, ${t.cores[0]} 50%, ${t.cores[1]} 50%)"></span>
       <span>${t.nome}</span>
-      ${ativa ? '<span class="marca-ativa">✓</span>' : ""}
+      ${ativa ? `<span class="marca-ativa">${icone("check")}</span>` : ""}
     `;
     item.onclick = () => {
       aplicarTema(t.id);

@@ -168,6 +168,25 @@ input[type="radio"] {
 }
 .excluir:hover { text-decoration: underline; }
 
+/* ---------- Ícones (Lucide, assets/icones.svg) ---------- */
+.icone {
+  width: 1.15em;
+  height: 1.15em;
+  flex-shrink: 0;
+  vertical-align: -0.2em;
+  stroke-width: 2;
+}
+.icone-grande { width: 2.4em; height: 2.4em; }
+/* Botões com ícone e texto: alinhados e com um respiro entre os dois */
+.btn:has(> .icone), .aba-tipo:has(> .icone), .aba-detalhe:has(> .icone),
+.btn-voltar-sala:has(> .icone), .acao-chip-codigo:has(> .icone) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45em;
+}
+.btn-fechar-modal .icone { width: 1.25em; height: 1.25em; vertical-align: middle; }
+
 /* ---------- Utilitários ---------- */
 .oculto,
 .forcar-oculto {
@@ -1111,7 +1130,8 @@ html[data-tema="noturno"] .secao-perigo h4 { color: #F08A75; }
 
 #modal-quiz,
 #modal-agendamento,
-#modal-config-agenda {
+#modal-config-agenda,
+#modal-marcar-aula {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
@@ -1443,15 +1463,8 @@ html[data-tema="noturno"] .secao-perigo h4 { color: #F08A75; }
   font-size: 0.9rem;
 }
 .cartao-aluno-sem-app .aula-info { flex-direction: column; align-items: flex-start; gap: 0.2rem; }
-/* "Marcar aula" não é janela por cima da tela: fica na coluna ao lado do calendário */
-#modal-marcar-aula .modal-conteudo {
-  max-width: none;
-  max-height: none;
-  overflow: visible;
-  box-shadow: none;
-  border: 1px solid var(--borda);
-  margin-bottom: 1rem;
-}
+/* "Marcar aula" abre numa janela por cima da tela, como "Configurar disponibilidade" */
+#modal-marcar-aula .modal-conteudo { max-width: 560px; }
 .linha-marcar-aula { display: flex; flex-wrap: wrap; gap: 0 0.8rem; }
 .linha-marcar-aula .campo-perfil { flex: 1; min-width: 140px; }
 #modal-marcar-aula select,

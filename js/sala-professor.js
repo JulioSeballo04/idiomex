@@ -103,8 +103,8 @@ function escolherArquivoBiblioteca(arquivo) {
     if (!titulo.value.trim()) titulo.value = arquivo.name.replace(/\.[^.]+$/, "").slice(0, 200);
   }
   nome.hidden = !arquivoBiblioteca;
-  nome.textContent = arquivoBiblioteca
-    ? `${CATEGORIAS_ARQUIVO[categoriaDoArquivo(arquivoBiblioteca.type, arquivoBiblioteca.name)].icone} ${arquivoBiblioteca.name} (${formatarTamanhoArquivo(arquivoBiblioteca.size)})` : "";
+  nome.innerHTML = arquivoBiblioteca
+    ? `${icone(CATEGORIAS_ARQUIVO[categoriaDoArquivo(arquivoBiblioteca.type, arquivoBiblioteca.name)].icone)} ${escapeHtml(arquivoBiblioteca.name)} (${formatarTamanhoArquivo(arquivoBiblioteca.size)})` : "";
   if (!arquivoBiblioteca) document.getElementById("arquivo-biblioteca").value = "";
 }
 
@@ -202,11 +202,11 @@ function renderizarBiblioteca() {
       return `
         <div class="documento-aula item-biblioteca" data-id="${d.id}">
           <div class="linha-item-biblioteca">
-            <span class="icone-tipo-documento" title="${cat.nome}">${cat.icone}</span>
+            <span class="icone-tipo-documento" title="${cat.nome}">${icone(cat.icone)}</span>
             <div class="info-item-biblioteca">
               <button class="titulo-documento link-arquivo" onclick="abrirDaBiblioteca('${d.id}')">${escapeHtml(d.titulo)}</button>
               <span class="data-msg">${cat.nome} · ${formatarTamanhoArquivo(d.tamanho)} · ${escapeHtml(data)}</span>
-              <span class="data-msg quem-ve-resumo">👁 ${escapeHtml(textoQuemVe(d))}</span>
+              <span class="data-msg quem-ve-resumo">${icone("eye")} ${escapeHtml(textoQuemVe(d))}</span>
             </div>
             <div class="aula-acoes">
               <button class="btn btn-secundario btn-mini" onclick="editarQuemVe('${d.id}')">Quem vê</button>
@@ -360,7 +360,7 @@ function renderizarBanco() {
           : `<button class="btn btn-secundario btn-mini" onclick="editarQuemVe('${l.d.id}')">Quem vê</button>`;
         return `
           <div class="linha-banco" data-origem="${l.origem}">
-            <span class="icone-tipo-documento" title="${cat.nome}">${cat.icone}</span>
+            <span class="icone-tipo-documento" title="${cat.nome}">${icone(cat.icone)}</span>
             <div class="info-item-biblioteca">
               ${abrir}
               <span class="data-msg">${l.aluno ? escapeHtml(l.aluno.nome) : "Todos os alunos"} · ${l.origem === "sala" ? "Sala do aluno" : "Documentos de aula"} · ${escapeHtml(data)}</span>
@@ -425,7 +425,7 @@ function montarRelatorioMensal(alunoId) {
           ${meses.map((m) => `<option value="${m}" ${m === escolhido ? "selected" : ""}>${nomeDoMes(m)}</option>`).join("")}
         </select>
       </label>
-      <button type="button" class="btn btn-secundario btn-mini btn-emitir-relatorio" ${liberado ? "" : "disabled"} onclick="emitirRelatorioMensal('${alunoId}')">📄 Emitir relatório</button>
+      <button type="button" class="btn btn-secundario btn-mini btn-emitir-relatorio" ${liberado ? "" : "disabled"} onclick="emitirRelatorioMensal('${alunoId}')">${icone("file-text")} Emitir relatório</button>
       ${liberado ? "" : `<span class="dica-plano">O relatório de ${nomeDoMes(escolhido).split(" de ")[0].toLowerCase()} libera em ${diaQueLibera(escolhido)}.</span>`}
     </div>`;
 }
@@ -521,7 +521,7 @@ function htmlDoRelatorio({ aluno, semApp, mes, aulas, registros, documentos, pal
       .acoes { margin: 0 0 18px; } .acoes button { padding: 8px 14px; font-size: 0.95rem; cursor: pointer; }
       @media print { .acoes { display: none; } body { padding: 0; } }
     </style></head><body>
-    <div class="acoes"><button onclick="window.print()">🖨️ Imprimir / salvar em PDF</button></div>
+    <div class="acoes"><button onclick="window.print()">Imprimir / salvar em PDF</button></div>
     <h1>Relatório mensal — ${e(nomeDoMes(mes))}</h1>
     <p class="sub">Aluno: <strong>${e(aluno.nome)}</strong>${semApp ? " (sem app)" : ""} · Professor: ${e(nomeProfessor)}</p>
     ${plano ? `<p class="sub">Plano: ${e(plano)}</p>` : ""}

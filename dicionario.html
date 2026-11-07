@@ -55,20 +55,20 @@
       <div class="acoes-topo">
         <span id="bandeira-idioma" class="bandeira-idioma"></span>
         <select id="seletor-idioma" class="seletor-idioma-aluno" title="Idioma que você está estudando" onchange="trocarIdiomaAtivo(this.value)" hidden></select>
-        <button class="btn btn-secundario btn-icone btn-notificacoes" id="btn-notificacoes" aria-label="Notificações" title="Notificações" onclick="abrirNotificacoes()">🔔<span class="contador-notificacoes" id="contador-notificacoes" hidden>0</span></button>
+        <button class="btn btn-secundario btn-icone btn-notificacoes" id="btn-notificacoes" aria-label="Notificações" title="Notificações" onclick="abrirNotificacoes()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-bell"></use></svg><span class="contador-notificacoes" id="contador-notificacoes" hidden>0</span></button>
         <div class="seletor-tema" id="seletor-tema">
           <button class="btn-tema" type="button" title="Mudar cores do app" onclick="alternarMenuTema()">
             <span class="ponto-tema-atual" id="ponto-tema-atual"></span>
           </button>
           <div class="menu-tema oculto" id="menu-tema"></div>
         </div>
-        <button class="btn btn-secundario btn-perfil" title="Meu perfil" onclick="abrirPerfil()"><span aria-hidden="true">👤</span><span class="rotulo-btn-perfil">Meu perfil</span></button>
-        <button class="btn btn-secundario btn-sair" onclick="sair()">Sair</button>
+        <button class="btn btn-secundario btn-perfil" title="Meu perfil" onclick="abrirPerfil()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-user-round"></use></svg><span class="rotulo-btn-perfil">Meu perfil</span></button>
+        <button class="btn btn-secundario btn-sair" onclick="sair()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-log-out"></use></svg><span>Sair</span></button>
       </div>
     </header>
 
     <section id="tela-sala-aula" class="tela-sala-aula" hidden aria-labelledby="titulo-sala-aula">
-      <button type="button" class="btn-voltar-sala" onclick="fecharSalaDeAula()">← Voltar ao início</button>
+      <button type="button" class="btn-voltar-sala" onclick="fecharSalaDeAula()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-arrow-left"></use></svg>Voltar ao início</button>
       <div class="cabecalho-sala">
         <div class="eyebrow" id="eyebrow-sala">Sua sala</div>
         <h1 id="titulo-sala-aula">Sala de aula</h1>
@@ -83,15 +83,15 @@
 
     <section class="atalhos-aluno" aria-label="Atalhos">
       <button class="atalho" onclick="iniciarQuiz()">
-        <span class="icone-atalho" aria-hidden="true">🎯</span>
+        <span class="icone-atalho" aria-hidden="true"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-target"></use></svg></span>
         <span class="texto-atalho"><strong>Quiz rápido</strong><small>Revise suas palavras</small></span>
       </button>
       <button class="atalho" onclick="abrirAgendamento()">
-        <span class="icone-atalho" aria-hidden="true">📅</span>
+        <span class="icone-atalho" aria-hidden="true"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-calendar-plus"></use></svg></span>
         <span class="texto-atalho"><strong>Agendar aula</strong><small>Escolha um horário</small></span>
       </button>
       <button class="atalho" id="btn-sala-aula" onclick="abrirSalaDeAula()">
-        <span class="icone-atalho" aria-hidden="true">🏫</span>
+        <span class="icone-atalho" aria-hidden="true"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-school"></use></svg></span>
         <span class="texto-atalho"><strong>Sala de aula</strong><small>Link e materiais</small></span>
       </button>
     </section>
@@ -100,7 +100,7 @@
       <div class="modal-conteudo">
         <div class="modal-cabecalho">
           <h3>Quiz rápido</h3>
-          <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharQuiz()">✕</button>
+          <button type="button" class="btn-fechar-modal" title="Fechar" aria-label="Fechar" onclick="fecharQuiz()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-x"></use></svg></button>
         </div>
         <p style="color:var(--ink-soft, #666); font-size:0.85rem; margin-top:-0.4rem;">Complete a frase com a palavra certa.</p>
         <div id="corpo-quiz"></div>
@@ -111,7 +111,7 @@
       <div class="modal-conteudo">
         <div class="modal-cabecalho">
           <h3 id="titulo-notificacoes">Notificações</h3>
-          <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharNotificacoes()">✕</button>
+          <button type="button" class="btn-fechar-modal" title="Fechar" aria-label="Fechar" onclick="fecharNotificacoes()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-x"></use></svg></button>
         </div>
         <div id="lista-notificacoes"></div>
       </div>
@@ -121,7 +121,7 @@
       <div class="modal-conteudo">
         <div class="modal-cabecalho">
           <h3>Meu perfil</h3>
-          <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharPerfil()">✕</button>
+          <button type="button" class="btn-fechar-modal" title="Fechar" aria-label="Fechar" onclick="fecharPerfil()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-x"></use></svg></button>
         </div>
         <p class="dica-perfil">Seu professor usa esses dados pra entrar em contato, por exemplo se precisar cancelar ou remarcar uma aula.</p>
         <div class="campo-perfil">
@@ -163,7 +163,7 @@
       <div class="modal-conteudo modal-largo">
         <div class="modal-cabecalho">
           <h3>Agendar aula</h3>
-          <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharAgendamento()">✕</button>
+          <button type="button" class="btn-fechar-modal" title="Fechar" aria-label="Fechar" onclick="fecharAgendamento()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-x"></use></svg></button>
         </div>
         <div id="corpo-agendamento"></div>
       </div>

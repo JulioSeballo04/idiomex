@@ -48,7 +48,7 @@ html[data-tema="noturno"] .slogan-app { color: #5CCFB0; }
 
 /* ---------- Saudação ---------- */
 .boas-vindas { margin-bottom: 1.3rem; }
-.boas-vindas .eyebrow { text-transform: none; letter-spacing: 0.02em; font-size: 0.85rem; }
+.boas-vindas .eyebrow { text-transform: none; letter-spacing: 0; font-size: 1rem; font-weight: 600; color: var(--acento-forte); }
 .tela-letra .boas-vindas .eyebrow { text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.08em; }
 .boas-vindas h1 { font-size: 2.1rem; margin: 0.1em 0 0; }
 .tela-letra .boas-vindas h1 { font-size: 1.6rem; }
@@ -457,7 +457,6 @@ html[data-tema="noturno"] .btn-destaque { color: #223247; }
   padding: 0.65em 0.9em;
   transition: background 0.15s, color 0.15s;
 }
-.abas-professor .aba-tipo[data-icone]::before { content: attr(data-icone); }
 .abas-professor .aba-tipo:hover { color: var(--acento-forte); }
 .abas-professor .aba-tipo.ativa { background: var(--acento); color: #fff; }
 .abas-professor .aba-tipo.ativa .contador-pedidos { box-shadow: 0 0 0 2px var(--acento); }
@@ -656,3 +655,35 @@ html[data-tema="noturno"] .lista-resumo .tom-alerta { color: #F08A75; }
   padding: 1rem 1.1rem;
   margin-top: 0;
 }
+
+/* ============================================================
+   ÍCONES NAS PÁGINAS INICIAIS
+   ============================================================ */
+.icone-atalho { color: var(--acento-forte); }
+.icone-atalho .icone { width: 22px; height: 22px; }
+.tela-letra .icone-atalho .icone { width: 18px; height: 18px; }
+.icone-numero { color: var(--acento); line-height: 0; }
+.icone-numero .icone { width: 18px; height: 18px; }
+.acoes-topo .btn-icone .icone,
+.btn-perfil .icone,
+.btn-sair .icone { width: 1.1em; height: 1.1em; }
+.btn-perfil, .btn-sair { display: inline-flex; align-items: center; gap: 0.45em; }
+.btn-notificacoes { display: inline-flex; align-items: center; justify-content: center; }
+.acao-chip-codigo .icone { width: 0.95em; height: 0.95em; }
+.abas-professor .aba-tipo .icone { width: 1.05em; height: 1.05em; }
+.letra-tab .icone { width: 18px; height: 18px; vertical-align: middle; }
+.icone-notificacao { display: inline-flex; color: var(--acento-forte); }
+.icone-notificacao .icone { width: 20px; height: 20px; }
+.btn-visto .icone { width: 1em; height: 1em; vertical-align: middle; }
+.aviso-inativos .icone, .aviso-traducao .icone { vertical-align: -0.2em; }
+.cal-nota .icone, .legenda-nota .icone { width: 0.85em; height: 0.85em; vertical-align: -0.1em; }
+.cal-nav button .icone { vertical-align: middle; }
+.passo-circulo .icone { width: 0.9em; height: 0.9em; }
+.selo-sucesso .icone { width: 26px; height: 26px; }
+.marca-ativa .icone { width: 0.95em; height: 0.95em; vertical-align: -0.15em; }
+.btn-falar .icone, .btn-falar-frase .icone { width: 1em; height: 1em; vertical-align: -0.15em; color: var(--acento-forte); }
+.btn-editar-palavra .icone, .btn-editar-traducao .icone, .remover .icone,
+.btn-remover-aluno .icone, .btn-remover-palavra-professor .icone, .remover-periodo .icone { width: 0.95em; height: 0.95em; vertical-align: -0.12em; }
+.icone-tipo-documento { display: inline-flex; color: var(--acento-forte); }
+.titulo-documento .icone { color: var(--acento-forte); margin-right: 0.15em; }
+.icone-audio { display: inline-flex; color: var(--acento-forte); }

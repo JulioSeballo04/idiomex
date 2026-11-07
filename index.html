@@ -56,7 +56,7 @@
       </div>
       <!-- O código vem logo depois de "Sou", em destaque: sem ele o aluno não cria a conta -->
       <div class="campo campo-codigo-destaque" id="campo-codigo">
-        <label for="cadCodigo">🔑 Código do seu professor <span class="obrigatorio">obrigatório</span></label>
+        <label for="cadCodigo"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-key-round"></use></svg> Código do seu professor <span class="obrigatorio">obrigatório</span></label>
         <input type="text" id="cadCodigo" placeholder="Ex: PROF-8X2K" autocomplete="off" autocapitalize="characters"
           oninput="this.closest('.campo-codigo-destaque').classList.remove('faltando')">
         <p class="dica-codigo">Peça o código ao seu professor <strong>antes</strong> de criar a conta — é ele que liga a sua conta à dele.</p>
