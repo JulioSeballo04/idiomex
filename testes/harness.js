@@ -29,7 +29,7 @@ const FB = path.join(__dirname, 'node_modules/firebase-site');
 
 // Servidor de arquivos estáticos do site (sem dependências)
 const TIPOS = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.png': 'image/png',
-  '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
+  '.ico': 'image/x-icon', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
 function subirSite() {
   return new Promise((resolve) => {
     const servidor = http.createServer((req, res) => {

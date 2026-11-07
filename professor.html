@@ -38,14 +38,14 @@
         <span class="slogan-app">Sua Conexão com o Mundo</span>
       </div>
       <div class="acoes-topo">
-        <button class="btn btn-secundario btn-icone btn-notificacoes" id="btn-notificacoes" aria-label="Notificações" title="Notificações" onclick="abrirNotificacoesProfessor()">🔔<span class="contador-notificacoes" id="contador-notificacoes" hidden>0</span></button>
+        <button class="btn btn-secundario btn-icone btn-notificacoes" id="btn-notificacoes" aria-label="Notificações" title="Notificações" onclick="abrirNotificacoesProfessor()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-bell"></use></svg><span class="contador-notificacoes" id="contador-notificacoes" hidden>0</span></button>
         <div class="seletor-tema" id="seletor-tema">
           <button class="btn-tema" type="button" title="Mudar cores do app" onclick="alternarMenuTema()">
             <span class="ponto-tema-atual" id="ponto-tema-atual"></span>
           </button>
           <div class="menu-tema oculto" id="menu-tema"></div>
         </div>
-        <button class="btn btn-secundario btn-sair" onclick="sair()">Sair</button>
+        <button class="btn btn-secundario btn-sair" onclick="sair()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-log-out"></use></svg><span>Sair</span></button>
       </div>
     </header>
 
@@ -57,7 +57,7 @@
       <div class="codigo-topo">
         <span class="rotulo-codigo-topo">Código para seus alunos</span>
         <button type="button" class="chip-codigo" title="Copiar o código" onclick="copiarCodigo('status-copiar-topo')">
-          <strong id="codigo-topo">...</strong><span class="acao-chip-codigo">Copiar</span>
+          <strong id="codigo-topo">...</strong><span class="acao-chip-codigo"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-copy"></use></svg>Copiar</span>
         </button>
         <span class="status-msg" id="status-copiar-topo"></span>
       </div>
@@ -67,7 +67,7 @@
       <div class="modal-conteudo">
         <div class="modal-cabecalho">
           <h3>Notificações</h3>
-          <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharNotificacoesProfessor()">✕</button>
+          <button type="button" class="btn-fechar-modal" title="Fechar" aria-label="Fechar" onclick="fecharNotificacoesProfessor()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-x"></use></svg></button>
         </div>
         <div id="lista-notificacoes"></div>
       </div>
@@ -84,18 +84,18 @@
     </div>
 
     <nav class="abas-tipo abas-professor" aria-label="Seções do painel">
-      <button class="aba-tipo ativa" id="btn-aba-agenda" onclick="mostrarAbaProfessor('agenda')" data-icone="📅">Agenda</button>
-      <button class="aba-tipo" id="btn-aba-alunos" onclick="mostrarAbaProfessor('alunos')" data-icone="👥">Meus Alunos</button>
-      <button class="aba-tipo" id="btn-aba-sala" onclick="mostrarAbaProfessor('sala')" data-icone="📚">Documentos</button>
-      <button class="aba-tipo" id="btn-aba-config" onclick="mostrarAbaProfessor('config')" data-icone="⚙️">Configurações</button>
+      <button class="aba-tipo ativa" id="btn-aba-agenda" onclick="mostrarAbaProfessor('agenda')"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-calendar"></use></svg>Agenda</button>
+      <button class="aba-tipo" id="btn-aba-alunos" onclick="mostrarAbaProfessor('alunos')"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-users"></use></svg>Meus Alunos</button>
+      <button class="aba-tipo" id="btn-aba-sala" onclick="mostrarAbaProfessor('sala')"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-folder-open"></use></svg>Documentos</button>
+      <button class="aba-tipo" id="btn-aba-config" onclick="mostrarAbaProfessor('config')"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-settings"></use></svg>Configurações</button>
     </nav>
 
     <!-- AGENDA -->
     <!-- DOCUMENTOS: Documentos de aula (biblioteca do professor) e Banco de dados -->
     <div id="painel-aba-sala" class="oculto">
       <div class="abas-detalhe abas-sala-professor" role="tablist">
-        <button class="aba-detalhe ativa" id="btn-janela-documentos" onclick="mostrarJanelaSala('documentos')">📚 Documentos de aula</button>
-        <button class="aba-detalhe" id="btn-janela-banco" onclick="mostrarJanelaSala('banco')">🗄️ Banco de dados</button>
+        <button class="aba-detalhe ativa" id="btn-janela-documentos" onclick="mostrarJanelaSala('documentos')"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-library"></use></svg>Documentos de aula</button>
+        <button class="aba-detalhe" id="btn-janela-banco" onclick="mostrarJanelaSala('banco')"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-database"></use></svg>Banco de dados</button>
       </div>
 
       <div id="janela-documentos">
@@ -118,7 +118,7 @@
 
         <div class="sala-secao">
           <h4>Meus documentos</h4>
-          <input type="text" class="busca-sala" id="busca-biblioteca" placeholder="🔎 Buscar por título ou nome do arquivo..." oninput="buscarNaBiblioteca(this.value)">
+          <input type="text" class="busca-sala" id="busca-biblioteca" placeholder="Buscar por título ou nome do arquivo..." oninput="buscarNaBiblioteca(this.value)">
           <div id="lista-biblioteca"></div>
         </div>
       </div>
@@ -127,11 +127,11 @@
         <div class="sala-secao">
           <div class="cabecalho-banco">
             <h4>Documentos nas janelas dos alunos</h4>
-            <button type="button" class="btn btn-secundario btn-mini" onclick="carregarBancoDeDados()">↻ Atualizar</button>
+            <button type="button" class="btn btn-secundario btn-mini" onclick="carregarBancoDeDados()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-refresh-cw"></use></svg>Atualizar</button>
           </div>
           <p class="dica-plano">Tudo o que você deixou para os alunos: os arquivos e links da sala de cada aluno e os Documentos de aula que eles podem ver.</p>
           <div class="filtros-banco">
-            <input type="text" class="busca-sala" id="busca-banco" placeholder="🔎 Buscar documento..." oninput="buscarNoBanco(this.value)">
+            <input type="text" class="busca-sala" id="busca-banco" placeholder="Buscar documento..." oninput="buscarNoBanco(this.value)">
             <select id="filtro-aluno-banco" onchange="filtrarBancoPorAluno(this.value)" title="Filtrar por aluno"></select>
           </div>
           <div id="lista-banco"></div>
@@ -141,8 +141,8 @@
 
     <div id="painel-aba-agenda">
       <div class="agenda-topo">
-        <button class="btn btn-secundario" onclick="abrirConfigAgenda()">⚙️ Configurar disponibilidade</button>
-        <button class="btn btn-secundario" onclick="abrirMarcarAula()">Marcar aula para um aluno</button>
+        <button class="btn btn-secundario" onclick="abrirConfigAgenda()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-sliders-horizontal"></use></svg>Configurar disponibilidade</button>
+        <button class="btn btn-secundario" onclick="abrirMarcarAula()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-calendar-plus"></use></svg>Marcar aula para um aluno</button>
       </div>
       <div id="painel-hoje-professor"></div>
       <!-- Calendário à esquerda; ao lado, o formulário "Marcar aula" e o detalhe do dia escolhido -->
@@ -150,52 +150,6 @@
         <div id="grade-calendario-professor"></div>
         <div class="coluna-lateral-agenda">
           <section id="resumo-mes-professor" class="cartao-secao resumo-mes" aria-live="polite"></section>
-          <div id="modal-marcar-aula" class="modal-oculto">
-            <div class="modal-conteudo modal-largo">
-              <div class="modal-cabecalho">
-                <h3>Marcar aula</h3>
-                <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharMarcarAula()">✕</button>
-              </div>
-              <div class="campo-perfil">
-                <label for="marcar-aluno">Aluno</label>
-                <select id="marcar-aluno" onchange="trocarAlunoMarcarAula()"></select>
-              </div>
-              <div class="campo-perfil">
-                <label for="marcar-data">Dia <span class="dica-campo">(ou clique no calendário)</span></label>
-                <input type="date" id="marcar-data" onchange="selecionarDiaMarcarAula()">
-              </div>
-              <div class="campo-perfil">
-                <label>Horário</label>
-                <div id="marcar-slots"></div>
-                <div class="horario-manual">
-                  <button type="button" class="link-trocar" id="btn-outro-horario" onclick="alternarHorarioManual()">Outro horário (fora da sua disponibilidade)</button>
-                  <input type="time" id="marcar-hora" hidden>
-                </div>
-              </div>
-              <div class="linha-marcar-aula">
-                <div class="campo-perfil">
-                  <label for="marcar-modalidade">Modalidade</label>
-                  <select id="marcar-modalidade"></select>
-                </div>
-                <div class="campo-perfil campo-duracao-marcar">
-                  <label for="marcar-duracao">Duração (min)</label>
-                  <input type="text" inputmode="numeric" id="marcar-duracao" maxlength="3" placeholder="padrão">
-                </div>
-                <div class="campo-perfil" id="marcar-idioma-wrap">
-                  <label for="marcar-idioma">Idioma</label>
-                  <select id="marcar-idioma" onchange="atualizarReposicaoMarcarAula(); selecionarDiaMarcarAula()"></select>
-                </div>
-              </div>
-              <label class="opcao-reposicao-marcar" id="marcar-reposicao-wrap" hidden>
-                <input type="checkbox" id="marcar-reposicao"> É reposição (desconta a duração da aula — <span id="marcar-reposicao-saldo"></span>)
-              </label>
-              <label class="opcao-reposicao-marcar" id="marcar-whatsapp-wrap" hidden>
-                <input type="checkbox" id="marcar-whatsapp"> Enviar a confirmação para o WhatsApp do aluno
-              </label>
-              <button class="btn btn-primario" onclick="confirmarMarcarAula()">Marcar aula</button>
-              <p class="status-msg" id="status-marcar-aula"></p>
-            </div>
-          </div>
           <div id="detalhe-dia-professor"></div>
         </div>
       </div>
@@ -265,11 +219,58 @@
       </div>
     </div>
 
+    <div id="modal-marcar-aula" class="modal-oculto">
+      <div class="modal-conteudo modal-largo modal-marcar">
+        <div class="modal-cabecalho">
+          <h3>Marcar aula</h3>
+          <button type="button" class="btn-fechar-modal" title="Fechar" aria-label="Fechar" onclick="fecharMarcarAula()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-x"></use></svg></button>
+        </div>
+        <div class="campo-perfil">
+          <label for="marcar-aluno">Aluno</label>
+          <select id="marcar-aluno" onchange="trocarAlunoMarcarAula()"></select>
+        </div>
+        <div class="campo-perfil">
+          <label for="marcar-data">Dia</label>
+          <input type="date" id="marcar-data" onchange="selecionarDiaMarcarAula()">
+        </div>
+        <div class="campo-perfil">
+          <label>Horário</label>
+          <div id="marcar-slots"></div>
+          <div class="horario-manual">
+            <button type="button" class="link-trocar" id="btn-outro-horario" onclick="alternarHorarioManual()">Outro horário (fora da sua disponibilidade)</button>
+            <input type="time" id="marcar-hora" hidden>
+          </div>
+        </div>
+        <div class="linha-marcar-aula">
+          <div class="campo-perfil">
+            <label for="marcar-modalidade">Modalidade</label>
+            <select id="marcar-modalidade"></select>
+          </div>
+          <div class="campo-perfil campo-duracao-marcar">
+            <label for="marcar-duracao">Duração (min)</label>
+            <input type="text" inputmode="numeric" id="marcar-duracao" maxlength="3" placeholder="padrão">
+          </div>
+          <div class="campo-perfil" id="marcar-idioma-wrap">
+            <label for="marcar-idioma">Idioma</label>
+            <select id="marcar-idioma" onchange="atualizarReposicaoMarcarAula(); selecionarDiaMarcarAula()"></select>
+          </div>
+        </div>
+        <label class="opcao-reposicao-marcar" id="marcar-reposicao-wrap" hidden>
+          <input type="checkbox" id="marcar-reposicao"> É reposição (desconta a duração da aula — <span id="marcar-reposicao-saldo"></span>)
+        </label>
+        <label class="opcao-reposicao-marcar" id="marcar-whatsapp-wrap" hidden>
+          <input type="checkbox" id="marcar-whatsapp"> Enviar a confirmação para o WhatsApp do aluno
+        </label>
+        <button class="btn btn-primario" onclick="confirmarMarcarAula()">Marcar aula</button>
+        <p class="status-msg" id="status-marcar-aula"></p>
+      </div>
+    </div>
+
     <div id="modal-config-agenda" class="modal-oculto">
       <div class="modal-conteudo modal-largo">
         <div class="modal-cabecalho">
           <h3>Configurar disponibilidade</h3>
-          <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharConfigAgenda()">✕</button>
+          <button type="button" class="btn-fechar-modal" title="Fechar" aria-label="Fechar" onclick="fecharConfigAgenda()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-x"></use></svg></button>
         </div>
         <div class="config-alvo-idioma" id="config-alvo-idioma" hidden>
           <label>Configurações de

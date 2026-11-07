@@ -14,13 +14,13 @@
 // ============================================================
 
 const CATEGORIAS_ARQUIVO = {
-  pdf: { nome: "PDF", plural: "PDFs", icone: "📄" },
-  imagem: { nome: "Imagem", plural: "Imagens", icone: "🖼️" },
-  video: { nome: "Vídeo", plural: "Vídeos", icone: "🎬" },
-  audio: { nome: "Áudio", plural: "Áudios", icone: "🎧" },
-  texto: { nome: "Texto", plural: "Textos", icone: "📝" },
-  link: { nome: "Link", plural: "Links", icone: "🔗" },
-  outro: { nome: "Outro", plural: "Outros", icone: "📎" }
+  pdf: { nome: "PDF", plural: "PDFs", icone: "file-text" },
+  imagem: { nome: "Imagem", plural: "Imagens", icone: "image" },
+  video: { nome: "Vídeo", plural: "Vídeos", icone: "clapperboard" },
+  audio: { nome: "Áudio", plural: "Áudios", icone: "headphones" },
+  texto: { nome: "Texto", plural: "Textos", icone: "notebook-pen" },
+  link: { nome: "Link", plural: "Links", icone: "link" },
+  outro: { nome: "Outro", plural: "Outros", icone: "paperclip" }
 };
 
 // Categoria de um arquivo pelo tipo (MIME) e, sem ele, pela extensão do nome
@@ -84,7 +84,7 @@ function garantirModalVisualizador() {
     <div class="modal-conteudo modal-visualizador">
       <div class="modal-cabecalho">
         <h3 id="titulo-visualizador"></h3>
-        <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharVisualizador()">✕</button>
+        <button type="button" class="btn-fechar-modal" title="Fechar" aria-label="Fechar" onclick="fecharVisualizador()">${icone("x")}</button>
       </div>
       <div id="ferramentas-visualizador" class="ferramentas-visualizador"></div>
       <div id="corpo-visualizador" class="corpo-visualizador"></div>
@@ -297,7 +297,7 @@ async function abrirVisualizador(docRef, documento, permitirBaixar) {
     corpo.innerHTML = `<video class="player-documento" controls controlsList="nodownload noremoteplayback" playsinline preload="metadata"></video>`;
     corpo.querySelector("video").src = urlDoVisualizador;
   } else if (categoria === "audio") {
-    corpo.innerHTML = `<div class="player-audio"><span class="icone-audio">🎧</span><audio class="player-documento" controls controlsList="nodownload" preload="metadata"></audio></div>`;
+    corpo.innerHTML = `<div class="player-audio"><span class="icone-audio">${icone("headphones", "icone-grande")}</span><audio class="player-documento" controls controlsList="nodownload" preload="metadata"></audio></div>`;
     corpo.querySelector("audio").src = urlDoVisualizador;
   } else if (categoria === "imagem") {
     corpo.innerHTML = `<img class="imagem-documento" alt="" draggable="false">`;
@@ -391,7 +391,7 @@ function montarFiltroDeTipos(documentos, filtroAtual, aoFiltrar) {
       ${rotulo} <span class="contagem-tipo">${qtd}</span></button>`;
   return `<div class="filtro-tipos-documento" role="tablist">
     ${chip("", "Todos", documentos.length)}
-    ${Object.keys(CATEGORIAS_ARQUIVO).filter((c) => contagem[c]).map((c) => chip(c, `${CATEGORIAS_ARQUIVO[c].icone} ${CATEGORIAS_ARQUIVO[c].plural}`, contagem[c])).join("")}
+    ${Object.keys(CATEGORIAS_ARQUIVO).filter((c) => contagem[c]).map((c) => chip(c, `${icone(CATEGORIAS_ARQUIVO[c].icone)} ${CATEGORIAS_ARQUIVO[c].plural}`, contagem[c])).join("")}
   </div>`;
 }
 

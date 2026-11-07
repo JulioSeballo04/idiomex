@@ -12,6 +12,12 @@ function escapeHtml(texto) {
   return div.innerHTML;
 }
 
+// Ícone da biblioteca Lucide (assets/icones.svg). Decorativo: o texto ou o title/aria-label
+// do botão é que diz o que ele faz. Ex.: icone("bell"), icone("x", "icone-grande").
+function icone(nome, classe = "") {
+  return `<svg class="icone${classe ? " " + classe : ""}" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-${nome}"></use></svg>`;
+}
+
 // Redesenha um pedaço da tela sem perder o que a pessoa está digitando. As telas
 // são redesenhadas inteiras a cada atualização em tempo real (palavra nova de um
 // aluno, aula marcada...) — sem isso, um recado ou anotação pela metade sumia, e
@@ -145,7 +151,7 @@ function perguntar(texto, valorInicial) {
 
 window.alert = (texto) => { avisar(String(texto === undefined ? "" : texto)); };
 
-// Esc fecha a janela (modal) que estiver aberta, como o botão ✕ dela
+// Esc fecha a janela (modal) que estiver aberta, como o botão de fechar dela
 document.addEventListener("keydown", (evento) => {
   if (evento.key !== "Escape") return;
   const aberto = document.querySelector('[id^="modal-"]:not(.modal-oculto)');
@@ -610,7 +616,7 @@ function confirmarComWhatsapp(opcoes) {
     modal.id = "modal-confirmar-whatsapp";
     modal.className = "modal-oculto";
     modal.innerHTML = `<div class="modal-conteudo"><div class="modal-cabecalho"><h3 id="titulo-confirmar-whatsapp"></h3>
-      <button type="button" class="btn-fechar-modal" title="Fechar" onclick="document.getElementById('modal-confirmar-whatsapp').classList.add('modal-oculto')">✕</button></div>
+      <button type="button" class="btn-fechar-modal" title="Fechar" aria-label="Fechar" onclick="document.getElementById('modal-confirmar-whatsapp').classList.add('modal-oculto')">${icone("x")}</button></div>
       <div id="corpo-confirmar-whatsapp"></div></div>`;
     document.body.appendChild(modal);
   }

@@ -51,8 +51,8 @@ function escutarNotificacoes(uid) {
     }, (e) => console.warn("Não foi possível carregar as notificações:", e));
 }
 
-const ICONES_NOTIFICACAO = { "credito-reposicao": "🎟️", "reposicao-aprovada": "✅", "reposicao-recusada": "❌",
-  "aula-nao-realizada": "🎟️", "aula-marcada": "📅", "palavra-adicionada": "📖", "documento-aula": "📚" };
+const ICONES_NOTIFICACAO = { "credito-reposicao": "ticket", "reposicao-aprovada": "circle-check", "reposicao-recusada": "circle-x",
+  "aula-nao-realizada": "ticket", "aula-marcada": "calendar-plus", "palavra-adicionada": "book-open", "documento-aula": "library" };
 
 // Cada notificação é de um idioma: o sino mostra só as do idioma que o aluno está
 // estudando agora. As antigas, de antes de existir o campo, contam como do primeiro
@@ -83,12 +83,12 @@ function renderizarNotificacoes() {
   if (!lista) return;
   lista.innerHTML = doIdioma.length ? doIdioma.map((n) => `
     <div class="item-notificacao${n.lida ? "" : " nao-lida"}">
-      <span class="icone-notificacao">${ICONES_NOTIFICACAO[n.tipo] || "🔔"}</span>
+      <span class="icone-notificacao">${icone(ICONES_NOTIFICACAO[n.tipo] || "bell")}</span>
       <div>
         <div>${escapeHtml(n.texto)}</div>
         <span class="data-msg">${n.criadoEm ? escapeHtml(n.criadoEm.toDate().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })) : ""}</span>
       </div>
-      <button type="button" class="btn-visto" title="Visto — tirar da lista" aria-label="Visto: tirar a notificação da lista" onclick="dispensarNotificacao('${n.id}')">✓</button>
+      <button type="button" class="btn-visto" title="Visto — tirar da lista" aria-label="Visto: tirar a notificação da lista" onclick="dispensarNotificacao('${n.id}')">${icone("check")}</button>
     </div>`).join("") : `<p class="vazio">Nenhuma notificação por enquanto.</p>`;
 }
 
@@ -104,7 +104,7 @@ async function abrirNotificacoes() {
   try { await lote.commit(); } catch (e) { console.warn("Não foi possível marcar as notificações como lidas:", e); }
 }
 
-// ✓ (visto): a notificação sai da lista
+// Botão "visto": a notificação sai da lista
 async function dispensarNotificacao(id) {
   const user = auth.currentUser;
   if (!user) return;
@@ -325,7 +325,7 @@ function montarIndiceLetras() {
 
   const inicio = document.createElement("button");
   inicio.className = "letra-tab" + (letraSelecionada === "INICIO" ? " ativa" : "");
-  inicio.textContent = "🏠";
+  inicio.innerHTML = icone("house");
   inicio.title = "Início";
   inicio.onclick = () => { fecharSalaDeAula(); letraSelecionada = "INICIO"; montarIndiceLetras(); renderizarTela(); };
   container.appendChild(inicio);
@@ -358,7 +358,7 @@ function renderizarTela() {
   document.body.classList.toggle("tela-letra", !noInicio);
 
   if (noInicio) {
-    eyebrowTopo.textContent = `${saudacaoDoPeriodo()} · ${IDIOMAS[idiomaDoAluno].nome}`;
+    eyebrowTopo.textContent = fraseDeBoasVindas(idiomaDoAluno);
     tituloTopo.textContent = nomeDoAlunoAtual || "Olá!";
     renderizarProgresso();
     renderizarPalavrasRecentes();
@@ -369,12 +369,25 @@ function renderizarTela() {
   renderizarPalavras();
 }
 
-function saudacaoDoPeriodo() {
-  const hora = new Date().getHours();
-  if (hora < 5) return "Boa noite";
-  if (hora < 12) return "Bom dia";
-  if (hora < 18) return "Boa tarde";
-  return "Boa noite";
+// Frase de boas-vindas no idioma que o aluno estuda, sorteada ao abrir a página
+// (fica a mesma até recarregar, pra não trocar a cada atualização da tela)
+const FRASES_BOAS_VINDAS = {
+  en: ["Welcome back!", "Great to see you!", "Ready to learn something new?", "Let's keep going!",
+    "Nice to have you back!", "Every word counts!", "Let's make today count!", "Keep up the great work!",
+    "Hello there!", "Time to practice!", "You're doing great!", "Small steps, big progress!"],
+  es: ["¡Bienvenido de nuevo!", "¡Qué bueno verte!", "¿Listo para aprender algo nuevo?", "¡Sigamos adelante!", "¡Cada palabra cuenta!"],
+  it: ["Bentornato!", "Che bello rivederti!", "Pronto a imparare qualcosa di nuovo?", "Andiamo avanti!", "Ogni parola conta!"],
+  fr: ["Bon retour !", "Ravi de te revoir !", "Prêt à apprendre quelque chose de nouveau ?", "On continue !", "Chaque mot compte !"],
+  de: ["Willkommen zurück!", "Schön, dich zu sehen!", "Bereit, etwas Neues zu lernen?", "Weiter geht's!", "Jedes Wort zählt!"],
+  ja: ["おかえりなさい！", "今日もがんばろう！", "新しい言葉を学ぼう！", "一歩ずつ進もう！"],
+  zh: ["欢迎回来！", "很高兴见到你！", "准备好学点新东西了吗？", "继续加油！"],
+  ko: ["다시 오신 것을 환영해요!", "만나서 반가워요!", "오늘도 힘내요!", "새로운 단어를 배워 봐요!"]
+};
+const frasesSorteadas = {};
+function fraseDeBoasVindas(idioma) {
+  const frases = FRASES_BOAS_VINDAS[idioma] || FRASES_BOAS_VINDAS.en;
+  if (!(idioma in frasesSorteadas)) frasesSorteadas[idioma] = frases[Math.floor(Math.random() * frases.length)];
+  return frasesSorteadas[idioma];
 }
 
 function irParaLetra(letra) {
@@ -395,16 +408,16 @@ function renderizarProgresso() {
   const mesAtual = dataDeHojeISO().slice(0, 7);
   const aulasNoMes = minhasAulasCache.filter((a) => a.status === "concluida" && (a.data || "").startsWith(mesAtual) &&
     (idiomasDisponiveis.length < 2 || aulaDoIdioma(a, idiomaDoAluno))).length;
-  const numero = (valor, rotulo, icone) => `
+  const numero = (valor, rotulo, nomeIcone) => `
     <div class="numero-progresso">
-      <span class="icone-numero" aria-hidden="true">${icone}</span>
+      <span class="icone-numero" aria-hidden="true">${icone(nomeIcone)}</span>
       <strong>${valor}</strong>
       <span>${rotulo}</span>
     </div>`;
   container.innerHTML =
-    numero(palavras.length, palavras.length === 1 ? "palavra aprendida" : "palavras aprendidas", "📚") +
-    numero(novasNaSemana, novasNaSemana === 1 ? "nova nesta semana" : "novas nesta semana", "✨") +
-    numero(aulasNoMes, aulasNoMes === 1 ? "aula feita no mês" : "aulas feitas no mês", "🎓");
+    numero(palavras.length, palavras.length === 1 ? "palavra aprendida" : "palavras aprendidas", "book-open") +
+    numero(novasNaSemana, novasNaSemana === 1 ? "nova nesta semana" : "novas nesta semana", "sparkles") +
+    numero(aulasNoMes, aulasNoMes === 1 ? "aula feita no mês" : "aulas feitas no mês", "graduation-cap");
 }
 
 // As últimas palavras adicionadas, como fichinhas: um toque leva pra letra dela
@@ -512,7 +525,7 @@ function desenharPalavras(grade) {
         const pt = typeof f === "string" ? "" : f.pt;
         // A tradução fica sempre no cartão, desfocada enquanto estiver oculta
         const traducao = pt ? `<br><span class="frase-traducao" aria-hidden="${!revelada}">${escapeHtml(pt)}</span>` : "";
-        return `<div class="frase-exemplo">"${escapeHtml(en)}" <button class="btn-falar-frase" type="button" title="Ouvir frase" onclick="falarFrase('${p.id}', ${indice})">🔊</button>${traducao}</div>`;
+        return `<div class="frase-exemplo">"${escapeHtml(en)}" <button class="btn-falar-frase" type="button" title="Ouvir frase" aria-label="Ouvir frase" onclick="falarFrase('${p.id}', ${indice})">${icone("volume-2")}</button>${traducao}</div>`;
       }).join("");
       const temTraducao = p.frasesExemplo.some((f) => typeof f !== "string" && f.pt);
       // Palavras antigas guardavam as frases sem tradução: dá pra gerar de novo, já traduzidas
@@ -520,11 +533,11 @@ function desenharPalavras(grade) {
         ? botaoVerTraducao(p.id, revelada)
         : frasesSendoGeradas.has(p.id)
           ? `<span class="btn-ver-traducao">Gerando frases com tradução...</span>`
-          : `<button class="btn-ver-traducao" onclick="tentarGerarFrasesDeNovo('${p.id}')">↻ Gerar frases com tradução</button>`;
+          : `<button class="btn-ver-traducao" onclick="tentarGerarFrasesDeNovo('${p.id}')">${icone("refresh-cw")} Gerar frases com tradução</button>`;
       frases = linhas + botaoRevelar;
     } else if (frasesTravadas(p)) {
       frases = `<div class="frase-exemplo">Não foi possível gerar frases de exemplo agora.
-        <button class="btn-tentar-frases" type="button" onclick="tentarGerarFrasesDeNovo('${p.id}')">↻ Tentar de novo</button>
+        <button class="btn-tentar-frases" type="button" onclick="tentarGerarFrasesDeNovo('${p.id}')">${icone("refresh-cw")} Tentar de novo</button>
         ${p.motivoFalhaFrases ? `<span class="motivo-falha-frases">Detalhe: ${escapeHtml(p.motivoFalhaFrases)}</span>` : ""}</div>`;
     } else {
       frases = `<div class="frase-exemplo">Gerando frases de exemplo...</div>`;
@@ -557,10 +570,10 @@ function desenharPalavras(grade) {
     }
 
     cartao.innerHTML = `
-      <button class="remover" title="Remover" onclick="removerPalavra('${p.id}')">✕</button>
-      <div class="palavra-en">${escapeHtml(p.palavraEn)} <button class="btn-falar" type="button" title="Ouvir pronúncia" onclick="falarPalavra('${p.id}')">🔊</button>
-        <button class="btn-editar-palavra" type="button" title="Corrigir a palavra" aria-label="Corrigir a palavra" onclick="editarPalavra('${p.id}')">✎</button></div>
-      <div class="palavra-pt">${escapeHtml(p.traducaoPt)} <button class="btn-editar-traducao" type="button" title="Corrigir tradução" aria-label="Corrigir tradução" onclick="editarTraducao('${p.id}')">✎</button></div>
+      <button class="remover" title="Remover" aria-label="Remover a palavra" onclick="removerPalavra('${p.id}')">${icone("x")}</button>
+      <div class="palavra-en">${escapeHtml(p.palavraEn)} <button class="btn-falar" type="button" title="Ouvir pronúncia" aria-label="Ouvir pronúncia" onclick="falarPalavra('${p.id}')">${icone("volume-2")}</button>
+        <button class="btn-editar-palavra" type="button" title="Corrigir a palavra" aria-label="Corrigir a palavra" onclick="editarPalavra('${p.id}')">${icone("pencil")}</button></div>
+      <div class="palavra-pt">${escapeHtml(p.traducaoPt)} <button class="btn-editar-traducao" type="button" title="Corrigir tradução" aria-label="Corrigir tradução" onclick="editarTraducao('${p.id}')">${icone("pencil")}</button></div>
       ${p.adicionadaPor ? `<span class="selo-palavra-professor">Adicionada pelo professor</span>` : ""}
       ${montarAvisoTraducao(p)}
       ${frases}
@@ -715,7 +728,7 @@ function montarAvisoTraducao(p) {
   const botoes = sugeridas.map((t, i) =>
     `<button type="button" class="btn-usar-traducao" onclick="usarTraducaoSugerida('${p.id}', ${i})">Usar "${escapeHtml(t)}"</button>`
   ).join("");
-  return `<div class="aviso-traducao">💡 Confira a tradução: a IA entende "${escapeHtml(p.palavraEn)}" como
+  return `<div class="aviso-traducao">${icone("lightbulb")} Confira a tradução: a IA entende "${escapeHtml(p.palavraEn)}" como
     <strong>${sugeridas.map(escapeHtml).join(", ")}</strong>.<div class="acoes-aviso-traducao">${botoes}</div></div>`;
 }
 
@@ -878,7 +891,7 @@ function renderizarQuiz() {
     <p class="quiz-frase">${escapeHtml(quizAtual.fraseComLacuna)}</p>
     <div class="quiz-opcoes" id="quiz-opcoes"></div>
     <p class="quiz-feedback" id="quiz-feedback"></p>
-    <button type="button" class="btn btn-secundario" id="btn-proxima-quiz" style="margin-top:0.8rem; display:none;" onclick="proximaPerguntaQuiz()">Próxima pergunta →</button>
+    <button type="button" class="btn btn-secundario" id="btn-proxima-quiz" style="margin-top:0.8rem; display:none;" onclick="proximaPerguntaQuiz()">Próxima pergunta ${icone("arrow-right")}</button>
   `;
   const container = document.getElementById("quiz-opcoes");
   quizAtual.opcoes.forEach((opcao) => {
@@ -900,7 +913,7 @@ function responderQuiz(botaoClicado, escolha) {
   if (!acertou) botaoClicado.classList.add("opcao-errada");
 
   document.getElementById("quiz-feedback").textContent = acertou
-    ? "Boa! Resposta certa. 🎉"
+    ? "Boa! Resposta certa."
     : `Quase! A resposta certa era "${quizAtual.respostaCerta}".`;
   document.getElementById("btn-proxima-quiz").style.display = "inline-block";
 }
@@ -1059,10 +1072,10 @@ function desenharSalaDeAula(corpo) {
     aoBuscar: "buscarDocumentos(this.value)", aoMudarPagina: "irParaPaginaDocumentos(%n)",
     vazio: "Nenhum documento ainda. Os materiais que o professor usar em aula aparecem aqui.",
     item: (d) => {
-        const icone = CATEGORIAS_ARQUIVO[categoriaDoDocumento(d)].icone;
+        const iconeDoc = icone(CATEGORIAS_ARQUIVO[categoriaDoDocumento(d)].icone);
         if (d.origem === "biblioteca") return `
           <div class="documento-aula">
-            <button class="titulo-documento link-arquivo" onclick="abrirDocumentoDaBiblioteca('${d.id}')">${icone} ${escapeHtml(d.titulo)}</button>
+            <button class="titulo-documento link-arquivo" onclick="abrirDocumentoDaBiblioteca('${d.id}')">${iconeDoc} ${escapeHtml(d.titulo)}</button>
             <span class="data-msg">${CATEGORIAS_ARQUIVO[categoriaDoDocumento(d)].nome} · ${formatarTamanhoArquivo(d.tamanho)}</span>
           </div>`;
         const aberto = notasDocumentoAbertas.has(d.id);
@@ -1077,8 +1090,8 @@ function desenharSalaDeAula(corpo) {
         return `
           <div class="documento-aula">
             ${d.url
-              ? `<a class="titulo-documento" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${icone} ${escapeHtml(d.titulo)}</a>`
-              : `<button class="titulo-documento link-arquivo" onclick="abrirArquivoDocumento('${d.id}')">${icone} ${escapeHtml(d.titulo)}</button>
+              ? `<a class="titulo-documento" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${iconeDoc} ${escapeHtml(d.titulo)}</a>`
+              : `<button class="titulo-documento link-arquivo" onclick="abrirArquivoDocumento('${d.id}')">${iconeDoc} ${escapeHtml(d.titulo)}</button>
                  <span class="data-msg">${escapeHtml(d.nomeArquivo)} · ${formatarTamanhoArquivo(d.tamanho)}</span>`}
             <button class="btn-notas-documento ${d.anotacao ? "tem-nota" : ""}" onclick="alternarNotasDocumento('${d.id}')">
               ${aberto ? "Fechar anotações" : d.anotacao ? "Ver anotações" : "Fazer anotações"}
@@ -1625,7 +1638,7 @@ function montarPassosAgendamento() {
   const atual = (passos.find((p) => !p.feito) || passos[passos.length - 1]).n;
   return `<div class="passos-agendamento">${passos.map((p) => `
     <div class="passo ${p.feito ? "feito" : (p.n === atual ? "atual" : "")}">
-      <span class="passo-circulo">${p.feito ? "✓" : p.n}</span><span class="passo-rotulo">${p.rotulo}</span>
+      <span class="passo-circulo">${p.feito ? icone("check") : p.n}</span><span class="passo-rotulo">${p.rotulo}</span>
     </div>`).join('<div class="passo-linha"></div>')}</div>`;
 }
 
@@ -1637,7 +1650,7 @@ function renderizarAgendamento() {
     const c = agendamento.confirmada;
     corpo.innerHTML = `
       <div class="agendamento-sucesso">
-        <div class="selo-sucesso${c.pedido ? " selo-pedido" : ""}">${c.pedido ? "⏳" : "✓"}</div>
+        <div class="selo-sucesso${c.pedido ? " selo-pedido" : ""}">${icone(c.pedido ? "hourglass" : "check")}</div>
         <h3>${c.pedido ? "Pedido de reposição enviado" : "Aula confirmada"}</h3>
         ${c.pedido ? `<p class="dica-pedido-enviado">O horário está reservado. Você recebe uma notificação quando o professor aprovar ou recusar.</p>` : ""}
         <p>${escapeHtml(rotuloDiaCurto(c.data))} às ${escapeHtml(c.hora)} · ${escolheIdiomaNoAgendamento() ? `${IDIOMAS[c.idioma].nome} · ` : ""}${c.modalidade === "online" ? "Online" : "Presencial"}${c.reposicao ? " · Reposição" : ""}</p>
@@ -1797,9 +1810,9 @@ function montarCalendarioAgendamento() {
   container.innerHTML = `
     <div class="cal-wrap">
       <div class="cal-head">
-        <div class="cal-nav"><button type="button" id="btn-cal-mes-anterior" ${eMesAtual ? "disabled" : ""} aria-label="Mês anterior">&larr;</button></div>
+        <div class="cal-nav"><button type="button" id="btn-cal-mes-anterior" ${eMesAtual ? "disabled" : ""} aria-label="Mês anterior">${icone("chevron-left")}</button></div>
         <div class="cal-title">${NOMES_MESES[mes]} de ${ano}</div>
-        <div class="cal-nav"><button type="button" id="btn-cal-mes-proximo" aria-label="Próximo mês">&rarr;</button></div>
+        <div class="cal-nav"><button type="button" id="btn-cal-mes-proximo" aria-label="Próximo mês">${icone("chevron-right")}</button></div>
       </div>
       <div class="cal-dow">${NOMES_DIAS_SEMANA_CURTO.map((d) => `<span>${d}</span>`).join("")}</div>
       <div class="cal-grid">${celulas.join("")}</div>

@@ -87,7 +87,7 @@ auth.onAuthStateChanged(async (user) => {
 // O sino mostra quantas ainda não foram lidas; abrir a lista marca todas como lidas.
 
 let notificacoesProfessorCache = [];
-const ICONES_NOTIFICACAO_PROFESSOR = { "aluno-marcou-aula": "📅", "aluno-pediu-reposicao": "🔔", "aluno-cancelou-aula": "❌" };
+const ICONES_NOTIFICACAO_PROFESSOR = { "aluno-marcou-aula": "calendar-plus", "aluno-pediu-reposicao": "ticket", "aluno-cancelou-aula": "circle-x" };
 
 function escutarNotificacoesProfessor(uid) {
   db.collection("usuarios").doc(uid).collection("notificacoes")
@@ -106,12 +106,12 @@ function renderizarNotificacoesProfessor() {
   document.getElementById("btn-notificacoes").setAttribute("aria-label", naoLidas ? `Notificações (${naoLidas} não lidas)` : "Notificações");
   document.getElementById("lista-notificacoes").innerHTML = notificacoesProfessorCache.length ? notificacoesProfessorCache.map((n) => `
     <div class="item-notificacao${n.lida ? "" : " nao-lida"}">
-      <span class="icone-notificacao">${ICONES_NOTIFICACAO_PROFESSOR[n.tipo] || "🔔"}</span>
+      <span class="icone-notificacao">${icone(ICONES_NOTIFICACAO_PROFESSOR[n.tipo] || "bell")}</span>
       <div>
         <div>${escapeHtml(n.texto)}</div>
         <span class="data-msg">${n.criadoEm ? escapeHtml(n.criadoEm.toDate().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })) : ""}</span>
       </div>
-      <button type="button" class="btn-visto" title="Visto — tirar da lista" aria-label="Visto: tirar a notificação da lista" onclick="dispensarNotificacaoProfessor('${n.id}')">✓</button>
+      <button type="button" class="btn-visto" title="Visto — tirar da lista" aria-label="Visto: tirar a notificação da lista" onclick="dispensarNotificacaoProfessor('${n.id}')">${icone("check")}</button>
     </div>`).join("") : `<p class="vazio">Nenhuma notificação por enquanto. Aqui aparecem as aulas que os alunos marcarem ou cancelarem.</p>`;
 }
 
@@ -125,7 +125,7 @@ async function abrirNotificacoesProfessor() {
   try { await lote.commit(); } catch (e) { console.warn("Não foi possível marcar as notificações como lidas:", e); }
 }
 
-// ✓ (visto): a notificação sai da lista
+// Botão "visto": a notificação sai da lista
 async function dispensarNotificacaoProfessor(id) {
   notificacoesProfessorCache = notificacoesProfessorCache.filter((n) => n.id !== id); // some na hora
   renderizarNotificacoesProfessor();
@@ -453,7 +453,7 @@ function renderizarVisaoGeralTurma() {
     </div>
     ${inativos.length > 0 ? `
       <div class="aviso-inativos">
-        ⚠ Sem palavra nova há mais de ${DIAS_INATIVIDADE} dias: ${inativos.map(escapeHtml).join(", ")}
+        ${icone("triangle-alert")} Sem palavra nova há mais de ${DIAS_INATIVIDADE} dias: ${inativos.map(escapeHtml).join(", ")}
       </div>
     ` : ""}
   `;
@@ -489,7 +489,7 @@ function desenharListaAlunos(lista) {
       </span>
       <span class="cabecalho-direita">
         <span class="contagem">${estado.palavras.length} palavra(s)</span>
-        <button class="btn-remover-aluno" type="button" title="Remover aluno" onclick="event.stopPropagation(); removerAlunoDoProfessor('${aluno.id}')">✕</button>
+        <button class="btn-remover-aluno" type="button" title="Remover aluno" onclick="event.stopPropagation(); removerAlunoDoProfessor('${aluno.id}')">${icone("x")}</button>
         <span class="seta-expandir">▾</span>
       </span>
     `;
@@ -828,7 +828,7 @@ function montarAbaVocabulario(alunoId) {
         const minha = p.adicionadaPor === professorIdAtual;
         return `
           <div class="cartao-palavra">
-            ${minha ? `<button class="btn-remover-palavra-professor" type="button" title="Remover palavra" aria-label="Remover a palavra ${escapeHtml(p.palavraEn)}" onclick="removerPalavraDoAluno('${alunoId}','${p.id}')">✕</button>` : ""}
+            ${minha ? `<button class="btn-remover-palavra-professor" type="button" title="Remover palavra" aria-label="Remover a palavra ${escapeHtml(p.palavraEn)}" onclick="removerPalavraDoAluno('${alunoId}','${p.id}')">${icone("x")}</button>` : ""}
             <div class="palavra-en">${escapeHtml(p.palavraEn)}</div>
             <div class="palavra-pt">${escapeHtml(p.traducaoPt)}</div>
             ${minha ? `<span class="selo-palavra-professor">Adicionada por você</span>` : ""}
@@ -1128,7 +1128,7 @@ function montarAbaSalaDeAula(alunoId) {
       </div>
       ${link ? `
         <div class="acoes-link-aula">
-          <a href="${escapeHtml(link)}" target="_blank" rel="noopener">Abrir a aula ↗</a>
+          <a href="${escapeHtml(link)}" target="_blank" rel="noopener">Abrir a aula ${icone("external-link")}</a>
           <button class="excluir" onclick="removerLinkAula('${alunoId}')">Remover link</button>
         </div>` : ""}
     </div>`;
@@ -1174,7 +1174,7 @@ function montarAbaSalaDeAula(alunoId) {
       <div class="linha-sala">
         ${arquivo
           ? `<span class="arquivo-escolhido">${escapeHtml(arquivo.name)} (${formatarTamanhoArquivo(arquivo.size)})
-               <button type="button" title="Tirar arquivo" onclick="escolherArquivoDocumento('${alunoId}', null)">✕</button></span>`
+               <button type="button" title="Tirar arquivo" aria-label="Tirar arquivo" onclick="escolherArquivoDocumento('${alunoId}', null)">${icone("x")}</button></span>`
           : `<label class="btn btn-secundario btn-escolher-arquivo">Escolher arquivo
                <input type="file" id="input-arquivo-documento-${alunoId}" hidden onchange="escolherArquivoDocumento('${alunoId}', this.files[0])">
              </label>
@@ -1411,7 +1411,7 @@ function rotuloQuandoAula(a, agora, hojeIso, amanhaIso) {
 function linhaAulaPainel(a, mostrarData) {
   const concluida = a.status === "concluida";
   const acoes = concluida
-    ? `<span class="selo-concluida">✓ Concluída</span><button class="btn btn-secundario btn-mini" onclick="desfazerConclusaoAula('${a.id}')">Desfazer</button>`
+    ? `<span class="selo-concluida">${icone("circle-check")} Concluída</span><button class="btn btn-secundario btn-mini" onclick="desfazerConclusaoAula('${a.id}')">Desfazer</button>`
     : `<button class="btn btn-secundario btn-mini" onclick="concluirAula('${a.id}')">Concluir</button><button class="excluir" onclick="cancelarAulaComoProfessor('${a.id}')">Cancelar</button>`;
   return `
     <div class="cartao-aula${concluida ? " aula-concluida" : ""}">
@@ -1540,7 +1540,7 @@ function renderizarHojeProfessor() {
       </div>` : ""}
     ${pedidos.length ? `
       <div class="cartao-pedidos-reposicao" id="pedidos-reposicao">
-        <h3>🔔 ${pedidos.length === 1 ? "1 pedido de reposição" : `${pedidos.length} pedidos de reposição`} para aprovar</h3>
+        <h3>${icone("ticket")} ${pedidos.length === 1 ? "1 pedido de reposição" : `${pedidos.length} pedidos de reposição`} para aprovar</h3>
         <p>O aluno marcou uma reposição sem ter crédito. O horário fica reservado até você decidir. Aprovar já conta como 1 crédito usado.</p>
         ${pedidos.map((a) => `
           <div class="cartao-aula">
@@ -1632,16 +1632,11 @@ function selecionarIdiomaProfessor(idioma) {
   renderizarAlunosSemApp();
 }
 
-// Contador de avisos na aba "Agenda" e no ícone da barra lateral: pedidos de
+// Contador de avisos na aba "Agenda": pedidos de
 // reposição, aulas para confirmar e alunos sem app esperando aula
 function atualizarContadorPedidos(qtd) {
   const aba = document.getElementById("btn-aba-agenda");
-  if (aba) aba.innerHTML = `Agenda${qtd ? ` <span class="contador-pedidos" title="Avisos da agenda">${qtd}</span>` : ""}`;
-  const lateral = document.getElementById("navlat-agenda");
-  if (lateral) {
-    lateral.innerHTML = `📅${qtd ? `<span class="contador-pedidos contador-lateral">${qtd}</span>` : ""}`;
-    lateral.title = qtd ? `Agenda — ${qtd} aviso(s)` : "Agenda";
-  }
+  if (aba) aba.innerHTML = `${icone("calendar")}Agenda${qtd ? ` <span class="contador-pedidos" title="Avisos da agenda">${qtd}</span>` : ""}`;
 }
 
 // Cria uma notificação para o aluno (sino na tela dele), do idioma a que ela se refere
@@ -1997,7 +1992,7 @@ function linhaPeriodoHtml(periodo) {
       <input type="time" class="periodo-inicio" value="${escapeHtml(periodo.inicio)}" aria-label="Início do período">
       <span>até</span>
       <input type="time" class="periodo-fim" value="${escapeHtml(periodo.fim)}" aria-label="Fim do período">
-      <button type="button" class="excluir remover-periodo" title="Remover período" aria-label="Remover período" onclick="removerPeriodo(this)">✕</button>
+      <button type="button" class="excluir remover-periodo" title="Remover período" aria-label="Remover período" onclick="removerPeriodo(this)">${icone("x")}</button>
     </div>`;
 }
 
@@ -2431,7 +2426,7 @@ function montarCalendarioProfessor() {
       <div class="${classes.join(" ")}" data-calday="${dataIso}">
         <span class="cal-num">${dia}</span>
         ${contagem > 0 ? `<span class="cal-dot">${contagem}</span>` : ""}
-        ${temNota ? `<span class="cal-nota" title="Tem anotação">✎</span>` : ""}
+        ${temNota ? `<span class="cal-nota" title="Tem anotação">${icone("pencil")}</span>` : ""}
         ${variosIdiomas && idiomasPorDia[dataIso] ? `<span class="cal-idiomas">${[...idiomasPorDia[dataIso]].map((id) => `<i style="background:${IDIOMAS[id].cor}" title="${IDIOMAS[id].nome}"></i>`).join("")}</span>` : ""}
       </div>
     `);
@@ -2455,9 +2450,9 @@ function montarCalendarioProfessor() {
   document.getElementById("grade-calendario-professor").innerHTML = `
     <div class="cal-wrap cal-wrap-professor">
       <div class="cal-head">
-        <div class="cal-nav"><button type="button" id="btn-cal-prof-anterior" aria-label="Mês anterior">&larr;</button></div>
+        <div class="cal-nav"><button type="button" id="btn-cal-prof-anterior" aria-label="Mês anterior">${icone("chevron-left")}</button></div>
         <div class="cal-title">${NOMES_MESES[mes]} de ${ano}${eMesAtual ? "" : ` <button type="button" class="link-trocar" id="btn-cal-prof-hoje">voltar para hoje</button>`}</div>
-        <div class="cal-nav"><button type="button" id="btn-cal-prof-proximo" aria-label="Próximo mês">&rarr;</button></div>
+        <div class="cal-nav"><button type="button" id="btn-cal-prof-proximo" aria-label="Próximo mês">${icone("chevron-right")}</button></div>
       </div>
       <div class="cal-dow">${NOMES_DIAS_SEMANA_CURTO.map((d) => `<span>${d}</span>`).join("")}</div>
       <div class="cal-grid">${celulas.join("")}</div>
@@ -2467,7 +2462,7 @@ function montarCalendarioProfessor() {
         <span><span class="dot dot-tem-aula"></span> Tem aula</span>
         <span><span class="dot dot-nao-atende"></span> Não atende</span>
         <span><span class="dot dot-ajustado"></span> Horário ajustado só nesse dia</span>
-        <span><span class="legenda-nota">✎</span> Tem anotação</span>
+        <span><span class="legenda-nota">${icone("pencil")}</span> Tem anotação</span>
         ${variosIdiomas ? idiomasAtuaisProfessor.map((id) => `<span><i class="dot" style="background:${IDIOMAS[id].cor}"></i> Aula de ${IDIOMAS[id].nome}</span>`).join("") : ""}
       </div>
     </div>
@@ -2493,12 +2488,6 @@ function montarCalendarioProfessor() {
     celula.onclick = () => {
       const dataIso = celula.dataset.calday;
       diaSelecionadoProfessor = diaSelecionadoProfessor === dataIso ? null : dataIso;
-      // Com o "Marcar aula" aberto ao lado, o dia clicado já vai para o formulário
-      const formularioAberto = !document.getElementById("modal-marcar-aula").classList.contains("modal-oculto");
-      if (formularioAberto) {
-        document.getElementById("marcar-data").value = dataIso;
-        selecionarDiaMarcarAula();
-      }
       montarCalendarioProfessor();
     };
   });
@@ -3057,14 +3046,13 @@ function abrirMarcarAula(alunoId, dataIso) {
   document.getElementById("status-marcar-aula").textContent = "";
   atualizarReposicaoMarcarAula();
   atualizarWhatsappMarcarAula();
-  // O formulário fica ao lado do calendário, na Agenda (pode ter sido aberto em "Meus Alunos")
+  // Abre numa janela; a Agenda fica atrás (pode ter sido aberta em "Meus Alunos")
   mostrarAbaProfessor("agenda");
   const painel = document.getElementById("modal-marcar-aula");
   painel.classList.remove("modal-oculto");
   // Só depois de visível e com o idioma escolhido: com o formulário escondido, os
   // horários não eram desenhados e o dia aberto ficava sem nenhum horário
   renderizarHorariosMarcarAula();
-  painel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 // Horários livres do dia, iguais aos que o aluno vê ao agendar: a disponibilidade do
