@@ -687,3 +687,26 @@ html[data-tema="noturno"] .lista-resumo .tom-alerta { color: #F08A75; }
 .icone-tipo-documento { display: inline-flex; color: var(--acento-forte); }
 .titulo-documento .icone { color: var(--acento-forte); margin-right: 0.15em; }
 .icone-audio { display: inline-flex; color: var(--acento-forte); }
+
+/* ---------- Frase de boas-vindas (aluno e professor) ---------- */
+.frase-boas-vindas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.55rem;
+  font-size: 1rem;
+  margin-bottom: 0.1rem;
+}
+.frase-bv { font-weight: 600; color: var(--acento-forte); }
+.frase-boas-vindas .traducao-bv { font-size: 0.9rem; }
+.btn-olho-bv {
+  background: none;
+  border: none;
+  padding: 0.25em;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  line-height: 0;
+}
+.btn-olho-bv:hover { color: var(--acento-forte); background: color-mix(in srgb, var(--acento) 12%, transparent); }
+.btn-olho-bv:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }

@@ -67,7 +67,7 @@ auth.onAuthStateChanged(async (user) => {
   // Boas-vindas no idioma que ensina (no escolhido no topo; ensinando vários, um deles sorteado)
   const idiomaDaSaudacao = idiomasAtuaisProfessor.includes(idiomaAtivoProfessor) ? idiomaAtivoProfessor :
     idiomasAtuaisProfessor[Math.floor(Math.random() * idiomasAtuaisProfessor.length)];
-  document.getElementById("eyebrow-professor").textContent = fraseDeBoasVindas(idiomaDaSaudacao, "professor");
+  montarBoasVindas(document.getElementById("eyebrow-professor"), idiomaDaSaudacao, "professor");
 
   const hoje = new Date();
   mesCalendarioProfessor = new Date(hoje.getFullYear(), hoje.getMonth(), 1);

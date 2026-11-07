@@ -357,8 +357,9 @@ function renderizarTela() {
   const noInicio = letraSelecionada === "INICIO";
   document.body.classList.toggle("tela-letra", !noInicio);
 
+  eyebrowTopo.hidden = noInicio; // no Início, a frase de boas-vindas fica no lugar
   if (noInicio) {
-    eyebrowTopo.textContent = fraseDeBoasVindas(idiomaDoAluno, "aluno");
+    montarBoasVindas(document.getElementById("frase-boas-vindas"), idiomaDoAluno, "aluno");
     tituloTopo.textContent = nomeDoAlunoAtual || "Olá!";
     renderizarProgresso();
     renderizarPalavrasRecentes();
@@ -418,12 +419,7 @@ function renderizarPalavrasRecentes() {
     </button>`).join("")}</div>`;
 }
 
-// Ícone de olho do botão "Ver tradução / Ocultar tradução". É sempre o mesmo olho:
-// com a tradução à mostra, um risco é desenhado por cima dele (olho riscado = ocultar).
-const ICONE_OLHO = `<svg class="icone-olho" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-  <g class="olho"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></g>
-  <line class="risco" x1="4" y1="4" x2="20" y2="20" pathLength="1"/>
-</svg>`;
+// ICONE_OLHO (o olho do "Ver tradução") fica em util.js: a saudação do topo também usa
 
 function botaoVerTraducao(id, revelada) {
   return `<button class="btn-ver-traducao btn-olho${revelada ? " revelada" : ""}" type="button" aria-pressed="${revelada}" onclick="alternarTraducao('${id}', this)">
