@@ -359,6 +359,16 @@ function dataDaqui(dias) {
     await prof.waitForSelector('.bloco-notas-documento:has-text("Past simple: verbo + ed")', { timeout: 5000 });
   });
 
+  await caso('boas-vindas: frase no idioma estudado com a tradução escondida atrás do olho', async () => {
+    await aluno.click('.letra-tab[title="Início"]');
+    await aluno.waitForSelector('#frase-boas-vindas .frase-bv', { timeout: 5000 });
+    esperar(await aluno.$('#frase-boas-vindas.traducoes-ocultas'), 'a tradução já começou à mostra');
+    await aluno.click('#frase-boas-vindas .btn-olho-bv');
+    esperar(!(await aluno.$('#frase-boas-vindas.traducoes-ocultas')), 'o olho não mostrou a tradução');
+    esperar((await aluno.textContent('#frase-boas-vindas .traducao-bv')).trim().length > 0, 'sem tradução');
+    await aluno.click('#frase-boas-vindas .btn-olho-bv'); // volta a esconder
+  });
+
   await caso('Sala de aula do aluno abre numa tela própria; o "voltar" do navegador volta ao Início', async () => {
     await aluno.click('.letra-tab[title="Início"]');
     await aluno.click('#btn-sala-aula');

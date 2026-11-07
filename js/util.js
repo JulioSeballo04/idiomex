@@ -159,6 +159,106 @@ document.addEventListener("keydown", (evento) => {
   if (fechar) fechar.click();
 });
 
+// Frase de boas-vindas no idioma estudado (aluno) ou ensinado (professor), com a
+// tradução em português escondida atrás do olho. Sorteada ao abrir a página e
+// mantida até recarregar, pra não trocar a cada atualização da tela.
+// Cada item: [frase no idioma, tradução].
+const FRASES_BOAS_VINDAS = {
+  aluno: {
+    en: [["Welcome back!", "Bem-vindo de volta!"], ["Great to see you!", "Que bom te ver!"],
+      ["Ready to learn something new?", "Pronto para aprender algo novo?"], ["Let's keep going!", "Vamos continuar!"],
+      ["Nice to have you back!", "Que bom que você voltou!"], ["Every word counts!", "Cada palavra conta!"],
+      ["Let's make today count!", "Vamos fazer o dia de hoje valer a pena!"], ["Keep up the great work!", "Continue com o ótimo trabalho!"],
+      ["Hello there!", "Olá!"], ["Time to practice!", "Hora de praticar!"], ["You're doing great!", "Você está indo muito bem!"],
+      ["Small steps, big progress!", "Pequenos passos, grande progresso!"]],
+    es: [["¡Bienvenido de nuevo!", "Bem-vindo de volta!"], ["¡Qué bueno verte!", "Que bom te ver!"],
+      ["¿Listo para aprender algo nuevo?", "Pronto para aprender algo novo?"], ["¡Sigamos adelante!", "Vamos em frente!"],
+      ["¡Cada palabra cuenta!", "Cada palavra conta!"]],
+    it: [["Bentornato!", "Bem-vindo de volta!"], ["Che bello rivederti!", "Que bom te ver de novo!"],
+      ["Pronto a imparare qualcosa di nuovo?", "Pronto para aprender algo novo?"], ["Andiamo avanti!", "Vamos em frente!"],
+      ["Ogni parola conta!", "Cada palavra conta!"]],
+    fr: [["Bon retour !", "Bem-vindo de volta!"], ["Ravi de te revoir !", "Que bom te ver de novo!"],
+      ["Prêt à apprendre quelque chose de nouveau ?", "Pronto para aprender algo novo?"], ["On continue !", "Vamos continuar!"],
+      ["Chaque mot compte !", "Cada palavra conta!"]],
+    de: [["Willkommen zurück!", "Bem-vindo de volta!"], ["Schön, dich zu sehen!", "Que bom te ver!"],
+      ["Bereit, etwas Neues zu lernen?", "Pronto para aprender algo novo?"], ["Weiter geht's!", "Vamos em frente!"],
+      ["Jedes Wort zählt!", "Cada palavra conta!"]],
+    ja: [["おかえりなさい！", "Bem-vindo de volta!"], ["今日もがんばろう！", "Vamos nos esforçar hoje também!"],
+      ["新しい言葉を学ぼう！", "Vamos aprender palavras novas!"], ["一歩ずつ進もう！", "Vamos passo a passo!"]],
+    zh: [["欢迎回来！", "Bem-vindo de volta!"], ["很高兴见到你！", "Que bom te ver!"],
+      ["准备好学点新东西了吗？", "Pronto para aprender algo novo?"], ["继续加油！", "Continue firme!"]],
+    ko: [["다시 오신 것을 환영해요!", "Bem-vindo de volta!"], ["만나서 반가워요!", "Que bom te ver!"],
+      ["오늘도 힘내요!", "Força hoje também!"], ["새로운 단어를 배워 봐요!", "Vamos aprender palavras novas!"]]
+  },
+  professor: {
+    en: [["Welcome back, teacher!", "Bem-vindo de volta, professor!"], ["Ready to inspire today?", "Pronto para inspirar hoje?"],
+      ["Great to see you!", "Que bom te ver!"], ["Your students are lucky to have you!", "Seus alunos têm sorte de ter você!"],
+      ["Let's make today a great class!", "Vamos fazer uma ótima aula hoje!"], ["Teaching is a superpower!", "Ensinar é um superpoder!"],
+      ["Hello, teacher!", "Olá, professor!"], ["Another day, another breakthrough!", "Mais um dia, mais uma conquista!"],
+      ["Thanks for all you do!", "Obrigado por tudo o que você faz!"], ["Let's get your week organized!", "Vamos organizar a sua semana!"]],
+    es: [["¡Bienvenido de nuevo, profe!", "Bem-vindo de volta, professor!"], ["¿Listo para inspirar hoy?", "Pronto para inspirar hoje?"],
+      ["¡Qué bueno verte!", "Que bom te ver!"], ["¡Tus alumnos tienen suerte de tenerte!", "Seus alunos têm sorte de ter você!"]],
+    it: [["Bentornato, prof!", "Bem-vindo de volta, professor!"], ["Pronto a ispirare oggi?", "Pronto para inspirar hoje?"],
+      ["Che bello rivederti!", "Que bom te ver de novo!"], ["I tuoi studenti sono fortunati ad averti!", "Seus alunos têm sorte de ter você!"]],
+    fr: [["Bon retour, prof !", "Bem-vindo de volta, professor!"], ["Prêt à inspirer aujourd'hui ?", "Pronto para inspirar hoje?"],
+      ["Ravi de te revoir !", "Que bom te ver de novo!"], ["Tes élèves ont de la chance de t'avoir !", "Seus alunos têm sorte de ter você!"]],
+    de: [["Willkommen zurück!", "Bem-vindo de volta!"], ["Bereit, heute zu inspirieren?", "Pronto para inspirar hoje?"],
+      ["Schön, dich zu sehen!", "Que bom te ver!"], ["Deine Schüler haben Glück mit dir!", "Seus alunos têm sorte de ter você!"]],
+    ja: [["おかえりなさい、先生！", "Bem-vindo de volta, professor!"], ["今日も素敵な授業を！", "Uma ótima aula hoje também!"],
+      ["お疲れさまです！", "Obrigado pelo seu trabalho!"]],
+    zh: [["欢迎回来，老师！", "Bem-vindo de volta, professor!"], ["今天也要精彩上课！", "Que a aula de hoje seja incrível!"],
+      ["老师辛苦了！", "Obrigado pelo seu esforço, professor!"]],
+    ko: [["다시 오신 것을 환영해요, 선생님!", "Bem-vindo de volta, professor!"], ["오늘도 멋진 수업 해요!", "Uma ótima aula hoje também!"],
+      ["선생님, 수고 많으세요!", "Obrigado pelo seu trabalho, professor!"]]
+  }
+};
+const frasesSorteadas = {};
+function fraseDeBoasVindas(idioma, quem = "aluno") {
+  const lista = FRASES_BOAS_VINDAS[quem] || FRASES_BOAS_VINDAS.aluno;
+  const frases = lista[idioma] || lista.en;
+  const chave = `${quem}:${idioma}`;
+  if (!(chave in frasesSorteadas)) frasesSorteadas[chave] = frases[Math.floor(Math.random() * frases.length)];
+  return frasesSorteadas[chave];
+}
+
+// Ícone de olho dos botões "ver tradução": o mesmo olho nos dois estados; com a
+// tradução à mostra, um risco é desenhado por cima (olho riscado = ocultar).
+const ICONE_OLHO = `<svg class="icone-olho" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+  <g class="olho"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></g>
+  <line class="risco" x1="4" y1="4" x2="20" y2="20" pathLength="1"/>
+</svg>`;
+
+// Desenha a frase de boas-vindas no elemento: a frase, a tradução desfocada e o olho.
+let traducaoBoasVindasRevelada = false;
+function montarBoasVindas(elemento, idioma, quem) {
+  if (!elemento) return;
+  const [frase, traducao] = fraseDeBoasVindas(idioma, quem);
+  const idiomaHtml = (IDIOMAS[idioma] || IDIOMAS.en).voz;
+  elemento.classList.add("frase-boas-vindas");
+  elemento.classList.toggle("traducoes-ocultas", !traducaoBoasVindasRevelada);
+  elemento.innerHTML = `
+    <span class="frase-bv" lang="${idiomaHtml}">${escapeHtml(frase)}</span>
+    <span class="frase-traducao traducao-bv" aria-hidden="${!traducaoBoasVindasRevelada}">${escapeHtml(traducao)}</span>
+    <button type="button" class="btn-olho btn-olho-bv${traducaoBoasVindasRevelada ? " revelada" : ""}" aria-pressed="${traducaoBoasVindasRevelada}"
+      title="${traducaoBoasVindasRevelada ? "Ocultar tradução" : "Ver tradução"}" aria-label="${traducaoBoasVindasRevelada ? "Ocultar tradução" : "Ver tradução"}"
+      onclick="alternarTraducaoBoasVindas(this)">${ICONE_OLHO}</button>`;
+}
+
+function alternarTraducaoBoasVindas(botao) {
+  traducaoBoasVindasRevelada = !traducaoBoasVindasRevelada;
+  const elemento = botao.closest(".frase-boas-vindas");
+  const rotulo = traducaoBoasVindasRevelada ? "Ocultar tradução" : "Ver tradução";
+  elemento.classList.toggle("traducoes-ocultas", !traducaoBoasVindasRevelada);
+  elemento.querySelector(".traducao-bv").setAttribute("aria-hidden", String(!traducaoBoasVindasRevelada));
+  botao.classList.toggle("revelada", traducaoBoasVindasRevelada);
+  botao.setAttribute("aria-pressed", String(traducaoBoasVindasRevelada));
+  botao.title = rotulo;
+  botao.setAttribute("aria-label", rotulo);
+  botao.classList.remove("piscando");
+  void botao.offsetWidth;
+  botao.classList.add("piscando");
+}
+
 // Lê um texto em voz alta usando a Web Speech API do navegador (sem custo,
 // sem depender de nenhuma API externa). Se o navegador não suportar, não faz nada.
 function falar(texto, idioma) {

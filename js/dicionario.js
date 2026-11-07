@@ -357,8 +357,9 @@ function renderizarTela() {
   const noInicio = letraSelecionada === "INICIO";
   document.body.classList.toggle("tela-letra", !noInicio);
 
+  eyebrowTopo.hidden = noInicio; // no Início, a frase de boas-vindas fica no lugar
   if (noInicio) {
-    eyebrowTopo.textContent = fraseDeBoasVindas(idiomaDoAluno);
+    montarBoasVindas(document.getElementById("frase-boas-vindas"), idiomaDoAluno, "aluno");
     tituloTopo.textContent = nomeDoAlunoAtual || "Olá!";
     renderizarProgresso();
     renderizarPalavrasRecentes();
@@ -367,27 +368,6 @@ function renderizarTela() {
     tituloTopo.textContent = `Palavras aprendidas com a inicial "${letraSelecionada}"`;
   }
   renderizarPalavras();
-}
-
-// Frase de boas-vindas no idioma que o aluno estuda, sorteada ao abrir a página
-// (fica a mesma até recarregar, pra não trocar a cada atualização da tela)
-const FRASES_BOAS_VINDAS = {
-  en: ["Welcome back!", "Great to see you!", "Ready to learn something new?", "Let's keep going!",
-    "Nice to have you back!", "Every word counts!", "Let's make today count!", "Keep up the great work!",
-    "Hello there!", "Time to practice!", "You're doing great!", "Small steps, big progress!"],
-  es: ["¡Bienvenido de nuevo!", "¡Qué bueno verte!", "¿Listo para aprender algo nuevo?", "¡Sigamos adelante!", "¡Cada palabra cuenta!"],
-  it: ["Bentornato!", "Che bello rivederti!", "Pronto a imparare qualcosa di nuovo?", "Andiamo avanti!", "Ogni parola conta!"],
-  fr: ["Bon retour !", "Ravi de te revoir !", "Prêt à apprendre quelque chose de nouveau ?", "On continue !", "Chaque mot compte !"],
-  de: ["Willkommen zurück!", "Schön, dich zu sehen!", "Bereit, etwas Neues zu lernen?", "Weiter geht's!", "Jedes Wort zählt!"],
-  ja: ["おかえりなさい！", "今日もがんばろう！", "新しい言葉を学ぼう！", "一歩ずつ進もう！"],
-  zh: ["欢迎回来！", "很高兴见到你！", "准备好学点新东西了吗？", "继续加油！"],
-  ko: ["다시 오신 것을 환영해요!", "만나서 반가워요!", "오늘도 힘내요!", "새로운 단어를 배워 봐요!"]
-};
-const frasesSorteadas = {};
-function fraseDeBoasVindas(idioma) {
-  const frases = FRASES_BOAS_VINDAS[idioma] || FRASES_BOAS_VINDAS.en;
-  if (!(idioma in frasesSorteadas)) frasesSorteadas[idioma] = frases[Math.floor(Math.random() * frases.length)];
-  return frasesSorteadas[idioma];
 }
 
 function irParaLetra(letra) {
@@ -439,12 +419,7 @@ function renderizarPalavrasRecentes() {
     </button>`).join("")}</div>`;
 }
 
-// Ícone de olho do botão "Ver tradução / Ocultar tradução". É sempre o mesmo olho:
-// com a tradução à mostra, um risco é desenhado por cima dele (olho riscado = ocultar).
-const ICONE_OLHO = `<svg class="icone-olho" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-  <g class="olho"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></g>
-  <line class="risco" x1="4" y1="4" x2="20" y2="20" pathLength="1"/>
-</svg>`;
+// ICONE_OLHO (o olho do "Ver tradução") fica em util.js: a saudação do topo também usa
 
 function botaoVerTraducao(id, revelada) {
   return `<button class="btn-ver-traducao btn-olho${revelada ? " revelada" : ""}" type="button" aria-pressed="${revelada}" onclick="alternarTraducao('${id}', this)">
