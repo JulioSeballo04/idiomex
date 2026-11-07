@@ -348,32 +348,81 @@ function montarIndiceLetras() {
   });
 }
 
-// Decide o que mostrar no topo e no corpo da página, dependendo da tela ativa
+// Decide o que mostrar no topo e no corpo da página, dependendo da tela ativa.
+// Na tela Início aparece o painel (próxima aula, progresso, recados, anotações);
+// nas telas de cada letra, só o formulário e as fichas daquela letra.
 function renderizarTela() {
-  const painelMensagens = document.getElementById("painel-mensagens");
-  const painelAnotacoes = document.getElementById("painel-anotacoes");
   const tituloTopo = document.getElementById("titulo-topo");
   const eyebrowTopo = document.getElementById("eyebrow-topo");
-  const contadorTotal = document.getElementById("contador-total");
+  const noInicio = letraSelecionada === "INICIO";
+  document.body.classList.toggle("tela-letra", !noInicio);
 
-  if (letraSelecionada === "INICIO") {
-    eyebrowTopo.textContent = `SEU VOCABULÁRIO DE ${IDIOMAS[idiomaDoAluno].nome.toUpperCase()}`;
+  if (noInicio) {
+    eyebrowTopo.textContent = `${saudacaoDoPeriodo()} · ${IDIOMAS[idiomaDoAluno].nome}`;
     tituloTopo.textContent = nomeDoAlunoAtual || "Olá!";
-    painelMensagens.classList.remove("forcar-oculto");
-    painelAnotacoes.classList.remove("forcar-oculto");
-    contadorTotal.classList.remove("forcar-oculto");
-    const totalDoIdioma = palavrasDoIdiomaAtual().length;
-    contadorTotal.textContent = totalDoIdioma === 1
-      ? "1 palavra aprendida"
-      : `${totalDoIdioma} palavras aprendidas`;
+    renderizarProgresso();
+    renderizarPalavrasRecentes();
   } else {
     eyebrowTopo.textContent = `VOCABULÁRIO DE ${IDIOMAS[idiomaDoAluno].nome.toUpperCase()}`;
     tituloTopo.textContent = `Palavras aprendidas com a inicial "${letraSelecionada}"`;
-    painelMensagens.classList.add("forcar-oculto");
-    painelAnotacoes.classList.add("forcar-oculto");
-    contadorTotal.classList.add("forcar-oculto");
   }
   renderizarPalavras();
+}
+
+function saudacaoDoPeriodo() {
+  const hora = new Date().getHours();
+  if (hora < 5) return "Boa noite";
+  if (hora < 12) return "Bom dia";
+  if (hora < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
+function irParaLetra(letra) {
+  letraSelecionada = letra;
+  montarIndiceLetras();
+  renderizarTela();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// Números do cartão "Seu progresso": total de palavras, novas na semana e aulas feitas no mês
+function renderizarProgresso() {
+  const container = document.getElementById("numeros-progresso");
+  if (!container) return;
+  const palavras = palavrasDoIdiomaAtual();
+  const seteDiasAtras = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const novasNaSemana = palavras.filter((p) => p.criadoEm && p.criadoEm.toMillis() >= seteDiasAtras).length;
+  const mesAtual = dataDeHojeISO().slice(0, 7);
+  const aulasNoMes = minhasAulasCache.filter((a) => a.status === "concluida" && (a.data || "").startsWith(mesAtual) &&
+    (idiomasDisponiveis.length < 2 || aulaDoIdioma(a, idiomaDoAluno))).length;
+  const numero = (valor, rotulo, icone) => `
+    <div class="numero-progresso">
+      <span class="icone-numero" aria-hidden="true">${icone}</span>
+      <strong>${valor}</strong>
+      <span>${rotulo}</span>
+    </div>`;
+  container.innerHTML =
+    numero(palavras.length, palavras.length === 1 ? "palavra aprendida" : "palavras aprendidas", "📚") +
+    numero(novasNaSemana, novasNaSemana === 1 ? "nova nesta semana" : "novas nesta semana", "✨") +
+    numero(aulasNoMes, aulasNoMes === 1 ? "aula feita no mês" : "aulas feitas no mês", "🎓");
+}
+
+// As últimas palavras adicionadas, como fichinhas: um toque leva pra letra dela
+const QTD_PALAVRAS_RECENTES = 8;
+function renderizarPalavrasRecentes() {
+  const container = document.getElementById("lista-palavras-recentes");
+  if (!container) return;
+  const recentes = palavrasDoIdiomaAtual()
+    .filter((p) => p.criadoEm)
+    .sort((a, b) => b.criadoEm.toMillis() - a.criadoEm.toMillis())
+    .slice(0, QTD_PALAVRAS_RECENTES);
+  if (recentes.length === 0) {
+    container.innerHTML = `<p class="vazio-inline">Suas palavras novas aparecem aqui. Que tal adicionar a primeira?</p>`;
+    return;
+  }
+  container.innerHTML = `<div class="chips-palavras">${recentes.map((p) => `
+    <button class="chip-palavra" type="button" title="Ver na letra ${escapeHtml(letraInicial(p.palavraEn))}" onclick="irParaLetra('${escapeHtml(letraInicial(p.palavraEn))}')">
+      <strong>${escapeHtml(p.palavraEn)}</strong><span>${escapeHtml(p.traducaoPt || "")}</span>
+    </button>`).join("")}</div>`;
 }
 
 // Ícone de olho do botão "Ver tradução / Ocultar tradução". É sempre o mesmo olho:
@@ -909,6 +958,7 @@ function escutarSalaDeAula(uid) {
   ref.collection("salaDeAula").doc("link").onSnapshot((snap) => {
     linkAulaCache = snap.exists ? snap.data() : null;
     renderizarSalaDeAula();
+    renderizarMinhasAulas(); // o botão "Entrar na aula" da próxima aula usa esse link
   });
   ref.collection("documentosAula").orderBy("criadoEm", "desc").onSnapshot((snap) => {
     documentosAulaCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -1082,6 +1132,52 @@ function escutarMinhasAulas(uid) {
     });
 }
 
+// "Hoje", "Amanhã" ou "Sáb, 08/11"
+function rotuloDiaDaAula(dataIso) {
+  const hoje = dataDeHojeISO();
+  const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
+  const amanhaIso = `${amanha.getFullYear()}-${String(amanha.getMonth() + 1).padStart(2, "0")}-${String(amanha.getDate()).padStart(2, "0")}`;
+  if (dataIso === hoje) return "Hoje";
+  if (dataIso === amanhaIso) return "Amanhã";
+  return `${NOMES_DIAS_CURTOS[new Date(`${dataIso}T12:00:00`).getDay()]}, ${formatarDataBR(dataIso).slice(0, 5)}`;
+}
+
+// Quanto falta pra aula: "acontecendo agora", "começa em 25 min", "em 3 dias"...
+function contagemParaAula(a) {
+  const inicio = new Date(`${a.data}T${a.horaInicio}:00`).getTime();
+  const minutos = Math.round((inicio - Date.now()) / 60000);
+  if (minutos <= 0) return "Acontecendo agora";
+  if (minutos < 60) return `Começa em ${minutos} min`;
+  if (minutos < 24 * 60) {
+    const h = Math.floor(minutos / 60), m = minutos % 60;
+    return `Começa em ${h}h${m ? ` ${m}min` : ""}`;
+  }
+  const dias = Math.round((new Date(`${a.data}T12:00:00`) - new Date(`${dataDeHojeISO()}T12:00:00`)) / 86400000);
+  return dias === 1 ? "Amanhã" : `Em ${dias} dias`;
+}
+
+function badgesDaAula(a) {
+  return `
+    <span class="badge-modalidade badge-${a.modalidade}">${a.modalidade === "online" ? "Online" : "Presencial"}</span>
+    ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
+    ${a.status === "pendente" ? '<span class="badge-status badge-status-pendente">Aguardando aprovação</span>' : ""}
+    ${aulaDoAlunoEmAndamento(a) ? '<span class="badge-status badge-status-em-andamento">Em andamento</span>' : ""}
+    ${idiomasParaAula().length > 1 ? `<span class="badge-idioma" style="background:${IDIOMAS[idiomaValido(a.idioma)].cor}">${IDIOMAS[idiomaValido(a.idioma)].nome}</span>` : ""}`;
+}
+
+// Aula agendada de hoje que já começou (e ainda não terminou: as que terminaram saem da lista)
+function aulaDoAlunoEmAndamento(a) {
+  const agora = new Date();
+  return a.status === "agendada" && a.data === dataDeHojeISO() &&
+    minutosDoHorario(a.horaInicio) <= agora.getHours() * 60 + agora.getMinutes();
+}
+
+function rotuloCancelarAula(a) {
+  return a.status === "pendente" ? "Cancelar pedido" : "Cancelar";
+}
+
+// Próxima aula em destaque (como nos apps de aula particular), com o link pra entrar
+// quando é online, e as seguintes numa lista menor logo abaixo
 function renderizarMinhasAulas() {
   const painel = document.getElementById("painel-minhas-aulas");
   const lista = document.getElementById("lista-minhas-aulas");
@@ -1099,28 +1195,57 @@ function renderizarMinhasAulas() {
     .filter((a) => (a.status === "agendada" || a.status === "pendente") && aindaVai(a) && doIdioma(a))
     .sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio));
 
+  painel.classList.remove("oculto");
+  const deQualIdioma = idiomasDisponiveis.length > 1 ? ` de ${IDIOMAS[idiomaDoAluno].nome}` : "";
+
   if (futuras.length === 0) {
-    painel.classList.add("oculto");
+    lista.innerHTML = `
+      <div class="destaque-aula destaque-vazio">
+        <div class="rotulo-destaque">Próxima aula${deQualIdioma}</div>
+        <p class="titulo-destaque">Nenhuma aula marcada</p>
+        <p class="texto-destaque">Escolha um dia e um horário livre na agenda do seu professor.</p>
+        <button class="btn btn-destaque" onclick="abrirAgendamento()">Marcar uma aula</button>
+      </div>`;
+    renderizarProgresso();
     return;
   }
 
-  painel.classList.remove("oculto");
-  document.getElementById("titulo-minhas-aulas").textContent = idiomasDisponiveis.length > 1
-    ? `Minhas próximas aulas de ${IDIOMAS[idiomaDoAluno].nome}` : "Minhas próximas aulas";
-  lista.innerHTML = futuras.map((a) => `
-    <div class="cartao-aula">
-      <div class="aula-info">
-        <span>${formatarDataBR(a.data)} · ${escapeHtml(faixaHorario(a.horaInicio, a.horaFim))}</span>
-        <span class="badge-modalidade badge-${a.modalidade}">${a.modalidade === "online" ? "Online" : "Presencial"}</span>
-        ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
-        ${a.status === "pendente" ? '<span class="badge-status badge-status-pendente">Aguardando aprovação</span>' : ""}
-        ${a.status === "agendada" && a.data === hojeIso && minutosDoHorario(a.horaInicio) <= minutosAgora ? '<span class="badge-status badge-status-em-andamento">Em andamento</span>' : ""}
-        ${idiomasParaAula().length > 1 ? `<span class="badge-idioma" style="background:${IDIOMAS[idiomaValido(a.idioma)].cor}">${IDIOMAS[idiomaValido(a.idioma)].nome}</span>` : ""}
+  const [proxima, ...seguintes] = futuras;
+  const link = linkAulaCache && linkAulaCache.professorId === professorIdDoAluno ? linkAulaCache.url : "";
+  const podeEntrar = link && proxima.modalidade === "online" && proxima.status === "agendada";
+  lista.innerHTML = `
+    <div class="cartao-aula destaque-aula">
+      <div class="topo-destaque">
+        <span class="rotulo-destaque">Próxima aula${deQualIdioma}</span>
+        <span class="contagem-aula">${contagemParaAula(proxima)}</span>
       </div>
-      <button class="excluir" onclick="cancelarMinhaAula('${a.id}')">${a.status === "pendente" ? "Cancelar pedido" : "Cancelar"}</button>
+      <div class="quando-destaque">
+        <span class="dia-destaque">${escapeHtml(rotuloDiaDaAula(proxima.data))}</span>
+        <span class="hora-destaque">${escapeHtml(faixaHorario(proxima.horaInicio, proxima.horaFim))}</span>
+      </div>
+      <div class="aula-info">${badgesDaAula(proxima)}</div>
+      <div class="acoes-destaque">
+        ${podeEntrar ? `<a class="btn btn-destaque" href="${escapeHtml(link)}" target="_blank" rel="noopener">Entrar na aula</a>` : ""}
+        <button class="btn-cancelar-destaque" onclick="cancelarMinhaAula('${proxima.id}')">${rotuloCancelarAula(proxima)}</button>
+      </div>
     </div>
-  `).join("");
+    ${seguintes.length ? `
+      <div class="seguintes-aulas">
+        <h3>Depois</h3>
+        ${seguintes.map((a) => `
+          <div class="cartao-aula">
+            <div class="aula-info">
+              <span>${escapeHtml(rotuloDiaDaAula(a.data))} · ${escapeHtml(faixaHorario(a.horaInicio, a.horaFim))}</span>
+              ${badgesDaAula(a)}
+            </div>
+            <button class="excluir" onclick="cancelarMinhaAula('${a.id}')">${rotuloCancelarAula(a)}</button>
+          </div>`).join("")}
+      </div>` : ""}`;
+  renderizarProgresso();
 }
+
+// A contagem ("começa em 25 min") e a aula que já terminou saem sozinhas, sem recarregar
+setInterval(() => { if (minhasAulasCache.length) renderizarMinhasAulas(); }, 60 * 1000);
 
 // Acompanha em tempo real o WhatsApp do professor e as mensagens que ele
 // configurou, pra o cancelamento já ter o link na hora do clique. Antes era lido
@@ -1201,8 +1326,18 @@ async function salvarPerfil() {
   const user = auth.currentUser;
   if (!user) return;
   const statusEl = document.getElementById("status-perfil");
+  const nome = document.getElementById("perfil-nome").value.trim().replace(/\s+/g, " ");
   const emailContato = document.getElementById("perfil-email").value.trim();
   const telefone = document.getElementById("perfil-telefone").value.trim();
+
+  if (!nome) {
+    statusEl.textContent = "Digite seu nome.";
+    return;
+  }
+  if (nome.length > 100) {
+    statusEl.textContent = "Nome muito longo (máximo de 100 caracteres).";
+    return;
+  }
 
   const digitos = apenasDigitos(telefone);
   if (telefone && (digitos.length < 10 || digitos.length > 13)) {
@@ -1212,8 +1347,10 @@ async function salvarPerfil() {
 
   statusEl.textContent = "Salvando...";
   try {
-    await db.collection("usuarios").doc(user.uid).update({ emailContato, telefone });
-    perfilAlunoAtual = { ...perfilAlunoAtual, emailContato, telefone };
+    await db.collection("usuarios").doc(user.uid).update({ nome, emailContato, telefone });
+    perfilAlunoAtual = { ...perfilAlunoAtual, nome, emailContato, telefone };
+    nomeDoAlunoAtual = nome;
+    if (letraSelecionada === "INICIO") document.getElementById("titulo-topo").textContent = nome;
     statusEl.textContent = "Perfil salvo!";
     setTimeout(fecharPerfil, 700);
   } catch (e) {

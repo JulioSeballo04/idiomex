@@ -61,6 +61,8 @@ auth.onAuthStateChanged(async (user) => {
   const perfil = (await db.collection("usuarios").doc(user.uid).get()).data();
   document.getElementById("nome-usuario").textContent = perfil.nome;
   document.getElementById("codigo-professor").textContent = perfil.codigoProfessor;
+  document.getElementById("codigo-topo").textContent = perfil.codigoProfessor || "—";
+  document.getElementById("eyebrow-professor").textContent = `${saudacaoDoPeriodoProfessor()} · Painel do professor`;
   garantirCodigoNoIndice(user.uid, perfil.codigoProfessor);
   prepararSeletorIdioma(perfil);
 
@@ -480,6 +482,7 @@ function desenharListaAlunos(lista) {
     const header = document.createElement("div");
     header.className = "item-aluno" + (estado.aberto ? " aberto" : "");
     header.innerHTML = `
+      <span class="avatar-aluno" aria-hidden="true">${escapeHtml(iniciaisDoNome(aluno.nome))}</span>
       <span class="nome-aluno">
         ${escapeHtml(aluno.nome)}
         ${estado.temNovidade ? '<span class="badge-novidade" title="Tem palavra nova"></span>' : ""}
@@ -1326,9 +1329,10 @@ function alternarNotasDocumentoProfessor(alunoId, documentoId) {
 
 // -------------------- CÓDIGO DO PROFESSOR --------------------
 
-async function copiarCodigo() {
+// Copia o código do professor (botão do topo ou o das Configurações)
+async function copiarCodigo(idStatus = "status-copiar") {
   const codigo = document.getElementById("codigo-professor").textContent;
-  const status = document.getElementById("status-copiar");
+  const status = document.getElementById(idStatus);
   try {
     await navigator.clipboard.writeText(codigo);
     status.textContent = "Copiado!";
@@ -1364,6 +1368,20 @@ function escutarAulasDoProfessor(uid) {
 
 const DIAS_PAINEL_HOJE = 7;
 const NOMES_DIAS_CURTOS_PROF = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+function saudacaoDoPeriodoProfessor() {
+  const hora = new Date().getHours();
+  if (hora >= 5 && hora < 12) return "Bom dia";
+  if (hora >= 12 && hora < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
+// Iniciais do nome para o círculo ao lado do aluno ("Beatriz Souza" → "BS")
+function iniciaisDoNome(nome) {
+  const partes = String(nome || "?").trim().split(/\s+/).filter(Boolean);
+  const letras = partes.length > 1 ? partes[0][0] + partes[partes.length - 1][0] : (partes[0] || "?").slice(0, 2);
+  return letras.toUpperCase();
+}
 
 function inicioDaAula(a) {
   return new Date(`${a.data}T${a.horaInicio}:00`);
@@ -1482,6 +1500,8 @@ function renderizarHojeProfessor() {
           <span class="ponto-idioma" style="background:${IDIOMAS[id].cor}"></span>${IDIOMAS[id].nome}${avisosPorIdioma[id] ? ` <span class="contador-pedidos">${avisosPorIdioma[id]}</span>` : ""}</button>`).join("")}`;
   }
 
+  renderizarDestaqueProximaAula(proxima, proximas, agora, hojeIso, amanhaIso);
+
   container.innerHTML = `
     ${atrasadas.length ? `
       <div class="cartao-pedidos-reposicao" id="confirmar-aulas">
@@ -1534,14 +1554,6 @@ function renderizarHojeProfessor() {
             ${acoesAulaHtml(a)}
           </div>`).join("")}
       </div>` : ""}
-    ${proxima ? `
-      <div class="cartao-proxima-aula">
-        <div class="rotulo-proxima-aula">Próxima aula</div>
-        <div class="corpo-proxima-aula">
-          <div><strong>${escapeHtml(proxima.alunoNome)}</strong> · ${legendaModalidade(proxima.modalidade)}${idiomasAtuaisProfessor.length > 1 ? ` · ${IDIOMAS[idiomaValido(proxima.idioma)].nome}` : ""}</div>
-          <div class="quando-proxima-aula">${rotuloQuandoAula(proxima, agora, hojeIso, amanhaIso)}</div>
-        </div>
-      </div>` : ""}
     <div class="cartao-proximas-aulas">
       <div class="cabecalho-proximas-aulas">
         <h3>Aulas dos próximos ${DIAS_PAINEL_HOJE} dias</h3>
@@ -1552,6 +1564,48 @@ function renderizarHojeProfessor() {
           <div class="titulo-grupo-dia">${rotuloDiaPainel(g.data, hojeIso, amanhaIso)}</div>
           ${g.aulas.map((a) => linhaAulaPainel(a, false)).join("")}
         </div>`).join("") : `<p class="vazio">Nenhuma aula marcada nos próximos ${DIAS_PAINEL_HOJE} dias.</p>`}
+    </div>`;
+}
+
+// Próxima aula em destaque no topo da página (vale para todas as abas): quem, quando,
+// quanto falta e quantas aulas ainda tem hoje. Sem aula, um atalho para marcar uma.
+function renderizarDestaqueProximaAula(proxima, proximas, agora, hojeIso, amanhaIso) {
+  const destaque = document.getElementById("destaque-proxima-aula-prof");
+  if (!destaque) return;
+  if (!proxima) {
+    destaque.innerHTML = `
+      <div class="destaque-aula destaque-vazio cartao-proxima-aula">
+        <div class="rotulo-destaque">Próxima aula</div>
+        <p class="titulo-destaque">Nenhuma aula nos próximos ${DIAS_PAINEL_HOJE} dias</p>
+        <p class="texto-destaque">Quando um aluno marcar uma aula, ela aparece aqui.</p>
+        <button class="btn btn-destaque" onclick="abrirMarcarAula()">Marcar uma aula</button>
+      </div>`;
+    return;
+  }
+  const restantesHoje = proximas.filter((a) => a.data === hojeIso && a.status === "agendada" && a.id !== proxima.id).length;
+  const contagem = proxima.data === hojeIso
+    ? (rotuloQuandoAula(proxima, agora, hojeIso, amanhaIso) === "agora" ? "Acontecendo agora" : `Começa ${rotuloQuandoAula(proxima, agora, hojeIso, amanhaIso)}`)
+    : rotuloDiaPainel(proxima.data, hojeIso, amanhaIso);
+  destaque.innerHTML = `
+    <div class="destaque-aula cartao-proxima-aula">
+      <div class="topo-destaque">
+        <span class="rotulo-destaque">Próxima aula</span>
+        <span class="contagem-aula">${escapeHtml(contagem)}</span>
+      </div>
+      <div class="aluno-destaque">
+        <span class="avatar-aluno avatar-claro" aria-hidden="true">${escapeHtml(iniciaisDoNome(proxima.alunoNome))}</span>
+        <strong>${escapeHtml(proxima.alunoNome)}</strong>
+      </div>
+      <div class="quando-destaque">
+        <span class="dia-destaque">${escapeHtml(rotuloDiaPainel(proxima.data, hojeIso, amanhaIso))}</span>
+        <span class="hora-destaque">${escapeHtml(faixaHorario(proxima.horaInicio, proxima.horaFim))}</span>
+      </div>
+      <div class="aula-info">
+        <span class="badge-modalidade badge-${proxima.modalidade}">${legendaModalidade(proxima.modalidade)}</span>
+        ${proxima.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
+        ${badgeIdiomaAula(proxima)}
+      </div>
+      <p class="rodape-destaque">${restantesHoje ? `Depois dela, mais ${restantesHoje} ${restantesHoje === 1 ? "aula" : "aulas"} hoje.` : (proxima.data === hojeIso ? "É a última aula de hoje." : "Nenhuma outra aula hoje.")}</p>
     </div>`;
 }
 
