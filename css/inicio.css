@@ -1,23 +1,25 @@
 /* ============================================================
-   PÁGINA INICIAL DO ALUNO
-   Inspirada nos apps de aula particular e de idiomas: a próxima
-   aula em destaque no topo (com contagem e botão para entrar),
-   atalhos grandes, números de progresso e as palavras recentes.
-   Tudo com as variáveis de tema, então segue as cores escolhidas.
+   PÁGINAS INICIAIS DO ALUNO E DO PROFESSOR
+   Inspiradas nos apps de aula particular e de idiomas: a próxima
+   aula em destaque no topo (com contagem), cartões arredondados,
+   números de progresso e atalhos grandes. Tudo com as variáveis
+   de tema, então segue as cores escolhidas.
+   A parte só do professor fica no fim do arquivo.
    ============================================================ */
 
-.pagina-aluno {
+.pagina-aluno,
+.pagina-professor {
   --raio-cartao: 16px;
   --destaque-bg: var(--acento-forte);
   --destaque-ink: #fff;
 }
-html[data-tema="noturno"] .pagina-aluno { --destaque-bg: var(--lateral-bg); }
+html[data-tema="noturno"] :is(.pagina-aluno, .pagina-professor) { --destaque-bg: var(--lateral-bg); }
 
 /* Telas de cada letra: só formulário e fichas (o painel fica no Início) */
 .tela-letra .so-inicio { display: none !important; }
 
 /* ---------- Cabeçalho: logo à esquerda, ações à direita ---------- */
-.cabecalho-aluno {
+.cabecalho-app {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -25,23 +27,23 @@ html[data-tema="noturno"] .pagina-aluno { --destaque-bg: var(--lateral-bg); }
   flex-wrap: wrap;
   margin-bottom: 1.6rem;
 }
-.marca-aluno { display: flex; flex-direction: column; align-items: flex-start; }
-.logo-aluno { width: 150px; height: auto; display: block; }
-.slogan-aluno {
+.marca-app { display: flex; flex-direction: column; align-items: flex-start; }
+.logo-app { width: 150px; height: auto; display: block; }
+.slogan-app {
   font-size: 0.75rem;
   font-weight: 600;
   color: #1E9E83;
   margin: 0.1rem 0 0 0.4rem;
 }
-html[data-tema="noturno"] .slogan-aluno { color: #5CCFB0; }
+html[data-tema="noturno"] .slogan-app { color: #5CCFB0; }
 
-.pagina-aluno .acoes-topo { gap: 0.5rem; }
-.pagina-aluno .acoes-topo .btn {
+:is(.pagina-aluno, .pagina-professor) .acoes-topo { gap: 0.5rem; }
+:is(.pagina-aluno, .pagina-professor) .acoes-topo .btn {
   border-radius: 999px;
   padding: 0.5em 0.95em;
   background: var(--bg-cartao);
 }
-.pagina-aluno .acoes-topo .btn-icone { padding: 0.5em 0.75em; }
+.acoes-topo .btn-icone { padding: 0.5em 0.75em; }
 .btn-perfil { display: inline-flex; align-items: center; gap: 0.4em; }
 
 /* ---------- Saudação ---------- */
@@ -311,11 +313,11 @@ html[data-tema="noturno"] .btn-destaque { color: #223247; }
 
 /* ---------- Celular ---------- */
 @media (max-width: 720px) {
-  .cabecalho-aluno { margin-bottom: 1.1rem; }
-  .logo-aluno { width: 118px; }
-  .slogan-aluno { display: none; }
-  .pagina-aluno .acoes-topo { gap: 0.35rem; }
-  .pagina-aluno .acoes-topo .btn { padding: 0.55em 0.75em; }
+  .cabecalho-app { margin-bottom: 1.1rem; }
+  .logo-app { width: 118px; }
+  .slogan-app { display: none; }
+  :is(.pagina-aluno, .pagina-professor) .acoes-topo { gap: 0.35rem; }
+  :is(.pagina-aluno, .pagina-professor) .acoes-topo .btn { padding: 0.55em 0.75em; }
   .rotulo-btn-perfil {
     position: absolute;
     width: 1px;
@@ -341,4 +343,184 @@ html[data-tema="noturno"] .btn-destaque { color: #223247; }
   .dia-destaque { font-size: 1.65rem; }
   .cartao-secao { padding: 1rem; }
   .numero-progresso strong { font-size: 1.35rem; }
+}
+
+/* ============================================================
+   PAINEL DO PROFESSOR
+   ============================================================ */
+
+/* Saudação com o código do professor à vista (é o que ele mais compartilha) */
+.boas-vindas-professor {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.8rem 1.2rem;
+}
+.codigo-topo { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; }
+.rotulo-codigo-topo { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); }
+.chip-codigo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.45em 0.5em 0.45em 1em;
+  border-radius: 999px;
+  border: 1px dashed var(--acento);
+  background: var(--bg-cartao);
+  cursor: pointer;
+}
+.chip-codigo strong { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 1rem; letter-spacing: 0.06em; color: var(--acento-forte); }
+.acao-chip-codigo {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.3em 0.8em;
+  border-radius: 999px;
+  background: var(--acento);
+  color: #fff;
+}
+.chip-codigo:hover .acao-chip-codigo { background: var(--acento-forte); }
+.codigo-topo .status-msg:empty { display: none; }
+
+/* Topo: próxima aula + visão geral da turma lado a lado */
+.resumo-professor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.2rem;
+  margin-bottom: 1.4rem;
+  align-items: stretch;
+}
+@media (min-width: 1000px) {
+  .resumo-professor { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+}
+#destaque-proxima-aula-prof .destaque-aula { height: 100%; }
+.aluno-destaque { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.7rem; font-size: 1.05rem; }
+.pagina-professor .quando-destaque { margin-top: 0.3rem; }
+.rodape-destaque { margin: 0.8rem 0 0; font-size: 0.85rem; opacity: 0.85; }
+
+.secao-visao-geral { display: flex; flex-direction: column; }
+.secao-visao-geral .visao-geral-cartoes {
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0;
+}
+.secao-visao-geral .cartao-metrica {
+  border: none;
+  background: var(--bg);
+  text-align: left;
+  padding: 0.8rem 0.9rem;
+}
+.secao-visao-geral .metrica-numero {
+  font-family: var(--fonte-titulo);
+  font-weight: 600;
+  font-size: 1.7rem;
+  line-height: 1.15;
+  color: var(--acento-forte);
+}
+.secao-visao-geral .metrica-numero-nome { font-size: 1.05rem; overflow-wrap: anywhere; }
+.secao-visao-geral .aviso-inativos { margin: 0.8rem 0 0; font-size: 0.82rem; }
+.secao-visao-geral .vazio { margin: 0; }
+
+/* Iniciais do aluno num círculo */
+.avatar-aluno {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: color-mix(in srgb, var(--acento) 16%, var(--bg-cartao));
+  color: var(--acento-forte);
+}
+.avatar-aluno.avatar-claro { background: rgba(255, 255, 255, 0.2); color: #fff; }
+
+/* Abas em formato de "pílulas" com ícone */
+.abas-professor {
+  gap: 0.4rem;
+  padding: 0.35rem;
+  margin: 0 0 1.4rem;
+  border: 1px solid var(--borda);
+  border-radius: 999px;
+  background: var(--bg-cartao);
+}
+.abas-professor .aba-tipo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45em;
+  border: none;
+  margin: 0;
+  border-radius: 999px;
+  padding: 0.65em 0.9em;
+  transition: background 0.15s, color 0.15s;
+}
+.abas-professor .aba-tipo[data-icone]::before { content: attr(data-icone); }
+.abas-professor .aba-tipo:hover { color: var(--acento-forte); }
+.abas-professor .aba-tipo.ativa { background: var(--acento); color: #fff; }
+.abas-professor .aba-tipo.ativa .contador-pedidos { box-shadow: 0 0 0 2px var(--acento); }
+
+/* Agenda: avisos e listas como cartões arredondados */
+.pagina-professor .agenda-topo { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.pagina-professor .agenda-topo .btn { border-radius: 999px; background: var(--bg-cartao); }
+.pagina-professor .cartao-pedidos-reposicao {
+  border: 1px solid var(--borda);
+  border-left: 5px solid var(--acento-secundario);
+  border-radius: var(--raio-cartao);
+  padding: 1rem 1.1rem;
+}
+.pagina-professor #confirmar-aulas { border-left-color: #C98A2C; }
+.pagina-professor #pedidos-reposicao { border-left-color: #C0392B; }
+.pagina-professor .cartao-pedidos-reposicao h3,
+.pagina-professor .cabecalho-proximas-aulas h3 { font-family: var(--fonte-corpo); font-weight: 700; }
+.pagina-professor .cartao-proximas-aulas {
+  border-radius: var(--raio-cartao);
+  padding: 1.1rem 1.2rem;
+}
+.pagina-professor .cartao-aula { border-radius: 12px; }
+.pagina-professor .cartao-proximas-aulas .cartao-aula,
+.pagina-professor .cartao-pedidos-reposicao .cartao-aula { background: var(--bg); border-color: transparent; }
+.pagina-professor .aula-acoes .btn { border-radius: 999px; }
+
+/* Lista de alunos */
+.pagina-professor .aluno-bloco { border-radius: var(--raio-cartao); transition: box-shadow 0.15s; }
+.pagina-professor .aluno-bloco:hover { box-shadow: 0 6px 18px var(--sombra); }
+.pagina-professor .item-aluno { justify-content: flex-start; gap: 0.8rem; padding: 0.75rem 1.1rem; }
+.pagina-professor .item-aluno .cabecalho-direita { margin-left: auto; }
+.pagina-professor .contagem {
+  padding: 0.2em 0.7em;
+  border-radius: 999px;
+  background: var(--bg);
+  font-size: 0.8rem;
+}
+.pagina-professor .secao-alunos-sem-app,
+.pagina-professor #janela-documentos .sala-secao,
+.pagina-professor #janela-banco .sala-secao {
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-cartao);
+  padding: 1.1rem 1.2rem;
+}
+
+/* Configurações: cada parte num cartão */
+.pagina-professor #painel-aba-config > .codigo-professor,
+.pagina-professor #painel-aba-config > .idioma-professor,
+.pagina-professor #painel-aba-config > .secao-whatsapp-professor,
+.pagina-professor #painel-aba-config > .secao-mensagens-whatsapp,
+.pagina-professor #painel-aba-config > .secao-conta {
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-cartao);
+  padding: 1rem 1.2rem;
+}
+
+@media (max-width: 720px) {
+  .boas-vindas-professor { align-items: flex-start; }
+  .codigo-topo { align-items: flex-start; }
+  .abas-professor { border-radius: 14px; }
+  .abas-professor .aba-tipo { padding: 0.6em 0.8em; font-size: 0.85rem; }
+  .pagina-professor .item-aluno { padding: 0.7rem 0.9rem; }
+  .avatar-aluno { width: 34px; height: 34px; font-size: 0.75rem; }
 }

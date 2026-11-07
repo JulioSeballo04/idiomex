@@ -24,8 +24,9 @@
 <script src="js/pwa.js" defer></script>
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/novidades.css">
+<link rel="stylesheet" href="css/inicio.css">
 </head>
-<body>
+<body class="pagina-professor">
 
 <div class="app-shell">
   <nav class="indice-letras">
@@ -39,25 +40,37 @@
   </nav>
 
   <main class="conteudo">
-    <img class="logo-app-topo logo-tema-claro" src="assets/logo.png" alt="Idiomex">
-    <img class="logo-app-topo logo-tema-noturno" src="assets/logo-noturno.png" alt="Idiomex">
-    <p class="slogan-logo slogan-app-topo">Sua Conexão com o Mundo</p>
-    <div class="topo-app">
-      <div class="saudacao">
-        <div class="eyebrow">PAINEL DO PROFESSOR</div>
-        <h1 id="nome-usuario">Olá!</h1>
+    <header class="cabecalho-app">
+      <div class="marca-app">
+        <img class="logo-app logo-tema-claro" src="assets/logo.png" alt="Idiomex">
+        <img class="logo-app logo-tema-noturno" src="assets/logo-noturno.png" alt="Idiomex">
+        <span class="slogan-app">Sua Conexão com o Mundo</span>
       </div>
       <div class="acoes-topo">
-        <button class="btn btn-secundario btn-notificacoes" id="btn-notificacoes" aria-label="Notificações" title="Notificações" onclick="abrirNotificacoesProfessor()">🔔<span class="contador-notificacoes" id="contador-notificacoes" hidden>0</span></button>
+        <button class="btn btn-secundario btn-icone btn-notificacoes" id="btn-notificacoes" aria-label="Notificações" title="Notificações" onclick="abrirNotificacoesProfessor()">🔔<span class="contador-notificacoes" id="contador-notificacoes" hidden>0</span></button>
         <div class="seletor-tema" id="seletor-tema">
           <button class="btn-tema" type="button" title="Mudar cores do app" onclick="alternarMenuTema()">
             <span class="ponto-tema-atual" id="ponto-tema-atual"></span>
           </button>
           <div class="menu-tema oculto" id="menu-tema"></div>
         </div>
-        <button class="btn btn-secundario" onclick="sair()">Sair</button>
+        <button class="btn btn-secundario btn-sair" onclick="sair()">Sair</button>
       </div>
-    </div>
+    </header>
+
+    <section class="boas-vindas boas-vindas-professor">
+      <div>
+        <div class="eyebrow" id="eyebrow-professor">Painel do professor</div>
+        <h1 id="nome-usuario">Olá!</h1>
+      </div>
+      <div class="codigo-topo">
+        <span class="rotulo-codigo-topo">Código para seus alunos</span>
+        <button type="button" class="chip-codigo" title="Copiar o código" onclick="copiarCodigo('status-copiar-topo')">
+          <strong id="codigo-topo">...</strong><span class="acao-chip-codigo">Copiar</span>
+        </button>
+        <span class="status-msg" id="status-copiar-topo"></span>
+      </div>
+    </section>
 
     <div id="modal-notificacoes" class="modal-oculto">
       <div class="modal-conteudo">
@@ -71,15 +84,20 @@
 
     <div id="seletor-idioma-professor" class="filtro-idioma-agenda" role="tablist" aria-label="Idioma do painel" hidden></div>
 
-    <h2 style="font-size:1.1rem;">Visão geral da turma</h2>
-    <div id="visao-geral-turma"></div>
-
-    <div class="abas-tipo">
-      <button class="aba-tipo ativa" id="btn-aba-agenda" onclick="mostrarAbaProfessor('agenda')">Agenda</button>
-      <button class="aba-tipo" id="btn-aba-alunos" onclick="mostrarAbaProfessor('alunos')">Meus Alunos</button>
-      <button class="aba-tipo" id="btn-aba-sala" onclick="mostrarAbaProfessor('sala')">Documentos</button>
-      <button class="aba-tipo" id="btn-aba-config" onclick="mostrarAbaProfessor('config')">Configurações</button>
+    <div class="resumo-professor">
+      <div id="destaque-proxima-aula-prof"></div>
+      <section class="cartao-secao secao-visao-geral">
+        <h2 class="titulo-secao">Visão geral da turma</h2>
+        <div id="visao-geral-turma"></div>
+      </section>
     </div>
+
+    <nav class="abas-tipo abas-professor" aria-label="Seções do painel">
+      <button class="aba-tipo ativa" id="btn-aba-agenda" onclick="mostrarAbaProfessor('agenda')" data-icone="📅">Agenda</button>
+      <button class="aba-tipo" id="btn-aba-alunos" onclick="mostrarAbaProfessor('alunos')" data-icone="👥">Meus Alunos</button>
+      <button class="aba-tipo" id="btn-aba-sala" onclick="mostrarAbaProfessor('sala')" data-icone="📚">Documentos</button>
+      <button class="aba-tipo" id="btn-aba-config" onclick="mostrarAbaProfessor('config')" data-icone="⚙️">Configurações</button>
+    </nav>
 
     <!-- AGENDA -->
     <!-- DOCUMENTOS: Documentos de aula (biblioteca do professor) e Banco de dados -->

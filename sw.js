@@ -17,7 +17,7 @@ const ARQUIVOS_BASE = [
   "professor.html",
   "css/style.css",
   "css/novidades.css",
-  "css/inicio-aluno.css",
+  "css/inicio.css",
   "js/firebase-config.js",
   "js/util.js",
   "js/documentos.js",
