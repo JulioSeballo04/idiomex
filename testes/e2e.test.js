@@ -353,10 +353,29 @@ function dataDaqui(dias) {
     await aluno.fill('textarea[id^="nota-documento-"]', 'Past simple: verbo + ed');
     await aluno.click('button:has-text("Salvar anotações")');
     await aluno.waitForFunction(() => /salvas/.test((document.querySelector('[id^="status-nota-documento-"]') || {}).textContent), null, { timeout: 5000 });
-    await aluno.click('#modal-sala-aula .btn-fechar-modal');
+    await aluno.click('#tela-sala-aula .btn-voltar-sala');
 
     await prof.click('.documento-aula .btn-notas-documento');
     await prof.waitForSelector('.bloco-notas-documento:has-text("Past simple: verbo + ed")', { timeout: 5000 });
+  });
+
+  await caso('Sala de aula do aluno abre numa tela própria; o "voltar" do navegador volta ao Início', async () => {
+    await aluno.click('.letra-tab[title="Início"]');
+    await aluno.click('#btn-sala-aula');
+    await aluno.waitForSelector('#tela-sala-aula:not([hidden]) #corpo-sala-aula .secao-aula-online', { timeout: 5000 });
+    esperar(await aluno.isHidden('#painel-minhas-aulas') && await aluno.isHidden('.formulario-palavra'), 'o painel do Início continuou à mostra');
+    esperar(!(await aluno.$('#modal-sala-aula')), 'ainda existe a janela flutuante da sala');
+    await aluno.goBack();
+    await aluno.waitForSelector('#tela-sala-aula', { state: 'hidden', timeout: 3000 });
+    esperar(await aluno.isVisible('.formulario-palavra'), 'não voltou para o Início');
+    esperar(/dicionario\.html$/.test(aluno.url()), 'saiu da página: ' + aluno.url());
+  });
+
+  await caso('painel do professor: sem a barra lateral e com o resumo do mês ao lado do calendário', async () => {
+    await prof.click('#btn-aba-agenda');
+    esperar(!(await prof.$('.indice-letras')), 'a barra lateral continua no painel do professor');
+    await prof.waitForSelector('#resumo-mes-professor .titulo-secao:has-text("Resumo de")', { timeout: 5000 });
+    await prof.click('#btn-aba-alunos'); // os próximos testes continuam na Sala de aula da Bia
   });
 
   await caso('professor envia um arquivo; o aluno vê e baixa o mesmo conteúdo', async () => {
@@ -422,7 +441,7 @@ function dataDaqui(dias) {
     esperar(/nodownload/.test(await aluno.getAttribute('#modal-visualizador video', 'controlslist')), 'player sem "nodownload"');
     esperar(!(await aluno.$('#modal-visualizador a[download]')), 'aluno tem botão de baixar');
     await aluno.click('#modal-visualizador .btn-fechar-modal');
-    await aluno.click('#modal-sala-aula .btn-fechar-modal');
+    await aluno.click('#tela-sala-aula .btn-voltar-sala');
     // O professor (dono do arquivo) pode baixar
     await prof.click('.item-biblioteca:has-text("Aula 1 em vídeo") .titulo-documento');
     await prof.waitForSelector('#modal-visualizador:not(.modal-oculto) a[download]', { timeout: 8000 });
@@ -443,7 +462,7 @@ function dataDaqui(dias) {
     await aluno.waitForSelector('#modal-visualizador .paginas-pdf canvas', { timeout: 15000 });
     esperar(!(await aluno.$('#modal-visualizador iframe, #modal-visualizador embed, #modal-visualizador a[download]')), 'PDF aberto com o leitor do navegador ou com download');
     await aluno.click('#modal-visualizador .btn-fechar-modal');
-    await aluno.click('#modal-sala-aula .btn-fechar-modal');
+    await aluno.click('#tela-sala-aula .btn-voltar-sala');
   });
 
   await caso('imagem: dá para dar zoom e abrir numa janela flutuante', async () => {
@@ -469,7 +488,7 @@ function dataDaqui(dias) {
     esperar(await janela.$('.barra button[data-z="1"]'), 'janela flutuante sem zoom');
     esperar(await aluno.isHidden('#modal-visualizador'), 'o visualizador continuou na frente do app');
     await janela.close();
-    await aluno.click('#modal-sala-aula .btn-fechar-modal');
+    await aluno.click('#tela-sala-aula .btn-voltar-sala');
   });
 
   await caso('Documentos de aula recusa tipo que não abre no app (ex: Word)', async () => {
@@ -556,7 +575,7 @@ function dataDaqui(dias) {
     esperar((await aluno.$$('#corpo-sala-aula .documento-aula')).length === 6, 'aluno vê mais de 6 por página');
     await aluno.click('#corpo-sala-aula .paginacao [aria-label="Próxima página"]');
     await aluno.waitForSelector('#corpo-sala-aula .paginacao:has-text("Página 2 de")', { timeout: 3000 });
-    await aluno.click('#modal-sala-aula .btn-fechar-modal');
+    await aluno.click('#tela-sala-aula .btn-voltar-sala');
   });
 
   await caso('relatório do mês atual só libera no dia 1º do mês seguinte; o do mês passado abre', async () => {
