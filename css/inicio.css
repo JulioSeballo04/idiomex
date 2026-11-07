@@ -524,3 +524,135 @@ html[data-tema="noturno"] .btn-destaque { color: #223247; }
   .pagina-professor .item-aluno { padding: 0.7rem 0.9rem; }
   .avatar-aluno { width: 34px; height: 34px; font-size: 0.75rem; }
 }
+
+/* ============================================================
+   SALA DE AULA DO ALUNO — tela própria (no lugar da janela)
+   ============================================================ */
+.tela-sala .conteudo > :not(.cabecalho-app):not(#tela-sala-aula):not([id^="modal-"]) { display: none !important; }
+.tela-sala-aula { animation: entrarTelaSala 0.2s ease-out; }
+@keyframes entrarTelaSala { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.btn-voltar-sala {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-bottom: 0.9rem;
+  padding: 0.45em 1em;
+  border-radius: 999px;
+  border: 1px solid var(--borda);
+  background: var(--bg-cartao);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.btn-voltar-sala:hover { border-color: var(--acento); color: var(--acento-forte); }
+.cabecalho-sala { margin-bottom: 1.2rem; }
+.cabecalho-sala .eyebrow { text-transform: none; letter-spacing: 0.02em; font-size: 0.85rem; }
+.cabecalho-sala h1 { font-size: 2rem; margin: 0.1em 0 0; }
+
+.grade-sala {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.2rem;
+  align-items: start;
+}
+@media (min-width: 1000px) {
+  .grade-sala { grid-template-columns: minmax(260px, 0.8fr) minmax(0, 2fr); }
+  .secao-aula-online { position: sticky; top: 1rem; }
+}
+.grade-sala .sala-secao { margin: 0; }
+.secao-aula-online .btn-entrar-aula {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 0.8em 1.2em;
+  font-size: 1rem;
+}
+.proxima-na-sala {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0 0 1rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 12px;
+  background: var(--bg);
+}
+.proxima-na-sala span { font-size: 0.75rem; color: var(--ink-soft); font-weight: 600; }
+.proxima-na-sala strong { font-size: 1.05rem; }
+.proxima-na-sala em { font-style: normal; font-size: 0.82rem; color: var(--acento-forte); font-weight: 600; }
+.proxima-na-sala .link-trocar { align-self: flex-start; }
+.secao-documentos-sala .documento-aula { border-radius: 12px; }
+
+@media (max-width: 720px) {
+  .cabecalho-sala h1 { font-size: 1.7rem; }
+}
+
+/* ============================================================
+   PROFESSOR — sem a barra lateral; resumo do mês ao lado do calendário
+   ============================================================ */
+.pagina-professor .conteudo { margin: 0 auto; }
+
+.coluna-lateral-agenda { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.resumo-mes .titulo-secao { margin-bottom: 0.7rem; }
+.progresso-mes { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.9rem; font-size: 0.82rem; color: var(--ink-soft); }
+.barra-progresso-mes { height: 8px; border-radius: 999px; background: var(--bg); overflow: hidden; }
+.barra-progresso-mes span { display: block; height: 100%; border-radius: inherit; background: var(--acento); transition: width 0.3s; }
+.numeros-resumo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+@media (min-width: 1300px) {
+  .numeros-resumo { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.numero-resumo {
+  display: flex;
+  flex-direction: column;
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  background: var(--bg);
+  min-width: 0;
+}
+.numero-resumo strong {
+  font-family: var(--fonte-titulo);
+  font-weight: 600;
+  font-size: 1.45rem;
+  line-height: 1.15;
+  color: var(--acento-forte);
+}
+.numero-resumo span { font-size: 0.75rem; color: var(--ink-soft); }
+.lista-resumo { list-style: none; margin: 0.9rem 0 0; padding: 0; }
+.lista-resumo li {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--borda);
+  font-size: 0.88rem;
+}
+.lista-resumo li:last-child { border-bottom: none; }
+.lista-resumo .tom-alerta { color: #B3412E; font-weight: 600; }
+html[data-tema="noturno"] .lista-resumo .tom-alerta { color: #F08A75; }
+.subtitulo-resumo {
+  font-family: var(--fonte-corpo);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 1rem 0 0.5rem;
+}
+.ranking-resumo { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.ranking-resumo li { display: flex; align-items: center; gap: 0.6rem; font-size: 0.88rem; }
+.ranking-resumo .avatar-aluno { width: 30px; height: 30px; font-size: 0.7rem; }
+.nome-ranking { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ranking-resumo strong { font-size: 0.8rem; color: var(--ink-soft); }
+.dica-resumo { margin: 0.9rem 0 0; font-size: 0.78rem; color: var(--ink-soft); }
+.pagina-professor #detalhe-dia-professor:empty { display: none; }
+.pagina-professor #calendario-professor .detalhe-dia-professor-conteudo {
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-cartao);
+  padding: 1rem 1.1rem;
+  margin-top: 0;
+}

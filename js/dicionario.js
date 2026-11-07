@@ -327,7 +327,7 @@ function montarIndiceLetras() {
   inicio.className = "letra-tab" + (letraSelecionada === "INICIO" ? " ativa" : "");
   inicio.textContent = "🏠";
   inicio.title = "Início";
-  inicio.onclick = () => { letraSelecionada = "INICIO"; montarIndiceLetras(); renderizarTela(); };
+  inicio.onclick = () => { fecharSalaDeAula(); letraSelecionada = "INICIO"; montarIndiceLetras(); renderizarTela(); };
   container.appendChild(inicio);
 
   // "#" só aparece quando existe palavra que não começa com letra A–Z (ex: japonês, mandarim)
@@ -343,7 +343,7 @@ function montarIndiceLetras() {
     btn.innerHTML = qtd > 0
       ? `${letra}<span class="contagem-letra">${qtd}</span>`
       : letra;
-    btn.onclick = () => { letraSelecionada = letra; montarIndiceLetras(); renderizarTela(); };
+    btn.onclick = () => { fecharSalaDeAula(); letraSelecionada = letra; montarIndiceLetras(); renderizarTela(); };
     container.appendChild(btn);
   });
 }
@@ -378,6 +378,7 @@ function saudacaoDoPeriodo() {
 }
 
 function irParaLetra(letra) {
+  fecharSalaDeAula();
   letraSelecionada = letra;
   montarIndiceLetras();
   renderizarTela();
@@ -996,14 +997,43 @@ function filtrarDocumentosPorTipo(tipo) {
   renderizarSalaDeAula();
 }
 
+// A Sala de aula é uma tela própria (não uma janela por cima): esconde o painel do
+// Início e mostra o link da aula e os documentos. O "voltar" do celular/navegador
+// também fecha a tela, porque ela entra no histórico.
+function salaDeAulaAberta() {
+  return document.body.classList.contains("tela-sala");
+}
+
 function abrirSalaDeAula() {
-  document.getElementById("modal-sala-aula").classList.remove("modal-oculto");
+  document.getElementById("eyebrow-sala").textContent = `Sua sala · ${IDIOMAS[idiomaDoAluno].nome}`;
+  if (!salaDeAulaAberta() && !(history.state && history.state.tela === "sala")) {
+    try { history.pushState({ tela: "sala" }, "", "#sala-de-aula"); } catch (e) {}
+  }
+  document.body.classList.add("tela-sala");
+  document.getElementById("tela-sala-aula").hidden = false;
   renderizarSalaDeAula();
+  window.scrollTo(0, 0);
+}
+
+function esconderSalaDeAula() {
+  document.body.classList.remove("tela-sala");
+  document.getElementById("tela-sala-aula").hidden = true;
 }
 
 function fecharSalaDeAula() {
-  document.getElementById("modal-sala-aula").classList.add("modal-oculto");
+  if (!salaDeAulaAberta()) return;
+  esconderSalaDeAula();
+  if (history.state && history.state.tela === "sala") history.back();
+  else if (location.hash === "#sala-de-aula") history.replaceState(null, "", location.pathname + location.search);
+  window.scrollTo(0, 0);
 }
+
+window.addEventListener("popstate", () => {
+  if (history.state && history.state.tela === "sala") abrirSalaDeAula(); // "avançar" do navegador
+  else if (salaDeAulaAberta()) esconderSalaDeAula();
+});
+// Recarregou a página com a sala aberta: continua nela
+if (location.hash === "#sala-de-aula") document.addEventListener("DOMContentLoaded", abrirSalaDeAula);
 
 function renderizarSalaDeAula() {
   const corpo = document.getElementById("corpo-sala-aula");
@@ -1016,6 +1046,10 @@ function desenharSalaDeAula(corpo) {
   const blocoLink = link
     ? `<a class="btn btn-primario btn-entrar-aula" href="${escapeHtml(link)}" target="_blank" rel="noopener">Entrar na aula</a>`
     : `<p class="vazio">Seu professor ainda não deixou o link da aula.</p>`;
+  const proxima = aulasFuturasDoAluno()[0];
+  const linhaProxima = proxima
+    ? `<p class="proxima-na-sala"><span>Próxima aula</span><strong>${escapeHtml(rotuloDiaDaAula(proxima.data))} · ${escapeHtml(faixaHorario(proxima.horaInicio, proxima.horaFim))}</strong><em>${escapeHtml(contagemParaAula(proxima))}</em></p>`
+    : `<p class="proxima-na-sala"><span>Próxima aula</span><strong>Nenhuma aula marcada</strong><button type="button" class="link-trocar" onclick="abrirAgendamento()">Marcar uma aula</button></p>`;
 
   const todos = documentosDaSala();
   const doTipo = filtroTipoDocumentos ? todos.filter((d) => categoriaDoDocumento(d) === filtroTipoDocumentos) : todos;
@@ -1055,13 +1089,16 @@ function desenharSalaDeAula(corpo) {
   });
 
   corpo.innerHTML = `
-    <div class="sala-secao">
-      <h4>Aula online</h4>
-      ${blocoLink}
-    </div>
-    <div class="sala-secao">
-      <h4>Documentos de aula</h4>
-      ${lista}
+    <div class="grade-sala">
+      <section class="sala-secao cartao-secao secao-aula-online">
+        <h2 class="titulo-secao">Aula online</h2>
+        ${linhaProxima}
+        ${blocoLink}
+      </section>
+      <section class="sala-secao cartao-secao secao-documentos-sala">
+        <h2 class="titulo-secao">Documentos de aula</h2>
+        ${lista}
+      </section>
     </div>`;
 }
 
@@ -1176,6 +1213,20 @@ function rotuloCancelarAula(a) {
   return a.status === "pendente" ? "Cancelar pedido" : "Cancelar";
 }
 
+// Aulas que ainda vão acontecer (agendadas ou pedidos), da mais próxima para a mais distante.
+// Aula de hoje que já terminou não entra; com mais de um idioma, só as do idioma atual.
+function aulasFuturasDoAluno() {
+  const hojeIso = dataDeHojeISO();
+  const agora = new Date();
+  const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
+  const aindaVai = (a) => a.data > hojeIso ||
+    (a.data === hojeIso && minutosDoHorario(a.horaFim || a.horaInicio) > minutosAgora);
+  const doIdioma = (a) => idiomasDisponiveis.length < 2 || aulaDoIdioma(a, idiomaDoAluno);
+  return minhasAulasCache
+    .filter((a) => (a.status === "agendada" || a.status === "pendente") && aindaVai(a) && doIdioma(a))
+    .sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio));
+}
+
 // Próxima aula em destaque (como nos apps de aula particular), com o link pra entrar
 // quando é online, e as seguintes numa lista menor logo abaixo
 function renderizarMinhasAulas() {
@@ -1183,17 +1234,8 @@ function renderizarMinhasAulas() {
   const lista = document.getElementById("lista-minhas-aulas");
   if (!painel || !lista) return;
 
-  const hojeIso = dataDeHojeISO();
-  const agora = new Date();
-  const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
-  // Aula de hoje que já terminou não é mais "próxima" (e não faz sentido cancelar)
-  const aindaVai = (a) => a.data > hojeIso ||
-    (a.data === hojeIso && minutosDoHorario(a.horaFim || a.horaInicio) > minutosAgora);
-  // Com mais de um idioma, mostra só as aulas do idioma que o aluno está estudando agora
-  const doIdioma = (a) => idiomasDisponiveis.length < 2 || aulaDoIdioma(a, idiomaDoAluno);
-  const futuras = minhasAulasCache
-    .filter((a) => (a.status === "agendada" || a.status === "pendente") && aindaVai(a) && doIdioma(a))
-    .sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio));
+  const futuras = aulasFuturasDoAluno();
+  if (salaDeAulaAberta()) renderizarSalaDeAula(); // a sala mostra quando é a próxima aula
 
   painel.classList.remove("oculto");
   const deQualIdioma = idiomasDisponiveis.length > 1 ? ` de ${IDIOMAS[idiomaDoAluno].nome}` : "";

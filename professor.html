@@ -29,15 +29,6 @@
 <body class="pagina-professor">
 
 <div class="app-shell">
-  <nav class="indice-letras">
-    <img class="marca" src="assets/apple-touch-icon.png" alt="Idiomex">
-    <div class="nav-lateral-professor">
-      <button class="nav-lateral-item ativa" id="navlat-agenda" onclick="mostrarAbaProfessor('agenda')" title="Agenda">📅</button>
-      <button class="nav-lateral-item" id="navlat-alunos" onclick="mostrarAbaProfessor('alunos')" title="Meus Alunos">👥</button>
-      <button class="nav-lateral-item" id="navlat-sala" onclick="mostrarAbaProfessor('sala')" title="Documentos de aula e Banco de dados">📚</button>
-      <button class="nav-lateral-item" id="navlat-config" onclick="mostrarAbaProfessor('config')" title="Configurações">⚙️</button>
-    </div>
-  </nav>
 
   <main class="conteudo">
     <header class="cabecalho-app">
@@ -158,6 +149,7 @@
       <div id="calendario-professor" style="margin-bottom:2rem;">
         <div id="grade-calendario-professor"></div>
         <div class="coluna-lateral-agenda">
+          <section id="resumo-mes-professor" class="cartao-secao resumo-mes" aria-live="polite"></section>
           <div id="modal-marcar-aula" class="modal-oculto">
             <div class="modal-conteudo modal-largo">
               <div class="modal-cabecalho">
@@ -365,7 +357,6 @@ function mostrarAbaProfessor(aba) {
   ["sala", "agenda", "alunos", "config"].forEach(function (nome) {
     document.getElementById("painel-aba-" + nome).classList.toggle("oculto", nome !== aba);
     document.getElementById("btn-aba-" + nome).classList.toggle("ativa", nome === aba);
-    document.getElementById("navlat-" + nome).classList.toggle("ativa", nome === aba);
   });
 }
 </script>

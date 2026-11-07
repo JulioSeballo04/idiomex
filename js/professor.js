@@ -2504,6 +2504,78 @@ function montarCalendarioProfessor() {
   });
 
   renderizarDetalheDiaProfessor();
+  renderizarResumoDoMes(ano, mes, prefixoMes);
+}
+
+function duracaoDaAulaMinutos(a) {
+  const minutos = minutosDoHorario(a.horaFim || a.horaInicio) - minutosDoHorario(a.horaInicio);
+  return minutos > 0 ? minutos : 0;
+}
+
+function formatarHorasDeAula(minutos) {
+  const h = Math.floor(minutos / 60), m = minutos % 60;
+  if (!h) return `${m} min`;
+  return m ? `${h}h ${m}min` : `${h}h`;
+}
+
+// Resumo do mês aberto no calendário (respeita o idioma escolhido no topo):
+// aulas realizadas, marcadas, canceladas, não realizadas, horas dadas e os
+// alunos com mais aulas no mês.
+function renderizarResumoDoMes(ano, mes, prefixoMes) {
+  const container = document.getElementById("resumo-mes-professor");
+  if (!container) return;
+  const agora = new Date();
+  const doMes = aulasCache.filter(noFiltroAgenda).filter((a) => (a.data || "").startsWith(prefixoMes));
+  const realizadas = doMes.filter((a) => a.status === "concluida");
+  const aindaVao = doMes.filter((a) => (a.status === "agendada" && fimDaAula(a) > agora) || a.status === "pendente");
+  const paraConfirmar = doMes.filter((a) => a.status === "agendada" && fimDaAula(a) <= agora);
+  const canceladas = doMes.filter((a) => a.status === "cancelada");
+  const naoRealizadas = doMes.filter((a) => a.status === "nao-realizada");
+  const reposicoes = doMes.filter((a) => a.reposicao && ["concluida", "agendada", "pendente"].includes(a.status));
+  const minutosDados = realizadas.reduce((total, a) => total + duracaoDaAulaMinutos(a), 0);
+  const previstas = realizadas.length + aindaVao.length + paraConfirmar.length;
+
+  const porAluno = {};
+  [...realizadas, ...aindaVao, ...paraConfirmar].forEach((a) => {
+    const chave = a.alunoId || a.alunoNome;
+    porAluno[chave] = porAluno[chave] || { nome: a.alunoNome || "Aluno", qtd: 0 };
+    porAluno[chave].qtd++;
+  });
+  const ranking = Object.values(porAluno).sort((x, y) => y.qtd - x.qtd || x.nome.localeCompare(y.nome)).slice(0, 3);
+  const pct = previstas ? Math.round((realizadas.length / previstas) * 100) : 0;
+  const deIdioma = idiomaAtivoProfessor ? ` · ${IDIOMAS[idiomaAtivoProfessor].nome}` : "";
+  const numero = (valor, rotulo, classe = "") => `
+    <div class="numero-resumo ${classe}"><strong>${valor}</strong><span>${rotulo}</span></div>`;
+
+  container.innerHTML = `
+    <h2 class="titulo-secao">Resumo de ${NOMES_MESES[mes].toLowerCase()}${deIdioma}</h2>
+    ${previstas || canceladas.length || naoRealizadas.length ? `
+      <div class="progresso-mes" role="img" aria-label="${realizadas.length} de ${previstas} aulas realizadas">
+        <div class="barra-progresso-mes"><span style="width:${pct}%"></span></div>
+        <span>${realizadas.length} de ${previstas} ${previstas === 1 ? "aula realizada" : "aulas realizadas"}</span>
+      </div>
+      <div class="numeros-resumo">
+        ${numero(realizadas.length, realizadas.length === 1 ? "realizada" : "realizadas", "tom-ok")}
+        ${numero(aindaVao.length, aindaVao.length === 1 ? "marcada" : "marcadas")}
+        ${numero(formatarHorasDeAula(minutosDados), "de aula dada")}
+        ${numero(Object.keys(porAluno).length, Object.keys(porAluno).length === 1 ? "aluno com aula" : "alunos com aula")}
+      </div>
+      <ul class="lista-resumo">
+        ${paraConfirmar.length ? `<li class="tom-alerta"><span>Para confirmar</span><strong>${paraConfirmar.length}</strong></li>` : ""}
+        <li><span>Reposições</span><strong>${reposicoes.length}</strong></li>
+        <li><span>Canceladas</span><strong>${canceladas.length}</strong></li>
+        <li><span>Não realizadas</span><strong>${naoRealizadas.length}</strong></li>
+      </ul>
+      ${ranking.length ? `
+        <h3 class="subtitulo-resumo">Mais aulas no mês</h3>
+        <ol class="ranking-resumo">
+          ${ranking.map((r) => `
+            <li><span class="avatar-aluno" aria-hidden="true">${escapeHtml(iniciaisDoNome(r.nome))}</span>
+              <span class="nome-ranking">${escapeHtml(r.nome)}</span>
+              <strong>${r.qtd} ${r.qtd === 1 ? "aula" : "aulas"}</strong></li>`).join("")}
+        </ol>` : ""}
+    ` : `<p class="vazio-inline">Nenhuma aula neste mês ainda.</p>`}
+    <p class="dica-resumo">Clique num dia do calendário para ver as aulas dele.</p>`;
 }
 
 // "Fingerprint" do override salvo de um dia — usado só pra saber se o editor
