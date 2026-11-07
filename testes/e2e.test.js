@@ -1220,6 +1220,7 @@ function dataDaqui(dias) {
     // pouco, sem a Bia recarregar a página) abre com a mensagem configurada
     const dia = dataDaqui(9);
     await aluno.evaluate(async (d) => { await agendarAula(professorIdDoAluno, d, '06:10', '07:00', 'online', auth.currentUser.uid, 'Bia', false, 'en', 'agendada'); }, dia);
+    await aluno.click('.letra-tab[title="Início"]'); // as aulas ficam no painel da tela Início
     await aluno.waitForSelector('#lista-minhas-aulas .cartao-aula:has-text("06:10")', { timeout: 5000 });
     await aluno.click('#lista-minhas-aulas .cartao-aula:has-text("06:10") button:has-text("Cancelar")');
     await aluno.waitForSelector('#modal-confirmar-whatsapp:not(.modal-oculto) #btn-confirmar-whatsapp:has-text("WhatsApp")', { timeout: 3000 });

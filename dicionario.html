@@ -35,8 +35,9 @@
 <script src="js/pwa.js" defer></script>
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/novidades.css">
+<link rel="stylesheet" href="css/inicio-aluno.css">
 </head>
-<body>
+<body class="pagina-aluno">
 
 <div class="app-shell">
   <nav class="indice-letras">
@@ -45,32 +46,46 @@
   </nav>
 
   <main class="conteudo">
-    <img class="logo-app-topo logo-tema-claro" src="assets/logo.png" alt="Idiomex">
-    <img class="logo-app-topo logo-tema-noturno" src="assets/logo-noturno.png" alt="Idiomex">
-    <p class="slogan-logo slogan-app-topo">Sua Conexão com o Mundo</p>
-    <div class="topo-app">
-      <div class="saudacao">
-        <div class="eyebrow" id="eyebrow-topo">SEU VOCABULÁRIO</div>
-        <h1 id="titulo-topo">Olá!</h1>
-        <div class="contador-total" id="contador-total"></div>
+    <header class="cabecalho-aluno">
+      <div class="marca-aluno">
+        <img class="logo-aluno logo-tema-claro" src="assets/logo.png" alt="Idiomex">
+        <img class="logo-aluno logo-tema-noturno" src="assets/logo-noturno.png" alt="Idiomex">
+        <span class="slogan-aluno">Sua Conexão com o Mundo</span>
       </div>
       <div class="acoes-topo">
         <span id="bandeira-idioma" class="bandeira-idioma"></span>
         <select id="seletor-idioma" class="seletor-idioma-aluno" title="Idioma que você está estudando" onchange="trocarIdiomaAtivo(this.value)" hidden></select>
-        <button class="btn btn-secundario" onclick="iniciarQuiz()">🎯 Quiz rápido</button>
-        <button class="btn btn-secundario" onclick="abrirAgendamento()">📅 Agendar aula</button>
-        <button class="btn btn-secundario" id="btn-sala-aula" onclick="abrirSalaDeAula()">🏫 Sala de aula</button>
-        <button class="btn btn-secundario btn-notificacoes" id="btn-notificacoes" aria-label="Notificações" title="Notificações" onclick="abrirNotificacoes()">🔔<span class="contador-notificacoes" id="contador-notificacoes" hidden>0</span></button>
-        <button class="btn btn-secundario" onclick="abrirPerfil()">👤 Meu perfil</button>
+        <button class="btn btn-secundario btn-icone btn-notificacoes" id="btn-notificacoes" aria-label="Notificações" title="Notificações" onclick="abrirNotificacoes()">🔔<span class="contador-notificacoes" id="contador-notificacoes" hidden>0</span></button>
         <div class="seletor-tema" id="seletor-tema">
           <button class="btn-tema" type="button" title="Mudar cores do app" onclick="alternarMenuTema()">
             <span class="ponto-tema-atual" id="ponto-tema-atual"></span>
           </button>
           <div class="menu-tema oculto" id="menu-tema"></div>
         </div>
-        <button class="btn btn-secundario" onclick="sair()">Sair</button>
+        <button class="btn btn-secundario btn-perfil" title="Meu perfil" onclick="abrirPerfil()"><span aria-hidden="true">👤</span><span class="rotulo-btn-perfil">Meu perfil</span></button>
+        <button class="btn btn-secundario btn-sair" onclick="sair()">Sair</button>
       </div>
-    </div>
+    </header>
+
+    <section class="boas-vindas">
+      <div class="eyebrow" id="eyebrow-topo">SEU VOCABULÁRIO</div>
+      <h1 id="titulo-topo">Olá!</h1>
+    </section>
+
+    <section class="atalhos-aluno" aria-label="Atalhos">
+      <button class="atalho" onclick="iniciarQuiz()">
+        <span class="icone-atalho" aria-hidden="true">🎯</span>
+        <span class="texto-atalho"><strong>Quiz rápido</strong><small>Revise suas palavras</small></span>
+      </button>
+      <button class="atalho" onclick="abrirAgendamento()">
+        <span class="icone-atalho" aria-hidden="true">📅</span>
+        <span class="texto-atalho"><strong>Agendar aula</strong><small>Escolha um horário</small></span>
+      </button>
+      <button class="atalho" id="btn-sala-aula" onclick="abrirSalaDeAula()">
+        <span class="icone-atalho" aria-hidden="true">🏫</span>
+        <span class="texto-atalho"><strong>Sala de aula</strong><small>Link e materiais</small></span>
+      </button>
+    </section>
 
     <div id="modal-quiz" class="modal-oculto">
       <div class="modal-conteudo">
@@ -155,34 +170,52 @@
       </div>
     </div>
 
-    <div id="painel-minhas-aulas" class="oculto" style="margin-bottom:2rem;">
-      <h3 style="font-size:0.95rem;" id="titulo-minhas-aulas">Minhas próximas aulas</h3>
-      <div id="lista-minhas-aulas"></div>
-    </div>
+    <div class="layout-inicio">
+      <div class="coluna-principal">
+        <section id="painel-minhas-aulas" class="painel-minhas-aulas so-inicio oculto">
+          <div id="lista-minhas-aulas"></div>
+        </section>
 
-    <div id="painel-mensagens" class="oculto" style="margin-bottom:2rem;">
-      <h3 style="font-size:0.95rem;">Recados do professor</h3>
-      <div id="lista-mensagens"></div>
-    </div>
+        <section class="cartao-secao secao-nova-palavra">
+          <h2 class="titulo-secao so-inicio" id="titulo-nova-palavra">Nova palavra</h2>
+          <form class="formulario-palavra" onsubmit="event.preventDefault(); adicionarPalavra(document.getElementById('input-palavra-en').value, document.getElementById('input-palavra-pt').value, document.getElementById('input-palavra-nota').value);">
+            <div class="linha-palavra">
+              <input type="text" id="input-palavra-en" placeholder="Palavra em inglês (ex: apple)" required>
+              <input type="text" id="input-palavra-pt" placeholder="Tradução (ex: maçã)" required>
+            </div>
+            <textarea id="input-palavra-nota" class="textarea-nota-palavra" placeholder="Anotação (opcional) — ex: quando usar, diferença de outra palavra, dica pra lembrar..."></textarea>
+            <button type="submit" class="btn btn-primario" id="btn-adicionar-palavra">Adicionar</button>
+          </form>
+          <p class="status-msg" id="status-palavra"></p>
+        </section>
 
-    <form class="formulario-palavra" onsubmit="event.preventDefault(); adicionarPalavra(document.getElementById('input-palavra-en').value, document.getElementById('input-palavra-pt').value, document.getElementById('input-palavra-nota').value);">
-      <div class="linha-palavra">
-        <input type="text" id="input-palavra-en" placeholder="Palavra em inglês (ex: apple)" required>
-        <input type="text" id="input-palavra-pt" placeholder="Tradução (ex: maçã)" required>
+        <section class="cartao-secao so-inicio" id="painel-palavras-recentes">
+          <h2 class="titulo-secao">Palavras recentes</h2>
+          <div id="lista-palavras-recentes"></div>
+        </section>
       </div>
-      <textarea id="input-palavra-nota" class="textarea-nota-palavra" placeholder="Anotação (opcional) — ex: quando usar, diferença de outra palavra, dica pra lembrar..."></textarea>
-      <button type="submit" class="btn btn-primario" id="btn-adicionar-palavra">Adicionar</button>
-    </form>
-    <p class="status-msg" id="status-palavra"></p>
 
-    <div id="painel-anotacoes" style="margin-bottom:2rem;">
-      <h3 style="font-size:0.95rem;">Minhas anotações</h3>
-      <div class="caixa-mensagem" style="margin-bottom:1rem;">
-        <textarea id="input-anotacoes" placeholder="Adicione anotações ou regras gramaticais aprendidas"></textarea>
-        <button class="btn btn-primario" style="margin-top:0.6em;" onclick="adicionarAnotacao(document.getElementById('input-anotacoes').value)">Salvar anotação</button>
-        <p class="status-msg" id="status-anotacao"></p>
-      </div>
-      <div id="lista-anotacoes"></div>
+      <aside class="coluna-lateral so-inicio">
+        <section class="cartao-secao" aria-label="Seu progresso">
+          <h2 class="titulo-secao">Seu progresso</h2>
+          <div class="numeros-progresso" id="numeros-progresso"></div>
+        </section>
+
+        <section id="painel-mensagens" class="cartao-secao oculto">
+          <h2 class="titulo-secao">Recados do professor</h2>
+          <div id="lista-mensagens"></div>
+        </section>
+
+        <section id="painel-anotacoes" class="cartao-secao">
+          <h2 class="titulo-secao">Minhas anotações</h2>
+          <div class="caixa-mensagem">
+            <textarea id="input-anotacoes" placeholder="Adicione anotações ou regras gramaticais aprendidas"></textarea>
+            <button class="btn btn-primario" onclick="adicionarAnotacao(document.getElementById('input-anotacoes').value)">Salvar anotação</button>
+            <p class="status-msg" id="status-anotacao"></p>
+          </div>
+          <div id="lista-anotacoes"></div>
+        </section>
+      </aside>
     </div>
 
     <div class="grade-cartoes" id="grade-cartoes"></div>

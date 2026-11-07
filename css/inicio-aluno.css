@@ -1,0 +1,344 @@
+/* ============================================================
+   PÁGINA INICIAL DO ALUNO
+   Inspirada nos apps de aula particular e de idiomas: a próxima
+   aula em destaque no topo (com contagem e botão para entrar),
+   atalhos grandes, números de progresso e as palavras recentes.
+   Tudo com as variáveis de tema, então segue as cores escolhidas.
+   ============================================================ */
+
+.pagina-aluno {
+  --raio-cartao: 16px;
+  --destaque-bg: var(--acento-forte);
+  --destaque-ink: #fff;
+}
+html[data-tema="noturno"] .pagina-aluno { --destaque-bg: var(--lateral-bg); }
+
+/* Telas de cada letra: só formulário e fichas (o painel fica no Início) */
+.tela-letra .so-inicio { display: none !important; }
+
+/* ---------- Cabeçalho: logo à esquerda, ações à direita ---------- */
+.cabecalho-aluno {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.6rem;
+}
+.marca-aluno { display: flex; flex-direction: column; align-items: flex-start; }
+.logo-aluno { width: 150px; height: auto; display: block; }
+.slogan-aluno {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #1E9E83;
+  margin: 0.1rem 0 0 0.4rem;
+}
+html[data-tema="noturno"] .slogan-aluno { color: #5CCFB0; }
+
+.pagina-aluno .acoes-topo { gap: 0.5rem; }
+.pagina-aluno .acoes-topo .btn {
+  border-radius: 999px;
+  padding: 0.5em 0.95em;
+  background: var(--bg-cartao);
+}
+.pagina-aluno .acoes-topo .btn-icone { padding: 0.5em 0.75em; }
+.btn-perfil { display: inline-flex; align-items: center; gap: 0.4em; }
+
+/* ---------- Saudação ---------- */
+.boas-vindas { margin-bottom: 1.3rem; }
+.boas-vindas .eyebrow { text-transform: none; letter-spacing: 0.02em; font-size: 0.85rem; }
+.tela-letra .boas-vindas .eyebrow { text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.08em; }
+.boas-vindas h1 { font-size: 2.1rem; margin: 0.1em 0 0; }
+.tela-letra .boas-vindas h1 { font-size: 1.6rem; }
+
+/* ---------- Atalhos ---------- */
+.atalhos-aluno {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1.4rem;
+}
+.atalho {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  text-align: left;
+  padding: 0.85rem 1rem;
+  border-radius: var(--raio-cartao);
+  border: 1px solid var(--borda);
+  background: var(--bg-cartao);
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+.atalho:hover {
+  transform: translateY(-2px);
+  border-color: var(--acento);
+  box-shadow: 0 6px 18px var(--sombra);
+}
+.atalho:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.icone-atalho {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  font-size: 1.35rem;
+  background: color-mix(in srgb, var(--acento) 14%, var(--bg-cartao));
+}
+.texto-atalho { display: flex; flex-direction: column; min-width: 0; }
+.texto-atalho strong { font-size: 0.95rem; }
+.texto-atalho small { font-size: 0.78rem; color: var(--ink-soft); }
+.tela-letra .atalho { padding: 0.55rem 0.8rem; }
+.tela-letra .icone-atalho { width: 34px; height: 34px; font-size: 1.1rem; }
+.tela-letra .texto-atalho small { display: none; }
+
+/* ---------- Layout do Início: coluna principal + lateral ---------- */
+.layout-inicio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.2rem;
+  align-items: start;
+}
+@media (min-width: 1000px) {
+  .layout-inicio { grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); }
+  .tela-letra .layout-inicio { grid-template-columns: minmax(0, 1fr); }
+}
+.coluna-principal, .coluna-lateral { display: flex; flex-direction: column; gap: 1.2rem; min-width: 0; }
+
+.cartao-secao {
+  background: var(--bg-cartao);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-cartao);
+  padding: 1.1rem 1.2rem;
+}
+.titulo-secao {
+  font-family: var(--fonte-corpo);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 0 0 0.8rem;
+}
+
+/* O formulário de palavra agora fica dentro de um cartão: sem moldura dupla */
+.secao-nova-palavra .formulario-palavra {
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: none;
+  box-shadow: none;
+}
+.secao-nova-palavra .status-msg:empty { display: none; }
+.tela-letra .secao-nova-palavra { padding: 1rem 1.1rem; }
+
+/* ---------- Próxima aula em destaque ---------- */
+.painel-minhas-aulas { display: flex; flex-direction: column; gap: 0.8rem; }
+.destaque-aula.cartao-aula,
+.destaque-aula {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  padding: 1.3rem 1.4rem 1.2rem;
+  border: none;
+  border-radius: var(--raio-cartao);
+  background: var(--destaque-bg);
+  color: var(--destaque-ink);
+  box-shadow: 0 10px 28px var(--sombra);
+}
+/* Detalhe decorativo: um círculo na cor de destaque do tema */
+.destaque-aula::after {
+  content: "";
+  position: absolute;
+  right: -60px;
+  top: -60px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: var(--acento-secundario);
+  opacity: 0.2;
+  pointer-events: none;
+}
+.destaque-aula > * { position: relative; z-index: 1; }
+.topo-destaque {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.rotulo-destaque {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.contagem-aula {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.25em 0.75em;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.quando-destaque {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.8rem;
+  margin: 0.6rem 0 0.7rem;
+}
+.dia-destaque {
+  font-family: var(--fonte-titulo);
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.hora-destaque { font-size: 1.15rem; font-weight: 600; opacity: 0.92; }
+.destaque-aula .aula-info { gap: 0.4rem; }
+.destaque-aula .badge-modalidade,
+.destaque-aula .badge-status {
+  background: rgba(255, 255, 255, 0.92);
+}
+.acoes-destaque {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  margin-top: 1rem;
+}
+.btn-destaque {
+  display: inline-block;
+  text-decoration: none;
+  background: #fff;
+  color: var(--acento-forte);
+  border-radius: 999px;
+  padding: 0.65em 1.4em;
+  font-weight: 700;
+}
+.btn-destaque:hover { background: rgba(255, 255, 255, 0.88); }
+html[data-tema="noturno"] .btn-destaque { color: #223247; }
+.btn-cancelar-destaque {
+  background: none;
+  border: none;
+  padding: 0.3em 0;
+  color: inherit;
+  opacity: 0.85;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.btn-cancelar-destaque:hover { opacity: 1; }
+
+.destaque-vazio .titulo-destaque {
+  font-family: var(--fonte-titulo);
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0.2rem;
+}
+.destaque-vazio .texto-destaque { margin: 0 0 1rem; opacity: 0.88; font-size: 0.92rem; }
+
+.seguintes-aulas h3 {
+  font-family: var(--fonte-corpo);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 0.4rem 0 0.5rem;
+}
+.seguintes-aulas .cartao-aula { border-radius: 12px; }
+
+/* ---------- Progresso ---------- */
+.numeros-progresso {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+.numero-progresso {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  padding: 0.75rem 0.7rem;
+  border-radius: 12px;
+  background: var(--bg);
+  min-width: 0;
+}
+.icone-numero { font-size: 1.1rem; }
+.numero-progresso strong {
+  font-family: var(--fonte-titulo);
+  font-size: 1.6rem;
+  line-height: 1.1;
+  color: var(--acento-forte);
+}
+.numero-progresso span:last-child { font-size: 0.75rem; color: var(--ink-soft); line-height: 1.25; }
+
+/* ---------- Palavras recentes ---------- */
+.chips-palavras { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.chip-palavra {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45em;
+  max-width: 100%;
+  padding: 0.45em 0.9em;
+  border-radius: 999px;
+  border: 1px solid var(--borda);
+  background: var(--bg);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.chip-palavra:hover { border-color: var(--acento); background: var(--bg-cartao); }
+.chip-palavra strong { font-size: 0.9rem; }
+.chip-palavra span {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Recados e anotações dentro dos cartões ---------- */
+.coluna-lateral .mensagem-item { background: var(--bg); }
+.coluna-lateral .mensagem-item:last-child { margin-bottom: 0; }
+#painel-anotacoes .caixa-mensagem { margin-bottom: 0.8rem; }
+#painel-anotacoes .caixa-mensagem textarea { min-height: 70px; }
+#painel-anotacoes .caixa-mensagem .btn { margin-top: 0.6em; }
+#painel-anotacoes .status-msg:empty { display: none; }
+
+/* ---------- Celular ---------- */
+@media (max-width: 720px) {
+  .cabecalho-aluno { margin-bottom: 1.1rem; }
+  .logo-aluno { width: 118px; }
+  .slogan-aluno { display: none; }
+  .pagina-aluno .acoes-topo { gap: 0.35rem; }
+  .pagina-aluno .acoes-topo .btn { padding: 0.55em 0.75em; }
+  .rotulo-btn-perfil {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .boas-vindas h1 { font-size: 1.7rem; }
+
+  .atalhos-aluno { gap: 0.5rem; }
+  .atalho {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.35rem;
+    padding: 0.75rem 0.4rem;
+  }
+  .texto-atalho strong { font-size: 0.82rem; }
+  .texto-atalho small { display: none; }
+  .tela-letra .atalho { flex-direction: row; justify-content: center; }
+
+  .destaque-aula.cartao-aula, .destaque-aula { padding: 1.1rem 1.1rem 1rem; }
+  .dia-destaque { font-size: 1.65rem; }
+  .cartao-secao { padding: 1rem; }
+  .numero-progresso strong { font-size: 1.35rem; }
+}
