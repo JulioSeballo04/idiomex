@@ -376,26 +376,53 @@ function slotsSemConflito(slots, duracaoMinutos, aulasMarcadas) {
 // PLANO DO ALUNO — aulas por semana e créditos de reposição
 // ============================================================
 // O professor define, por aluno E POR IDIOMA, quantas aulas ele pode marcar por
-// semana (0 = sem limite) e dá créditos de reposição. O saldo de reposições é
-// calculado a partir das próprias aulas daquele idioma: créditos concedidos menos
-// as aulas de reposição marcadas ou feitas. Uma reposição cancelada devolve o
-// crédito sozinha.
+// semana (0 = sem limite) e dá tempo de reposição, EM MINUTOS: cada crédito vale
+// 1 hora, mas nem toda reposição é uma hora cheia (às vezes a aula dura 1h20, ou
+// a reposição é feita esticando uma aula em 15 minutos). O saldo é calculado a
+// partir das próprias aulas daquele idioma: os minutos concedidos menos a duração
+// das aulas de reposição marcadas ou feitas. Uma reposição cancelada devolve os
+// minutos sozinha.
 //
 // No perfil: plano = {professorId, aulasPorSemana, reposicoesConcedidas,
-// porIdioma: {en: {aulasPorSemana, reposicoesConcedidas}, ...}}. Os campos de fora
-// de "porIdioma" são do plano antigo (antes de ser por idioma) e valem para o
-// idioma principal do professor até ele ajustar o plano de novo.
+// porIdioma: {en: {aulasPorSemana, reposicoesConcedidas, minutosReposicao}, ...}}.
+// "minutosReposicao" são os minutos concedidos; sem ele (planos de antes), cada
+// reposição concedida vale 1 hora. Os campos de fora de "porIdioma" são do plano
+// antigo (antes de ser por idioma) e valem para o idioma principal do professor
+// até ele ajustar o plano de novo.
 
-const SEM_PLANO = { aulasPorSemana: 0, reposicoesConcedidas: 0 };
+const MINUTOS_POR_CREDITO = 60;
+const SEM_PLANO = { aulasPorSemana: 0, reposicoesConcedidas: 0, minutosReposicao: 0 };
+
+// Minutos de reposição concedidos de um plano (ou de um cadastro de aluno sem app)
+function minutosConcedidos(p) {
+  if (!p) return 0;
+  if (Number.isInteger(p.minutosReposicao)) return p.minutosReposicao;
+  return (p.reposicoesConcedidas || 0) * MINUTOS_POR_CREDITO;
+}
+
+// "3h", "1h15", "45 min", "0 min"
+function formatarMinutos(total) {
+  const m = Math.max(0, Math.round(total || 0));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60), resto = m % 60;
+  return resto ? `${h}h${String(resto).padStart(2, "0")}` : `${h}h`;
+}
+
+// Duração de uma aula em minutos (aulas antigas, sem horário de fim: 1 hora)
+function duracaoDaAula(a) {
+  if (!a.horaFim) return MINUTOS_POR_CREDITO;
+  const d = minutosDoHorario(a.horaFim) - minutosDoHorario(a.horaInicio);
+  return d > 0 ? d : MINUTOS_POR_CREDITO;
+}
 
 // Plano do aluno com ESTE professor, num idioma (um plano de professor anterior não vale)
 function planoDoAluno(perfilAluno, professorId, idioma, idiomaPrincipal) {
   const p = perfilAluno && perfilAluno.plano;
   if (!p || p.professorId !== professorId) return SEM_PLANO;
   const doIdioma = p.porIdioma && p.porIdioma[idioma];
-  if (doIdioma) return { aulasPorSemana: doIdioma.aulasPorSemana || 0, reposicoesConcedidas: doIdioma.reposicoesConcedidas || 0 };
+  if (doIdioma) return { aulasPorSemana: doIdioma.aulasPorSemana || 0, reposicoesConcedidas: doIdioma.reposicoesConcedidas || 0, minutosReposicao: minutosConcedidos(doIdioma) };
   if (!p.porIdioma && idioma === idiomaPrincipal) {
-    return { aulasPorSemana: p.aulasPorSemana || 0, reposicoesConcedidas: p.reposicoesConcedidas || 0 };
+    return { aulasPorSemana: p.aulasPorSemana || 0, reposicoesConcedidas: p.reposicoesConcedidas || 0, minutosReposicao: minutosConcedidos(p) };
   }
   return SEM_PLANO;
 }
@@ -433,13 +460,24 @@ function inicioDaSemanaISO(dataIso) {
   return chaveDataISO(d);
 }
 
-function reposicoesUsadas(aulas, professorId, idioma) {
+function aulasDeReposicao(aulas, professorId, idioma) {
   return aulas.filter((a) => a.professorId === professorId && a.reposicao === true &&
-    aulaContaNoPlano(a) && aulaDoIdioma(a, idioma)).length;
+    aulaContaNoPlano(a) && aulaDoIdioma(a, idioma));
 }
 
+// Quantas aulas de reposição (marcadas ou feitas)
+function reposicoesUsadas(aulas, professorId, idioma) {
+  return aulasDeReposicao(aulas, professorId, idioma).length;
+}
+
+// Minutos de reposição usados: a soma da duração dessas aulas
+function minutosReposicaoUsados(aulas, professorId, idioma) {
+  return aulasDeReposicao(aulas, professorId, idioma).reduce((soma, a) => soma + duracaoDaAula(a), 0);
+}
+
+// Saldo de reposição, em minutos
 function saldoReposicoes(plano, aulas, professorId, idioma) {
-  return Math.max(0, plano.reposicoesConcedidas - reposicoesUsadas(aulas, professorId, idioma));
+  return Math.max(0, minutosConcedidos(plano) - minutosReposicaoUsados(aulas, professorId, idioma));
 }
 
 // Aulas normais (não reposição) do aluno, num idioma, na semana da data informada

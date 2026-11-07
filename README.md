@@ -143,7 +143,10 @@ usuarios/{uid}
   codigoVinculo          -> só em alunos, código usado para o vínculo
   plano                  -> só em alunos, definido pelo professor, POR IDIOMA:
                             {professorId, porIdioma: {en: {aulasPorSemana
-                             (0 = sem limite), reposicoesConcedidas}, ...}}
+                             (0 = sem limite), minutosReposicao}, ...}}
+                            (a reposição é em minutos: cada crédito vale 1h e
+                             cada aula de reposição desconta a duração dela;
+                             sem "minutosReposicao", vale reposicoesConcedidas × 60)
                             (aulasPorSemana/reposicoesConcedidas fora de
                              "porIdioma" = plano antigo, vale para o primeiro
                              idioma do professor)
@@ -209,7 +212,7 @@ usuarios/{professorId}/biblioteca/{id}
                              "alunos" (uids) dizem quem vê
 
 usuarios/{professorId}/alunosSemApp/{id}
-  nome, telefone, idioma, reposicoesConcedidas (nesse idioma), criadoEm
+  nome, telefone, idioma, minutosReposicao (nesse idioma), criadoEm
                           -> alunos que não usam o app: o professor marca as
                              aulas por eles e recebe um lembrete na agenda
                              enquanto não houver aula marcada

@@ -167,13 +167,17 @@
                   <label for="marcar-modalidade">Modalidade</label>
                   <select id="marcar-modalidade"></select>
                 </div>
+                <div class="campo-perfil campo-duracao-marcar">
+                  <label for="marcar-duracao">Duração (min)</label>
+                  <input type="text" inputmode="numeric" id="marcar-duracao" maxlength="3" placeholder="padrão">
+                </div>
                 <div class="campo-perfil" id="marcar-idioma-wrap">
                   <label for="marcar-idioma">Idioma</label>
                   <select id="marcar-idioma" onchange="atualizarReposicaoMarcarAula(); selecionarDiaMarcarAula()"></select>
                 </div>
               </div>
               <label class="opcao-reposicao-marcar" id="marcar-reposicao-wrap" hidden>
-                <input type="checkbox" id="marcar-reposicao"> É reposição (usa 1 crédito — <span id="marcar-reposicao-saldo"></span>)
+                <input type="checkbox" id="marcar-reposicao"> É reposição (desconta a duração da aula — <span id="marcar-reposicao-saldo"></span>)
               </label>
               <label class="opcao-reposicao-marcar" id="marcar-whatsapp-wrap" hidden>
                 <input type="checkbox" id="marcar-whatsapp"> Enviar a confirmação para o WhatsApp do aluno

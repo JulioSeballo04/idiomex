@@ -1403,13 +1403,19 @@ function idiomaDoAgendamento() {
   return idiomaValido((agendamento && agendamento.idioma) || idiomasParaAula()[0]);
 }
 
+// Duração (minutos) das aulas no idioma do agendamento
+function duracaoDoAgendamento() {
+  return (configAgendaProfessor && configDoAgendamento().duracaoAulaMinutos) || 50;
+}
+
 function situacaoDoPlano(dataIso) {
   const idioma = idiomaDoAgendamento();
   const plano = planoDoAluno(perfilAlunoAtual, professorIdDoAluno, idioma, idiomasParaAula()[0]);
   const saldo = saldoReposicoes(plano, minhasAulasCache, professorIdDoAluno, idioma);
   const limite = plano.aulasPorSemana;
   const naSemana = dataIso ? aulasNaSemana(minhasAulasCache, professorIdDoAluno, dataIso, idioma) : 0;
-  return { limite, naSemana, semanaCheia: limite > 0 && naSemana >= limite, saldo };
+  // saldo: minutos de reposição; a aula de reposição precisa caber nele
+  return { limite, naSemana, semanaCheia: limite > 0 && naSemana >= limite, saldo, duracao: duracaoDoAgendamento() };
 }
 
 function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade, reposicao, idiomaAula, pedido) {
@@ -1500,14 +1506,14 @@ function renderizarAgendamento() {
   // Com a semana cheia, a aula só pode ser reposição: com crédito, usa o crédito;
   // sem crédito, vira um pedido para o professor aprovar
   if (plano.semanaCheia) agendamento.reposicao = true;
-  const pedido = agendamento.reposicao && plano.saldo === 0;
+  const pedido = agendamento.reposicao && plano.saldo < plano.duracao;
   const linhasPlano = [];
   if (plano.limite > 0) {
     linhasPlano.push(agendamento.data
       ? `Semana de ${escapeHtml(formatarDataBR(inicioDaSemanaISO(agendamento.data)).slice(0, 5))}: <strong>${plano.naSemana} de ${plano.limite}</strong> aula${plano.limite > 1 ? "s" : ""} do seu plano`
       : `Seu plano: <strong>${plano.limite}</strong> aula${plano.limite > 1 ? "s" : ""} por semana`);
   }
-  linhasPlano.push(`Reposições${escolheIdiomaNoAgendamento() ? ` de ${IDIOMAS[idiomaDoAgendamento()].nome}` : ""} disponíveis: <strong>${plano.saldo}</strong>`);
+  linhasPlano.push(`Reposição${escolheIdiomaNoAgendamento() ? ` de ${IDIOMAS[idiomaDoAgendamento()].nome}` : ""} disponível: <strong>${formatarMinutos(plano.saldo)}</strong>`);
 
   const cartaoConfirmar = `
     <div class="cartao-passo${dataHoraEscolhidas ? "" : " passo-bloqueado"}">
@@ -1522,8 +1528,8 @@ function renderizarAgendamento() {
       <div class="plano-agendamento">${linhasPlano.map((l) => `<div>${l}</div>`).join("")}</div>
       <div class="campo-agendamento campo-reposicao">
         <label class="rotulo-reposicao"><input type="checkbox" id="chk-reposicao" ${agendamento.reposicao ? "checked" : ""} ${plano.semanaCheia ? "disabled" : ""} onchange="agendamento.reposicao = this.checked; renderizarAgendamento()"> Esta aula é uma reposição</label>
-        ${agendamento.reposicao && plano.saldo > 0 ? `<p class="dica-reposicao">${plano.semanaCheia ? "As aulas do seu plano nessa semana já estão marcadas — e" : "E"}sta aula vai usar 1 crédito de reposição e já fica confirmada.</p>` : ""}
-        ${pedido ? `<p class="dica-reposicao aviso-pedido">${plano.semanaCheia ? "As aulas do seu plano nessa semana já estão marcadas e v" : "V"}ocê não tem crédito de reposição: esta aula vai como <strong>pedido de reposição</strong>. O horário fica reservado e seu professor precisa aprovar.</p>` : ""}
+        ${agendamento.reposicao && !pedido ? `<p class="dica-reposicao">${plano.semanaCheia ? "As aulas do seu plano nessa semana já estão marcadas — e" : "E"}sta aula vai usar ${formatarMinutos(plano.duracao)} da sua reposição e já fica confirmada.</p>` : ""}
+        ${pedido ? `<p class="dica-reposicao aviso-pedido">${plano.semanaCheia ? "As aulas do seu plano nessa semana já estão marcadas e v" : "V"}ocê ${plano.saldo ? `tem só ${formatarMinutos(plano.saldo)} de reposição (a aula tem ${formatarMinutos(plano.duracao)})` : "não tem tempo de reposição"}: esta aula vai como <strong>pedido de reposição</strong>. O horário fica reservado e seu professor precisa aprovar.</p>` : ""}
       </div>
       ${agendamento.erro ? `<p class="erro-agendamento" role="alert">${escapeHtml(agendamento.erro)}</p>` : ""}
       <button type="button" class="btn btn-primario btn-confirmar-agendamento" id="btn-confirmar-agendamento" onclick="confirmarAgendamento()" ${dataHoraEscolhidas && !agendamento.salvando ? "" : "disabled"}>
@@ -1736,7 +1742,7 @@ async function confirmarAgendamento() {
     return;
   }
   const plano = situacaoDoPlano(agendamento.data);
-  const pedido = agendamento.reposicao && plano.saldo === 0; // reposição sem crédito: espera aprovação
+  const pedido = agendamento.reposicao && plano.saldo < plano.duracao; // sem tempo de reposição suficiente: espera aprovação
   if (!agendamento.reposicao && plano.semanaCheia) {
     agendamento.erro = `Você já marcou as ${plano.limite} aula${plano.limite > 1 ? "s" : ""} do seu plano nessa semana.`;
     renderizarAgendamento();
