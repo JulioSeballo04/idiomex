@@ -645,8 +645,8 @@ function montarPlanoAluno(alunoId) {
   const idiomasDoPlano = idiomaAtivoProfessor ? [idiomaAtivoProfessor] : idiomasAtuaisProfessor;
   const linhas = idiomasDoPlano.map((idioma) => {
     const plano = planoNoIdioma(aluno, idioma);
-    const saldo = saldoReposicoes(plano, aulasDoAluno, professorIdAtual, idioma);
     const usadas = reposicoesUsadas(aulasDoAluno, professorIdAtual, idioma);
+    const minutosUsados = minutosReposicaoUsados(aulasDoAluno, professorIdAtual, idioma);
     const nestaSemana = aulasNaSemana(aulasDoAluno, professorIdAtual, dataDeHojeISO(), idioma);
     const opcoes = [0, 1, 2, 3, 4, 5, 6, 7].map((n) =>
       `<option value="${n}" ${n === plano.aulasPorSemana ? "selected" : ""}>${n === 0 ? "Sem limite" : n}</option>`).join("");
@@ -657,22 +657,15 @@ function montarPlanoAluno(alunoId) {
           <label class="campo-plano">Aulas por semana
             <select onchange="definirAulasPorSemana('${alunoId}', '${idioma}', this.value)">${opcoes}</select>
           </label>
-          <div class="campo-plano">
-            <span>Reposições disponíveis</span>
-            <div class="contador-reposicoes">
-              <button type="button" class="btn-contador" aria-label="Tirar 1 reposição" onclick="ajustarReposicoes('${alunoId}', '${idioma}', -1)" ${saldo === 0 ? "disabled" : ""}>−</button>
-              <strong class="saldo-reposicoes">${saldo}</strong>
-              <button type="button" class="btn-contador" aria-label="Dar 1 reposição" onclick="ajustarReposicoes('${alunoId}', '${idioma}', 1)">+</button>
-            </div>
-          </div>
+          ${montarControleReposicao(alunoId, idioma)}
         </div>
-        <p class="dica-plano">Nesta semana: ${nestaSemana}${plano.aulasPorSemana ? ` de ${plano.aulasPorSemana}` : ""} aula${nestaSemana === 1 ? "" : "s"} do plano · ${usadas} reposiç${usadas === 1 ? "ão usada" : "ões usadas"}.</p>
+        <p class="dica-plano">Nesta semana: ${nestaSemana}${plano.aulasPorSemana ? ` de ${plano.aulasPorSemana}` : ""} aula${nestaSemana === 1 ? "" : "s"} do plano · ${usadas} reposiç${usadas === 1 ? "ão" : "ões"} (${formatarMinutos(minutosUsados)}) usada${usadas === 1 ? "" : "s"}.</p>
       </div>`;
   }).join("");
   return `
     <div class="plano-aluno">
       ${linhas}
-      <p class="dica-plano">Cada reposição é um crédito para o aluno marcar uma aula a mais${varios ? " naquele idioma" : ""}.</p>
+      <p class="dica-plano">A reposição é contada em minutos${varios ? ", por idioma" : ""}: a cada 60 min, o aluno ganha 1 crédito para marcar uma aula extra como reposição. Uma aula de reposição desconta a duração dela; numa aula esticada (ex: 1h15), desconte só os minutos a mais.</p>
     </div>`;
 }
 
@@ -695,23 +688,61 @@ function definirAulasPorSemana(alunoId, idioma, valor) {
   salvarPlanoAluno(alunoId, idioma, { aulasPorSemana: Math.max(0, Math.min(14, parseInt(valor, 10) || 0)) });
 }
 
-// +1 dá um crédito; −1 tira um crédito ainda não usado. Os créditos concedidos são
-// guardados em total; o saldo é esse total menos as reposições já marcadas/feitas.
-function ajustarReposicoes(alunoId, idioma, delta) {
-  const aluno = alunosCache.find((a) => a.id === alunoId);
-  if (!aluno) return;
-  const plano = planoNoIdioma(aluno, idioma);
-  const usadas = reposicoesUsadas(aulasCache.filter((a) => a.alunoId === alunoId), professorIdAtual, idioma);
-  const saldo = Math.max(0, plano.reposicoesConcedidas - usadas);
-  const novoSaldo = Math.max(0, saldo + delta);
-  if (novoSaldo === saldo) return;
-  salvarPlanoAluno(alunoId, idioma, { reposicoesConcedidas: usadas + novoSaldo }).then((ok) => {
-    if (ok && delta > 0) {
-      db.collection("usuarios").doc(alunoId).collection("notificacoes")
-        .add(notificacaoParaAluno("credito-reposicao", `Você recebeu 1 crédito de reposição de ${IDIOMAS[idioma].nome}. Agora tem ${novoSaldo} para usar ao marcar aulas de ${IDIOMAS[idioma].nome}.`, idioma))
-        .catch((e) => console.warn("Não foi possível avisar o aluno do crédito:", e));
-    }
+// Saldo de reposição de um aluno (do app ou sem app), em minutos: −1h / +1h e um
+// campo para descontar ou dar minutos avulsos (ex: a aula foi 15 min mais longa)
+function montarControleReposicao(alunoId, idioma) {
+  const { saldo } = creditosDoAluno(alunoId, idioma);
+  const campo = `min-reposicao-${alunoId}-${idioma}`;
+  return `
+    <div class="campo-plano campo-reposicao-minutos">
+      <span>Reposição disponível</span>
+      <div class="contador-reposicoes">
+        <button type="button" class="btn-contador" aria-label="Tirar 1 hora de reposição" onclick="ajustarMinutosReposicao('${alunoId}', '${idioma}', -${MINUTOS_POR_CREDITO})" ${saldo === 0 ? "disabled" : ""}>−1h</button>
+        <strong class="saldo-reposicoes">${formatarMinutos(saldo)}</strong>
+        <button type="button" class="btn-contador" aria-label="Dar 1 hora de reposição" onclick="ajustarMinutosReposicao('${alunoId}', '${idioma}', ${MINUTOS_POR_CREDITO})">+1h</button>
+      </div>
+      <span class="creditos-reposicao" title="A cada 60 min de reposição, 1 crédito para marcar uma aula extra">= ${creditosDeReposicao(saldo)} ${creditosDeReposicao(saldo) === 1 ? "crédito" : "créditos"}${saldo % MINUTOS_POR_CREDITO ? ` · faltam ${faltaParaProximoCredito(saldo)} para o próximo` : ""}</span>
+      <div class="minutos-reposicao">
+        <input type="text" inputmode="numeric" id="${campo}" maxlength="3" placeholder="min" aria-label="Minutos de reposição">
+        <button type="button" class="btn btn-secundario btn-mini" onclick="ajustarMinutosDoCampo('${alunoId}', '${idioma}', -1)" ${saldo === 0 ? "disabled" : ""}>Descontar</button>
+        <button type="button" class="btn btn-secundario btn-mini" onclick="ajustarMinutosDoCampo('${alunoId}', '${idioma}', 1)">Dar</button>
+      </div>
+    </div>`;
+}
+
+function ajustarMinutosDoCampo(alunoId, idioma, sinal) {
+  const campo = document.getElementById(`min-reposicao-${alunoId}-${idioma}`);
+  const minutos = parseInt((campo && campo.value) || "", 10);
+  if (!minutos || minutos < 1 || minutos > 600) { avisar("Digite os minutos (de 1 a 600), ex: 15."); return; }
+  ajustarMinutosReposicao(alunoId, idioma, sinal * minutos).then((ok) => {
+    const atual = document.getElementById(`min-reposicao-${alunoId}-${idioma}`); // a tela foi redesenhada
+    if (ok && atual) atual.value = "";
   });
+}
+
+// Muda o saldo em "delta" minutos (nunca abaixo de zero). Os minutos concedidos são
+// guardados em total; o saldo é esse total menos a duração das reposições marcadas/feitas.
+async function ajustarMinutosReposicao(alunoId, idioma, delta) {
+  const { usadas, saldo } = creditosDoAluno(alunoId, idioma);
+  const novoSaldo = Math.max(0, saldo + delta);
+  if (novoSaldo === saldo) return false;
+  const lote = db.batch();
+  gravarReposicoesConcedidas(lote, alunoId, idioma, usadas + novoSaldo);
+  if (alunosCache.some((a) => a.id === alunoId)) {
+    const nome = IDIOMAS[idioma].nome;
+    const texto = delta > 0
+      ? `Você recebeu ${formatarMinutos(novoSaldo - saldo)} de reposição de ${nome}. Agora tem ${formatarCreditos(novoSaldo)}: cada crédito marca uma aula extra de ${nome}.`
+      : `Foram descontados ${formatarMinutos(saldo - novoSaldo)} da sua reposição de ${nome}. Agora tem ${formatarCreditos(novoSaldo)}.`;
+    lote.set(db.collection("usuarios").doc(alunoId).collection("notificacoes").doc(), notificacaoParaAluno("credito-reposicao", texto, idioma));
+  }
+  try {
+    await lote.commit();
+    return true;
+  } catch (e) {
+    console.error(e);
+    alert(mensagemErroGravacao(e, "Não foi possível salvar a reposição."));
+    return false;
+  }
 }
 
 // Linha de contato do aluno (telefone/e-mail que ele preencheu no perfil)
@@ -1390,9 +1421,21 @@ function linhaAulaPainel(a, mostrarData) {
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
         ${badgeIdiomaAula(a)}
+        ${aulaEmAndamento(a) ? '<span class="badge-status badge-status-em-andamento">Em andamento</span>' : ""}
       </div>
       <div class="aula-acoes">${acoes}</div>
     </div>`;
+}
+
+// Aula que o professor registrou enquanto acontecia: no fim do horário vira concluída
+const aulasSendoConcluidas = new Set();
+function concluirAulasQueTerminaram(agora) {
+  aulasCache.filter((a) => a.status === "agendada" && a.concluirAoTerminar && fimDaAula(a) <= agora && !aulasSendoConcluidas.has(a.id))
+    .forEach((a) => {
+      aulasSendoConcluidas.add(a.id);
+      db.collection("aulas").doc(a.id).update({ status: "concluida", concluirAoTerminar: firebase.firestore.FieldValue.delete() })
+        .catch((e) => { aulasSendoConcluidas.delete(a.id); console.warn("Não foi possível concluir a aula:", e); });
+    });
 }
 
 function renderizarHojeProfessor() {
@@ -1409,7 +1452,8 @@ function renderizarHojeProfessor() {
 
   if (idiomaAtivoProfessor && !idiomasAtuaisProfessor.includes(idiomaAtivoProfessor)) idiomaAtivoProfessor = null;
   // Avisos de todos os idiomas: o contador da aba e os números do filtro contam tudo
-  const todasAtrasadas = aulasCache.filter((a) => a.status === "agendada" && fimDaAula(a) <= agora);
+  concluirAulasQueTerminaram(agora);
+  const todasAtrasadas = aulasCache.filter((a) => a.status === "agendada" && fimDaAula(a) <= agora && !a.concluirAoTerminar);
   const todosPedidos = aulasCache.filter((a) => a.status === "pendente");
   const todosLembretes = lembretesAlunosSemApp();
   atualizarContadorPedidos(todasAtrasadas.length + todosPedidos.length + todosLembretes.length);
@@ -1609,8 +1653,8 @@ function descricaoAula(a) {
   return `${IDIOMAS[idiomaValido(a.idioma)].nome}, ${formatarDataBR(a.data)} às ${a.horaInicio}`;
 }
 
-// Aprovar: a aula vira "agendada" e o professor concede o crédito que ela usa
-// (+1 em reposicoesConcedidas), então o saldo do aluno não muda
+// Aprovar: a aula vira "agendada" e o professor concede os minutos que ela usa
+// (a duração dela), então o saldo do aluno não muda
 async function aprovarPedidoReposicao(aulaId) {
   const aula = aulasCache.find((a) => a.id === aulaId);
   if (!aula) return;
@@ -1619,10 +1663,7 @@ async function aprovarPedidoReposicao(aulaId) {
   lote.update(db.collection("aulas").doc(aulaId), { status: "agendada" });
   if (aluno) {
     const idioma = idiomaValido(aula.idioma);
-    lote.update(db.collection("usuarios").doc(aluno.id), {
-      plano: planoComMudanca(aluno, professorIdAtual, idiomasAtuaisProfessor, idioma,
-        { reposicoesConcedidas: planoNoIdioma(aluno, idioma).reposicoesConcedidas + 1 })
-    });
+    gravarReposicoesConcedidas(lote, aluno.id, idioma, creditosDoAluno(aluno.id, idioma).concedidas + duracaoDaAula(aula));
     lote.set(db.collection("usuarios").doc(aluno.id).collection("notificacoes").doc(),
       notificacaoParaAluno("reposicao-aprovada", `Seu pedido de reposição (${descricaoAula(aula)}) foi aprovado. A aula está confirmada.`, aula.idioma));
   }
@@ -1663,31 +1704,33 @@ function idiomaDoAlunoSemApp(aluno) {
   return idiomaValido(aluno.idioma || idiomasAtuaisProfessor[0]);
 }
 
-// Créditos de reposição de um aluno do app ou sem app, num idioma: {concedidas, usadas, saldo}.
-// O aluno sem app estuda um idioma só; os créditos dele são desse idioma.
+// Reposição de um aluno do app ou sem app, num idioma, EM MINUTOS: {concedidas, usadas, saldo}.
+// O aluno sem app estuda um idioma só; a reposição dele é desse idioma.
 function creditosDoAluno(alunoId, idioma) {
   const aulas = aulasCache.filter((a) => a.alunoId === alunoId);
-  const usadas = reposicoesUsadas(aulas, professorIdAtual, idioma);
+  const usadas = minutosReposicaoUsados(aulas, professorIdAtual, idioma);
   const semApp = alunosSemAppCache.find((a) => a.id === alunoId);
   const aluno = alunosCache.find((a) => a.id === alunoId);
-  const concedidas = semApp ? (idiomaDoAlunoSemApp(semApp) === idioma ? semApp.reposicoesConcedidas || 0 : 0)
-    : aluno ? planoNoIdioma(aluno, idioma).reposicoesConcedidas : 0;
+  const concedidas = semApp ? (idiomaDoAlunoSemApp(semApp) === idioma ? minutosConcedidos(semApp) : 0)
+    : aluno ? planoNoIdioma(aluno, idioma).minutosReposicao : 0;
   return { concedidas, usadas, saldo: Math.max(0, concedidas - usadas) };
 }
 
-// Grava um novo total de reposições concedidas, num idioma, no lote (perfil do aluno ou cadastro sem app)
-function gravarReposicoesConcedidas(lote, alunoId, idioma, total) {
+// Grava um novo total de MINUTOS de reposição concedidos, num idioma, no lote
+// (perfil do aluno ou cadastro sem app)
+function gravarReposicoesConcedidas(lote, alunoId, idioma, totalMinutos) {
+  const minutos = Math.max(0, Math.round(totalMinutos));
   const semApp = alunosSemAppCache.find((a) => a.id === alunoId);
   if (semApp) {
     if (idiomaDoAlunoSemApp(semApp) !== idioma) return;
     lote.update(db.collection("usuarios").doc(professorIdAtual).collection("alunosSemApp").doc(alunoId),
-      { reposicoesConcedidas: Math.max(0, total) });
+      { minutosReposicao: minutos });
     return;
   }
   const aluno = alunosCache.find((a) => a.id === alunoId);
   if (!aluno) return;
   lote.update(db.collection("usuarios").doc(alunoId), {
-    plano: planoComMudanca(aluno, professorIdAtual, idiomasAtuaisProfessor, idioma, { reposicoesConcedidas: Math.max(0, total) })
+    plano: planoComMudanca(aluno, professorIdAtual, idiomasAtuaisProfessor, idioma, { minutosReposicao: minutos })
   });
 }
 
@@ -1723,7 +1766,7 @@ async function marcarAulaNaoRealizada(aulaId) {
     renderizarHojeProfessor();
     return;
   }
-  if (!(await confirmar(`A aula de ${aula.alunoNome} (${descricaoAula(aula)}) não foi realizada?\n\nO aluno ganha 1 reposição para marcar outra aula.`, { botao: "Não foi realizada" }))) return;
+  if (!(await confirmar(`A aula de ${aula.alunoNome} (${descricaoAula(aula)}) não foi realizada?\n\n${aula.reposicao ? "Os minutos de reposição que ela usou voltam para o aluno." : `O aluno ganha ${formatarMinutos(duracaoDaAula(aula))} de reposição para marcar outra aula.`}`, { botao: "Não foi realizada" }))) return;
   registrarAulaNaoRealizada(aula, idiomaValido(aula.idioma));
 }
 
@@ -1737,13 +1780,16 @@ function confirmarAulaNaoRealizada(aulaId) {
 async function registrarAulaNaoRealizada(aula, idioma) {
   const lote = db.batch();
   const gerarCredito = !aula.reposicao;
+  const minutos = duracaoDaAula(aula);
   lote.update(db.collection("aulas").doc(aula.id), gerarCredito
-    ? { status: "nao-realizada", reposicaoGerada: true, idiomaReposicao: idioma }
+    ? { status: "nao-realizada", reposicaoGerada: true, idiomaReposicao: idioma, minutosReposicaoGerados: minutos }
     : { status: "nao-realizada", reposicaoGerada: false });
-  if (gerarCredito) gravarReposicoesConcedidas(lote, aula.alunoId, idioma, creditosDoAluno(aula.alunoId, idioma).concedidas + 1);
+  if (gerarCredito) gravarReposicoesConcedidas(lote, aula.alunoId, idioma, creditosDoAluno(aula.alunoId, idioma).concedidas + minutos);
   if (alunosCache.some((a) => a.id === aula.alunoId)) {
     lote.set(db.collection("usuarios").doc(aula.alunoId).collection("notificacoes").doc(),
-      notificacaoParaAluno("aula-nao-realizada", `A aula (${descricaoAula(aula)}) não foi realizada. Você ganhou 1 reposição de ${IDIOMAS[idioma].nome} para marcar outra aula.`, idioma));
+      notificacaoParaAluno("aula-nao-realizada", gerarCredito
+        ? `A aula (${descricaoAula(aula)}) não foi realizada. Você ganhou ${formatarMinutos(minutos)} de reposição de ${IDIOMAS[idioma].nome} para marcar outra aula.`
+        : `A reposição (${descricaoAula(aula)}) não foi realizada. Os minutos dela voltaram para você usar em outra aula.`, idioma));
   }
   try {
     await lote.commit();
@@ -1762,12 +1808,14 @@ async function desfazerAulaNaoRealizada(aulaId) {
   lote.update(db.collection("aulas").doc(aulaId), {
     status: "agendada",
     reposicaoGerada: firebase.firestore.FieldValue.delete(),
-    idiomaReposicao: firebase.firestore.FieldValue.delete()
+    idiomaReposicao: firebase.firestore.FieldValue.delete(),
+    minutosReposicaoGerados: firebase.firestore.FieldValue.delete()
   });
   if (aula.reposicaoGerada) {
     const idioma = idiomaValido(aula.idiomaReposicao || aula.idioma);
     const { concedidas, usadas } = creditosDoAluno(aula.alunoId, idioma);
-    gravarReposicoesConcedidas(lote, aula.alunoId, idioma, Math.max(usadas, concedidas - 1));
+    // Aulas de antes da reposição em minutos geravam 1 crédito (1 hora)
+    gravarReposicoesConcedidas(lote, aula.alunoId, idioma, Math.max(usadas, concedidas - (aula.minutosReposicaoGerados || MINUTOS_POR_CREDITO)));
   }
   try {
     await lote.commit();
@@ -1779,7 +1827,8 @@ async function desfazerAulaNaoRealizada(aulaId) {
 
 async function desfazerConclusaoAula(aulaId) {
   try {
-    await db.collection("aulas").doc(aulaId).update({ status: "agendada" });
+    // Sem o "concluir no fim": senão a aula voltaria a ser concluída sozinha
+    await db.collection("aulas").doc(aulaId).update({ status: "agendada", concluirAoTerminar: firebase.firestore.FieldValue.delete() });
   } catch (e) {
     console.error(e);
     alert("Não foi possível desfazer agora. Tente novamente em instantes.");
@@ -2277,7 +2326,19 @@ function legendaModalidade(modalidade) {
   return modalidade === "online" ? "Online" : "Presencial";
 }
 
+// "Em andamento": aula agendada entre o início e o fim do horário dela
+function aulaEmAndamento(a, agora) {
+  const momento = agora || new Date();
+  return a.status === "agendada" && inicioDaAula(a) <= momento && fimDaAula(a) > momento;
+}
+
+// Status para mostrar na tela (com o "em andamento", que não é gravado)
+function statusExibido(a) {
+  return aulaEmAndamento(a) ? "em-andamento" : a.status;
+}
+
 function legendaStatusAula(status) {
+  if (status === "em-andamento") return "Em andamento";
   if (status === "concluida") return "Concluída";
   if (status === "cancelada") return "Cancelada";
   if (status === "pendente") return "Aguardando aprovação";
@@ -2615,7 +2676,7 @@ function montarListaAulasDia(dataIso) {
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
         ${badgeIdiomaAula(a)}
-        <span class="badge-status badge-status-${a.status}">${legendaStatusAula(a.status)}</span>
+        <span class="badge-status badge-status-${statusExibido(a)}">${legendaStatusAula(statusExibido(a))}</span>
       </div>
       ${acoesAulaHtml(a)}
     </div>
@@ -2779,7 +2840,7 @@ function montarAbaAulas(alunoId) {
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
         ${badgeIdiomaAula(a)}
-        <span class="badge-status badge-status-${a.status}">${legendaStatusAula(a.status)}</span>
+        <span class="badge-status badge-status-${statusExibido(a)}">${legendaStatusAula(statusExibido(a))}</span>
       </div>
       ${acoesAulaHtml(a)}
     </div>
@@ -2817,7 +2878,9 @@ function lembretesAlunosSemApp() {
     const motivos = [];
     if (idiomasAtuaisProfessor.length > 1) motivos.push(IDIOMAS[idioma].nome);
     if (!proximaAulaDoAluno(aluno.id, idioma)) motivos.push("nenhuma aula marcada");
-    if (saldo > 0) motivos.push(saldo === 1 ? "1 reposição para marcar" : `${saldo} reposições para marcar`);
+    // Só com um crédito inteiro (60 min) há uma aula extra para marcar
+    const creditos = creditosDeReposicao(saldo);
+    if (creditos > 0) motivos.push(`${creditos} ${creditos === 1 ? "crédito" : "créditos"} de reposição para marcar (${formatarMinutos(saldo)})`);
     return motivos.length ? { aluno, idioma, motivo: motivos.join(" · ") } : null;
   }).filter(Boolean);
 }
@@ -2843,14 +2906,7 @@ function renderizarAlunosSemApp() {
           ${aluno.telefone ? `<span>${escapeHtml(aluno.telefone)}${link ? ` — <a href="${link}" target="_blank" rel="noopener">WhatsApp</a>` : ""}</span>` : ""}
           <span class="${proxima ? "" : "aviso-pedido"}">${proxima ? `Próxima aula: ${formatarDataBR(proxima.data)} · ${escapeHtml(faixaHorario(proxima.horaInicio, proxima.horaFim))}` : "Nenhuma aula marcada"}</span>
         </div>
-        <div class="campo-plano">
-          <span>Reposições disponíveis</span>
-          <div class="contador-reposicoes">
-            <button type="button" class="btn-contador" aria-label="Tirar 1 reposição" onclick="ajustarReposicoesSemApp('${aluno.id}', -1)" ${saldo === 0 ? "disabled" : ""}>−</button>
-            <strong class="saldo-reposicoes">${saldo}</strong>
-            <button type="button" class="btn-contador" aria-label="Dar 1 reposição" onclick="ajustarReposicoesSemApp('${aluno.id}', 1)">+</button>
-          </div>
-        </div>
+        ${montarControleReposicao(aluno.id, idioma)}
         <div class="aula-acoes">
           <button class="btn btn-primario btn-mini" onclick="abrirMarcarAula('${aluno.id}')">Marcar aula</button>
           <button class="excluir" onclick="removerAlunoSemApp('${aluno.id}')">Remover</button>
@@ -2867,30 +2923,13 @@ async function adicionarAlunoSemApp() {
   if (!nome) { alert("Digite o nome do aluno."); return; }
   try {
     await db.collection("usuarios").doc(professorIdAtual).collection("alunosSemApp").add({
-      nome, telefone, idioma, reposicoesConcedidas: 0, criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+      nome, telefone, idioma, reposicoesConcedidas: 0, minutosReposicao: 0, criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     });
     document.getElementById("input-nome-sem-app").value = "";
     document.getElementById("input-telefone-sem-app").value = "";
   } catch (e) {
     console.error(e);
     alert(mensagemErroGravacao(e, "Não foi possível cadastrar o aluno."));
-  }
-}
-
-async function ajustarReposicoesSemApp(alunoId, delta) {
-  const aluno = alunosSemAppCache.find((a) => a.id === alunoId);
-  if (!aluno) return;
-  const idioma = idiomaDoAlunoSemApp(aluno);
-  const { usadas, saldo } = creditosDoAluno(alunoId, idioma);
-  const novoSaldo = Math.max(0, saldo + delta);
-  if (novoSaldo === saldo) return;
-  const lote = db.batch();
-  gravarReposicoesConcedidas(lote, alunoId, idioma, usadas + novoSaldo);
-  try {
-    await lote.commit();
-  } catch (e) {
-    console.error(e);
-    alert(mensagemErroGravacao(e, "Não foi possível salvar as reposições."));
   }
 }
 
@@ -2930,6 +2969,7 @@ function abrirMarcarAula(alunoId, dataIso) {
   campoData.value = dataIso || dataDeHojeISO();
   horarioEscolhidoMarcar = null;
   definirHorarioManual(false);
+  document.getElementById("marcar-duracao").value = "";
 
   const modalidades = (configAgendaAtual && configAgendaAtual.modalidades && configAgendaAtual.modalidades.length)
     ? configAgendaAtual.modalidades : ["online", "presencial"];
@@ -3021,13 +3061,14 @@ function renderizarHorariosMarcarAula() {
     return;
   }
   const duracao = duracaoDasAulas();
+  document.getElementById("marcar-duracao").placeholder = `${duracao} (padrão)`;
   const algumPassou = horarios.some((h) => horarioJaPassou(data, h));
   container.innerHTML = `<div class="slots-grade">${horarios.map((h) => `
     <button type="button" class="btn-slot-horario${h === horarioEscolhidoMarcar && !horarioManualMarcar ? " escolhido" : ""}${horarioJaPassou(data, h) ? " slot-passado" : ""}"
-      ${horarioJaPassou(data, h) ? 'title="Já passou: a aula fica registrada como realizada"' : ""}
+      ${horarioJaPassou(data, h) ? `title="${horarioJaPassou(data, somarMinutos(h, duracao)) ? "Já terminou: a aula fica registrada como concluída" : "Está acontecendo agora: a aula fica em andamento e é concluída no fim do horário"}"` : ""}
       aria-pressed="${h === horarioEscolhidoMarcar && !horarioManualMarcar}" onclick="escolherHorarioMarcarAula('${h}')">${faixaHorario(h, somarMinutos(h, duracao))}</button>`).join("")}
   </div>
-  ${algumPassou ? `<p class="dica-plano">Horários que já passaram (mais claros) servem para registrar uma aula que aconteceu: ela entra como realizada.</p>` : ""}`;
+  ${algumPassou ? `<p class="dica-plano">Horários que já começaram (mais claros) servem para registrar uma aula: se já terminou, entra como concluída; se está acontecendo agora, fica em andamento e é concluída sozinha no fim do horário.</p>` : ""}`;
 }
 
 function selecionarDiaMarcarAula() {
@@ -3101,9 +3142,9 @@ function atualizarReposicaoMarcarAula() {
   const wrap = document.getElementById("marcar-reposicao-wrap");
   const chk = document.getElementById("marcar-reposicao");
   wrap.hidden = saldo === 0;
-  chk.checked = saldo > 0 && alunosSemAppCache.some((a) => a.id === alunoId) && !proximaAulaDoAluno(alunoId, idioma);
+  chk.checked = creditosDeReposicao(saldo) >= 1 && alunosSemAppCache.some((a) => a.id === alunoId) && !proximaAulaDoAluno(alunoId, idioma);
   document.getElementById("marcar-reposicao-saldo").textContent =
-    `${saldo === 1 ? "1 disponível" : `${saldo} disponíveis`}${idiomasAtuaisProfessor.length > 1 ? ` em ${IDIOMAS[idioma].nome}` : ""}`;
+    `${formatarCreditos(saldo)}${idiomasAtuaisProfessor.length > 1 ? ` em ${IDIOMAS[idioma].nome}` : ""}`;
 }
 
 async function confirmarMarcarAula() {
@@ -3118,10 +3159,20 @@ async function confirmarMarcarAula() {
 
   if (!aluno) { status.textContent = "Escolha o aluno."; return; }
   if (!data || !hora) { status.textContent = "Escolha o dia e o horário."; return; }
-  const duracao = duracaoDasAulas(idiomaValido(idioma));
+  // Duração: a digitada no formulário (ex: uma reposição de 1h20) ou a configurada
+  const duracaoDigitada = parseInt(document.getElementById("marcar-duracao").value, 10);
+  if (document.getElementById("marcar-duracao").value.trim() && !(duracaoDigitada >= 10 && duracaoDigitada <= 300)) {
+    status.textContent = "Duração inválida: use de 10 a 300 minutos (ou deixe em branco para usar a padrão).";
+    return;
+  }
+  const duracao = duracaoDigitada || duracaoDasAulas(idiomaValido(idioma));
   const horaFim = somarMinutos(hora, duracao);
-  // Horário que já passou: o professor está registrando uma aula que aconteceu
-  const realizada = horarioJaPassou(data, hora);
+  // Horário que já começou: o professor está registrando uma aula que aconteceu
+  // (já terminou: entra concluída) ou que está acontecendo agora (fica em andamento
+  // até o fim do horário e então é concluída sozinha)
+  const jaComecou = horarioJaPassou(data, hora);
+  const realizada = jaComecou && horarioJaPassou(data, horaFim);
+  const emAndamentoAgora = jaComecou && !realizada;
 
   const inicio = minutosDoHorario(hora), fim = inicio + duracao;
   const choque = aulasQueOcupam(data, hora).find((a) =>
@@ -3135,14 +3186,14 @@ async function confirmarMarcarAula() {
 
   // Confirmação pelo WhatsApp do aluno: a aba é aberta antes do "await" (senão o
   // celular bloqueia o popup) e só recebe o endereço depois de a aula ser gravada
-  const enviarWhatsapp = !realizada && !document.getElementById("marcar-whatsapp-wrap").hidden &&
+  const enviarWhatsapp = !jaComecou && !document.getElementById("marcar-whatsapp-wrap").hidden &&
     document.getElementById("marcar-whatsapp").checked;
   const linkConfirmacao = enviarWhatsapp
     ? linkWhatsapp(telefoneDoAluno(aluno.id), mensagemConfirmacaoPeloProfessor(aluno.nome, data, hora, modalidade, idioma, reposicao))
     : null;
   const abaWhatsapp = linkConfirmacao ? window.open("", "_blank") : null;
 
-  status.textContent = realizada ? "Registrando..." : "Marcando...";
+  status.textContent = jaComecou ? "Registrando..." : "Marcando...";
   let aulaId;
   try {
     aulaId = await agendarAula(professorIdAtual, data, hora, horaFim, modalidade, aluno.id, aluno.nome, reposicao, idioma, "agendada");
@@ -3159,11 +3210,14 @@ async function confirmarMarcarAula() {
     // confirmar", onde o professor confirma com um clique.
     await db.collection("aulas").doc(aulaId).update({ status: "concluida" })
       .catch((e) => console.warn("Não foi possível marcar a aula como realizada:", e));
+  } else if (emAndamentoAgora) {
+    await db.collection("aulas").doc(aulaId).update({ concluirAoTerminar: true })
+      .catch((e) => console.warn("Não foi possível marcar a aula para concluir no fim:", e));
   }
   if (alunosCache.some((a) => a.id === aluno.id)) {
     const oQue = reposicao ? "uma reposição" : "uma aula";
-    const texto = realizada
-      ? `Seu professor registrou ${oQue} de ${IDIOMAS[idiomaValido(idioma)].nome} realizada em ${formatarDataBR(data)} às ${hora}.`
+    const texto = jaComecou
+      ? `Seu professor registrou ${oQue} de ${IDIOMAS[idiomaValido(idioma)].nome} ${realizada ? "realizada" : "em andamento"} em ${formatarDataBR(data)} às ${hora}.`
       : `Seu professor marcou ${oQue} de ${IDIOMAS[idiomaValido(idioma)].nome} para você: ${formatarDataBR(data)} às ${hora}.`;
     db.collection("usuarios").doc(aluno.id).collection("notificacoes")
       .add(notificacaoParaAluno("aula-marcada", texto, idioma))

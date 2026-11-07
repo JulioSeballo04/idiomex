@@ -36,6 +36,19 @@ function dataDaqui(dias) {
     esperar(await prof.$('#form-cadastro button:has-text("Criar conta com Google")'), 'sem botão "Criar conta com Google"');
   });
 
+  await caso('cadastro do aluno: o código do professor vem logo depois de "Sou", em destaque', async () => {
+    await prof.goto(`${SITE}/index.html`);
+    await prof.click('#btn-aba-cadastro');
+    const campos = await prof.$$eval('#form-cadastro > .campo:not(.oculto)', (els) => els.map((e) => e.id || e.querySelector('label').textContent.trim()));
+    esperar(campos[1] === 'campo-codigo', 'ordem dos campos: ' + campos.join(', '));
+    esperar(await prof.$('#campo-codigo.campo-codigo-destaque .obrigatorio'), 'código sem destaque de obrigatório');
+    await prof.click('#form-cadastro button[type=submit]');
+    await prof.waitForSelector('#campo-codigo.faltando', { timeout: 3000 });
+    esperar(/código do professor/.test(await prof.textContent('#status-cadastro')), 'sem aviso do código');
+    await prof.fill('#cadCodigo', 'P');
+    esperar(!(await prof.$('#campo-codigo.faltando')), 'destaque de erro continuou depois de digitar');
+  });
+
   await caso('regras do Firestore desatualizadas: o cadastro explica o problema (não fala em "gerar código")', async () => {
     // Simula regras antigas, sem a parte de codigosProfessor, e depois devolve as atuais
     const atuais = fs.readFileSync(path.join(__dirname, '../firestore.rules'), 'utf8');
@@ -303,6 +316,26 @@ function dataDaqui(dias) {
     esperar(!(await prof.$(`${bloco} .cartao-palavra:has-text("egg") .btn-remover-palavra-professor`)), 'professor pode remover palavra do aluno');
   });
 
+  await caso('aluno corrige a palavra: maiúscula mantém as frases; palavra nova gera frases de novo', async () => {
+    await aluno.click('.letra-tab:has-text("E")');
+    await aluno.waitForSelector('.cartao-palavra:has-text("egg")', { timeout: 5000 });
+    const frasesAntes = await aluno.evaluate(() => JSON.stringify(cacheDePalavras.find((p) => p.palavraEn === 'egg').frasesExemplo));
+    aluno.respostaPrompt = 'Egg';
+    await aluno.click('.cartao-palavra:has-text("egg") .btn-editar-palavra');
+    await aluno.waitForFunction(() => cacheDePalavras.some((p) => p.palavraEn === 'Egg'), null, { timeout: 5000 });
+    esperar(await aluno.evaluate((f) => JSON.stringify(cacheDePalavras.find((p) => p.palavraEn === 'Egg').frasesExemplo) === f, frasesAntes), 'só trocar a maiúscula apagou as frases');
+    // Palavra diferente (e de outra letra): frases novas e a tela vai para a letra nova
+    aluno.respostaPrompt = 'omelette';
+    await aluno.click('.cartao-palavra:has-text("Egg") .btn-editar-palavra');
+    await aluno.waitForSelector('.cartao-palavra:has-text("omelette") .frase-exemplo:has-text("I like the omelette")', { timeout: 8000 });
+    esperar((await aluno.textContent('.letra-tab.ativa')).trim().startsWith('O'), 'não foi para a letra O');
+    // Volta como estava (outros testes usam "egg")
+    aluno.respostaPrompt = 'egg';
+    await aluno.click('.cartao-palavra:has-text("omelette") .btn-editar-palavra');
+    await aluno.waitForFunction(() => cacheDePalavras.some((p) => p.palavraEn === 'egg' && p.frasesExemplo.length), null, { timeout: 8000 });
+    aluno.respostaPrompt = undefined;
+  });
+
   console.log('\nSala de aula');
   await caso('professor deixa link e documento; aluno anota e o professor lê a anotação', async () => {
     await prof.click('.aba-detalhe:has-text("Sala de aula")');
@@ -413,6 +446,32 @@ function dataDaqui(dias) {
     await aluno.click('#modal-sala-aula .btn-fechar-modal');
   });
 
+  await caso('imagem: dá para dar zoom e abrir numa janela flutuante', async () => {
+    await prof.fill('#titulo-biblioteca', 'Quadro da aula');
+    await prof.setInputFiles('#arquivo-biblioteca', path.join(__dirname, '../assets/icon-512.png'));
+    await prof.click('#btn-enviar-biblioteca');
+    await aluno.waitForFunction(() => documentosDaBiblioteca().some((d) => d.titulo === 'Quadro da aula'), null, { timeout: 10000 });
+    await aluno.click('#btn-sala-aula');
+    await aluno.click('#corpo-sala-aula button:has-text("Quadro da aula")');
+    await aluno.waitForSelector('#modal-visualizador:not(.modal-oculto) img.imagem-documento', { timeout: 8000 });
+    await aluno.waitForFunction(() => document.querySelector('#modal-visualizador img').style.width, null, { timeout: 5000 });
+    const largura = () => aluno.evaluate(() => document.querySelector('#modal-visualizador img').getBoundingClientRect().width);
+    const antes = await largura();
+    await aluno.click('#btn-zoom-mais'); await aluno.click('#btn-zoom-mais');
+    esperar((await aluno.textContent('#valor-zoom')).trim() === '150%', 'zoom não foi para 150%');
+    esperar(await largura() > antes * 1.4, `imagem não cresceu (${antes} -> ${await largura()})`);
+    await aluno.click('#valor-zoom');
+    esperar(Math.abs(await largura() - antes) < 2, 'clicar no 100% não voltou ao tamanho da janela');
+    // Janela flutuante (aqui, a janela pop-up; no Chrome de verdade, a "picture in picture")
+    await aluno.evaluate(() => { Object.defineProperty(window, 'documentPictureInPicture', { value: undefined, configurable: true }); });
+    const [janela] = await Promise.all([ctxA.waitForEvent('page', { timeout: 5000 }), aluno.click('#modal-visualizador .btn-flutuante')]);
+    await janela.waitForFunction(() => { const i = document.querySelector('img'); return i && i.naturalWidth > 0; }, null, { timeout: 5000 });
+    esperar(await janela.$('.barra button[data-z="1"]'), 'janela flutuante sem zoom');
+    esperar(await aluno.isHidden('#modal-visualizador'), 'o visualizador continuou na frente do app');
+    await janela.close();
+    await aluno.click('#modal-sala-aula .btn-fechar-modal');
+  });
+
   await caso('Documentos de aula recusa tipo que não abre no app (ex: Word)', async () => {
     await prof.setInputFiles('#arquivo-biblioteca', { name: 'apostila.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: Buffer.alloc(100) });
     await prof.waitForSelector('#status-biblioteca:has-text("PDF")', { timeout: 3000 });
@@ -447,13 +506,20 @@ function dataDaqui(dias) {
 
   await caso('Banco de dados mostra os documentos nas janelas dos alunos, com filtro por aluno', async () => {
     await prof.click('#btn-janela-banco');
-    await prof.waitForSelector('#lista-banco .linha-banco:has-text("Lesson 1"):has-text("Sala do aluno")', { timeout: 8000 });
-    await prof.waitForSelector('#lista-banco .linha-banco:has-text("Aula 1 em vídeo"):has-text("Todos os alunos")', { timeout: 3000 });
-    await prof.waitForSelector('#lista-banco .linha-banco:has-text("Pronúncia do th"):has-text("Caio")', { timeout: 3000 });
+    // Com mais de 6 documentos a lista tem páginas: a busca acha cada um
+    const achar = async (titulo, outro) => {
+      await prof.fill('#busca-banco', titulo);
+      await prof.waitForSelector(`#lista-banco .linha-banco:has-text("${titulo}"):has-text("${outro}")`, { timeout: 8000 });
+    };
+    await achar('Lesson 1', 'Sala do aluno');
+    await achar('Aula 1 em vídeo', 'Todos os alunos');
+    await achar('Pronúncia do th', 'Caio');
+    await prof.fill('#busca-banco', ''); await prof.dispatchEvent('#busca-banco', 'input');
     const bia = await prof.evaluate(() => alunosCache.find((a) => a.nome === 'Bia').id);
     await prof.selectOption('#filtro-aluno-banco', bia);
-    esperar(!(await prof.$('#lista-banco .linha-banco:has-text("Caio")')), 'filtro da Bia mostrou linha do Caio');
+    await prof.fill('#busca-banco', 'Pronúncia do th');
     await prof.waitForSelector('#lista-banco .linha-banco:has-text("Pronúncia do th"):has-text("Bia")', { timeout: 3000 });
+    esperar(!(await prof.$('#lista-banco .linha-banco:has-text("Caio")')), 'filtro da Bia mostrou linha do Caio');
     await prof.fill('#busca-banco', 'lesson 1');
     esperar((await prof.$$('#lista-banco .linha-banco')).length === 1, 'busca no banco não filtrou');
     await prof.fill('#busca-banco', ''); await prof.dispatchEvent('#busca-banco', 'input');
@@ -657,7 +723,8 @@ function dataDaqui(dias) {
     await prof.waitForSelector(pendente, { state: 'detached', timeout: 5000 });
     esperar(prof.ultimoDialogo && /reposição/.test(prof.ultimoDialogo), 'não pediu confirmação');
     await dormir(800);
-    esperar((await saldo()) === antes + 1, `saldo não aumentou (${antes} -> ${await saldo()})`);
+    const duracao = await prof.evaluate(() => duracaoDaAula(aulasCache.find((x) => x.horaInicio === '00:00' && x.data === dataDeHojeISO())));
+    esperar((await saldo()) === antes + duracao, `saldo não aumentou a duração da aula (${antes} -> ${await saldo()}, aula de ${duracao} min)`);
     await aluno.waitForFunction(() => notificacoesCache.some((n) => n.tipo === 'aula-nao-realizada'), null, { timeout: 5000 });
   });
   await ctxGabi.close();
@@ -788,6 +855,33 @@ function dataDaqui(dias) {
     await prof.click('#modal-marcar-aula .btn-fechar-modal');
   });
 
+  await caso('aula registrada durante o horário fica "em andamento" e é concluída no fim', async () => {
+    const agora = new Date();
+    if (agora.getHours() * 60 + agora.getMinutes() < 20) return; // logo depois da meia-noite não há "10 min atrás" hoje
+    const inicio = new Date(agora.getTime() - 10 * 60000);
+    const hora = `${String(inicio.getHours()).padStart(2, '0')}:${String(inicio.getMinutes()).padStart(2, '0')}`;
+    const hoje = dataDaqui(0);
+    await prof.evaluate(() => abrirMarcarAula(alunosSemAppCache.find((a) => a.nome === 'Seu Zé').id));
+    await prof.fill('#marcar-data', hoje);
+    await prof.dispatchEvent('#marcar-data', 'change');
+    await prof.click('#btn-outro-horario');
+    await prof.fill('#marcar-hora', hora);
+    await prof.click('#modal-marcar-aula button:has-text("Marcar aula")');
+    await prof.waitForSelector('#modal-marcar-aula.modal-oculto', { state: 'attached', timeout: 5000 });
+    const aula = await prof.waitForFunction(({ d, h }) => aulasCache.find((a) => a.data === d && a.horaInicio === h && a.concluirAoTerminar), { d: hoje, h: hora }, { timeout: 5000 }).then((x) => x.jsonValue());
+    esperar(aula.status === 'agendada', 'a aula em andamento entrou como ' + aula.status);
+    esperar(await prof.evaluate((id) => statusExibido(aulasCache.find((a) => a.id === id)), aula.id) === 'em-andamento', 'não aparece em andamento');
+    await prof.waitForSelector(`#painel-hoje-professor .cartao-aula:has-text("${hora}") .badge-status-em-andamento`, { timeout: 3000 });
+    esperar(!(await prof.$(`#confirmar-aulas .cartao-aula:has-text("${hora}")`)), 'pediu confirmação de uma aula em andamento');
+    // O horário acaba: vira concluída sozinha, sem pedir "Foi realizada?"
+    await prof.evaluate(async (id) => {
+      const fim = new Date(Date.now() - 60000);
+      await db.collection('aulas').doc(id).update({ horaFim: `${String(fim.getHours()).padStart(2, '0')}:${String(fim.getMinutes()).padStart(2, '0')}` });
+    }, aula.id);
+    await prof.waitForFunction((id) => { renderizarHojeProfessor(); return aulasCache.find((a) => a.id === id).status === 'concluida'; }, aula.id, { timeout: 8000, polling: 500 });
+    esperar(!(await prof.$(`#confirmar-aulas .cartao-aula:has-text("${hora}")`)), 'a aula concluída sozinha caiu em "para confirmar"');
+  });
+
   await caso('calendário volta para os meses anteriores e mostra as aulas dadas', async () => {
     const ze = await prof.evaluate(() => alunosSemAppCache.find((a) => a.nome === 'Seu Zé').id);
     const dia = dataDaqui(-40);
@@ -853,7 +947,7 @@ function dataDaqui(dias) {
       const p = (await db.collection('usuarios').doc(auth.currentUser.uid).get()).data().plano;
       return p && p.aulasPorSemana === 1;
     }, null, { timeout: 5000 });
-    esperar((await saldoNoPainel()).trim() === '0', 'saldo inicial diferente de 0');
+    esperar((await saldoNoPainel()).trim() === '0 min', 'saldo inicial diferente de 0');
   });
 
   const contadorSino = async (p) => (await p.isVisible('#contador-notificacoes')) ? (await p.textContent('#contador-notificacoes')).trim() : '0';
@@ -903,21 +997,26 @@ function dataDaqui(dias) {
     esperar((await contadorSino(hugo)) === '0', 'abrir não marcou como lida');
     // aprovar conta como 1 crédito concedido e usado: o saldo continua 0
     await prof.click('#btn-aba-alunos');
-    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("0")`, { timeout: 5000 });
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("0 min")`, { timeout: 5000 });
   });
 
   await caso('professor dá 1 reposição (+) e o aluno marca a aula extra usando o crédito', async () => {
-    await prof.click(`${blocoHugo} button[aria-label="Dar 1 reposição"]`);
-    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("1")`, { timeout: 5000 });
+    await prof.click(`${blocoHugo} button[aria-label="Dar 1 hora de reposição"]`);
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("1h")`, { timeout: 5000 });
     await hugo.waitForFunction(() => notificacoesCache.some((n) => n.tipo === 'credito-reposicao' && !n.lida), null, { timeout: 5000 });
     esperar((await contadorSino(hugo)) === '1', 'aluno não foi notificado do crédito');
     await confirmarPrimeiroHorario(hugo);
-    await hugo.waitForSelector('.plano-agendamento:has-text("Reposições disponíveis: 1")', { timeout: 3000 });
+    await hugo.waitForSelector('.plano-agendamento:has-text("Reposição: 1 crédito (1h)")', { timeout: 3000 });
     esperar(await hugo.isChecked('#chk-reposicao'), 'não usou a reposição automaticamente com a semana cheia');
     await hugo.click('#btn-confirmar-agendamento');
     await hugo.waitForSelector('.agendamento-sucesso:has-text("Reposição")', { timeout: 8000 });
     await hugo.keyboard.press('Escape');
-    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("0")`, { timeout: 5000 });
+    // A reposição desconta a duração da aula (aqui, menor que 1 hora): sobra o resto
+    const resto = await prof.evaluate(() => { const id = alunosCache.find((a) => a.nome === 'Hugo').id;
+      const aula = aulasCache.find((a) => a.alunoId === id && a.reposicao && a.status === 'agendada');
+      return aula ? formatarMinutos(60 - duracaoDaAula(aula)) : null; });
+    esperar(resto, 'a reposição marcada não apareceu para o professor');
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("${resto}")`, { timeout: 5000 });
   });
 
   await caso('cancelar a aula de reposição devolve o crédito', async () => {
@@ -926,16 +1025,69 @@ function dataDaqui(dias) {
     await hugo.click('#btn-confirmar-whatsapp');
     await hugo.waitForSelector('#modal-confirmar-whatsapp:has-text("Cancelado")', { timeout: 5000 });
     await hugo.click('#btn-fechar-confirmar-whatsapp');
-    await hugo.waitForFunction(() => situacaoDoPlano(null).saldo === 1, null, { timeout: 5000 });
-    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("1")`, { timeout: 5000 });
+    await hugo.waitForFunction(() => situacaoDoPlano(null).saldo === 60, null, { timeout: 5000 });
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("1h")`, { timeout: 5000 });
     await prof.waitForFunction(() => notificacoesProfessorCache.some((n) => n.tipo === 'aluno-cancelou-aula' && /Hugo cancelou a reposição/.test(n.texto)), null, { timeout: 5000 });
   });
 
   await caso('professor tira o crédito (−) e o saldo não fica negativo', async () => {
-    await prof.click(`${blocoHugo} button[aria-label="Tirar 1 reposição"]`);
-    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("0")`, { timeout: 5000 });
-    esperar(await prof.isDisabled(`${blocoHugo} button[aria-label="Tirar 1 reposição"]`), '"−" continua ativo com saldo 0');
+    await prof.click(`${blocoHugo} button[aria-label="Tirar 1 hora de reposição"]`);
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("0 min")`, { timeout: 5000 });
+    esperar(await prof.isDisabled(`${blocoHugo} button[aria-label="Tirar 1 hora de reposição"]`), '"−1h" continua ativo com saldo 0');
   });
+  await caso('reposição em minutos: o professor dá 3h e desconta 15 min de uma aula esticada', async () => {
+    for (let i = 0; i < 3; i++) await prof.click(`${blocoHugo} button[aria-label="Dar 1 hora de reposição"]`);
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("3h")`, { timeout: 5000 });
+    await prof.fill(`${blocoHugo} .minutos-reposicao input`, '15');
+    await prof.click(`${blocoHugo} .minutos-reposicao button:has-text("Descontar")`);
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("2h45")`, { timeout: 5000 });
+    esperar((await prof.inputValue(`${blocoHugo} .minutos-reposicao input`)) === '', 'o campo de minutos não foi limpo');
+    await hugo.waitForFunction(() => notificacoesCache.some((n) => /descontados 15 min.*2 créditos \(2h45\)/.test(n.texto)), null, { timeout: 5000 });
+    await prof.waitForSelector(`${blocoHugo} .creditos-reposicao:has-text("2 créditos · faltam 15 min")`, { timeout: 3000 });
+    const plano = await hugo.evaluate(async () => (await db.collection('usuarios').doc(auth.currentUser.uid).get()).data().plano);
+    // Gravado em minutos (o concedido inclui os minutos das reposições já usadas)
+    esperar(Object.values(plano.porIdioma).some((p) => Number.isInteger(p.minutosReposicao) && p.minutosReposicao >= 165), 'minutos não gravados no plano');
+    // Com 45 min (menos de 1 crédito), a reposição do aluno vira pedido
+    await prof.fill(`${blocoHugo} .minutos-reposicao input`, '120');
+    await prof.click(`${blocoHugo} .minutos-reposicao button:has-text("Descontar")`);
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("45 min")`, { timeout: 5000 });
+    await confirmarPrimeiroHorario(hugo);
+    await hugo.check('#chk-reposicao').catch(() => {});
+    await hugo.waitForSelector('.aviso-pedido:has-text("faltam 15 min")', { timeout: 3000 });
+    esperar(await hugo.$('#btn-confirmar-agendamento:has-text("Pedir reposição")'), 'com 45 min a reposição não virou pedido');
+    await hugo.keyboard.press('Escape');
+    // Volta ao zero para os próximos testes
+    await prof.fill(`${blocoHugo} .minutos-reposicao input`, '45');
+    await prof.click(`${blocoHugo} .minutos-reposicao button:has-text("Descontar")`);
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("0 min")`, { timeout: 5000 });
+  });
+
+  await caso('professor marca uma reposição com duração própria (1h20): desconta 80 min', async () => {
+    const hugoId = await prof.evaluate(() => alunosCache.find((a) => a.nome === 'Hugo').id);
+    for (let i = 0; i < 2; i++) await prof.click(`${blocoHugo} button[aria-label="Dar 1 hora de reposição"]`);
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("2h")`, { timeout: 5000 });
+    await prof.evaluate((id) => abrirMarcarAula(id), hugoId);
+    await prof.fill('#marcar-data', dataDaqui(12));
+    await prof.click('#btn-outro-horario');
+    await prof.fill('#marcar-hora', '19:00');
+    await prof.fill('#marcar-duracao', '80');
+    esperar(await prof.isVisible('#marcar-reposicao-wrap'), 'não ofereceu a reposição');
+    await prof.check('#marcar-reposicao');
+    await prof.uncheck('#marcar-whatsapp').catch(() => {});
+    await prof.click('#modal-marcar-aula button:has-text("Marcar aula")');
+    await prof.waitForSelector('#modal-marcar-aula.modal-oculto', { state: 'attached', timeout: 5000 });
+    const aula = await prof.waitForFunction((id) => aulasCache.find((a) => a.alunoId === id && a.horaInicio === '19:00' && a.reposicao), hugoId, { timeout: 5000 }).then((x) => x.jsonValue());
+    esperar(aula.horaFim === '20:20', 'a aula não ficou com 1h20: ' + aula.horaFim);
+    await prof.click('#btn-aba-alunos');
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("40 min")`, { timeout: 5000 });
+    // Cancelada, os 80 min voltam
+    await prof.evaluate((id) => db.collection('aulas').doc(id).update({ status: 'cancelada', canceladoPor: 'professor' }), aula.id);
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("2h")`, { timeout: 5000 });
+    await prof.fill(`${blocoHugo} .minutos-reposicao input`, '120');
+    await prof.click(`${blocoHugo} .minutos-reposicao button:has-text("Descontar")`);
+    await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("0 min")`, { timeout: 5000 });
+  });
+
   await caso('professor recusa um pedido: o horário é liberado e o aluno é notificado', async () => {
     await confirmarPrimeiroHorario(hugo);
     const horario = (await hugo.textContent('.resumo-passo span')).split(' às ')[1].trim();
@@ -1090,9 +1242,9 @@ function dataDaqui(dias) {
     await diego.click(`${blocoIris} .item-aluno`);
     await diego.waitForSelector(`${blocoIris} .plano-idioma[data-idioma="es"]`, { timeout: 5000 });
     esperar((await diego.$$(`${blocoIris} .plano-idioma`)).length === 2, 'não mostrou um plano por idioma');
-    await diego.click(`${blocoIris} .plano-idioma[data-idioma="es"] button[aria-label="Dar 1 reposição"]`);
-    await diego.waitForSelector(`${blocoIris} .plano-idioma[data-idioma="es"] .saldo-reposicoes:text-is("1")`, { timeout: 5000 });
-    esperar((await diego.textContent(`${blocoIris} .plano-idioma[data-idioma="en"] .saldo-reposicoes`)) === '0', 'o crédito de espanhol apareceu em inglês');
+    await diego.click(`${blocoIris} .plano-idioma[data-idioma="es"] button[aria-label="Dar 1 hora de reposição"]`);
+    await diego.waitForSelector(`${blocoIris} .plano-idioma[data-idioma="es"] .saldo-reposicoes:text-is("1h")`, { timeout: 5000 });
+    esperar((await diego.textContent(`${blocoIris} .plano-idioma[data-idioma="en"] .saldo-reposicoes`)) === '0 min', 'o crédito de espanhol apareceu em inglês');
 
     // No aluno: o aviso do crédito de espanhol não aparece no sino do inglês
     await iris.waitForFunction(() => notificacoesCache.some((n) => n.idioma === 'es'), null, { timeout: 5000 });
@@ -1115,7 +1267,7 @@ function dataDaqui(dias) {
       perfilAlunoAtual = (await db.collection('usuarios').doc(auth.currentUser.uid).get()).data(); // como "Agendar aula" faz
       return ['en', 'es'].map((id) => { agendamento = { idioma: id }; return situacaoDoPlano(null).saldo; });
     });
-    esperar(saldos[0] === 0 && saldos[1] === 1, 'saldos por idioma: ' + saldos);
+    esperar(saldos[0] === 0 && saldos[1] === 60, 'saldos por idioma (minutos): ' + saldos);
     await iris.evaluate(() => { agendamento = null; });
   });
 
@@ -1140,7 +1292,7 @@ function dataDaqui(dias) {
     await diego.selectOption(seletor, 'en');
     await diego.click(`${cartao} button:has-text("Confirmar")`);
     await diego.waitForSelector(cartao, { state: 'detached', timeout: 5000 });
-    await diego.waitForFunction((n) => creditosDoAluno(alunosCache.find((a) => a.nome === 'Iris').id, 'en').saldo === n, antes + 1, { timeout: 5000 });
+    await diego.waitForFunction((n) => creditosDoAluno(alunosCache.find((a) => a.nome === 'Iris').id, 'en').saldo > n, antes, { timeout: 5000 });
     await iris.waitForFunction(() => notificacoesCache.some((n) => n.tipo === 'aula-nao-realizada' && n.idioma === 'en'), null, { timeout: 5000 });
   });
 

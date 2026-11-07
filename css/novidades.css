@@ -1044,3 +1044,56 @@ audio.player-documento { background: transparent; }
 .btn-pagina:disabled { opacity: 0.4; cursor: default; }
 .reticencias-pagina { padding: 0 0.2rem; color: var(--ink-soft); }
 .paginacao .data-msg { margin-left: 0.4rem; }
+
+/* Cadastro do aluno: o código do professor em destaque */
+.campo-codigo-destaque {
+  border: 2px solid var(--acento);
+  background: color-mix(in srgb, var(--acento) 8%, var(--bg-cartao));
+  border-radius: 12px;
+  padding: 0.8rem 0.9rem;
+}
+.campo-codigo-destaque label { font-size: 0.95rem; color: var(--ink); }
+.campo-codigo-destaque input { font-size: 1.05rem; padding: 0.7em 0.8em; letter-spacing: 0.04em; text-transform: uppercase; }
+.campo-codigo-destaque input::placeholder { text-transform: none; letter-spacing: normal; }
+.campo-codigo-destaque .obrigatorio { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #fff; background: var(--acento); border-radius: 999px; padding: 0.1em 0.55em; margin-left: 0.3rem; vertical-align: middle; }
+.dica-codigo { margin: 0.2rem 0 0; font-size: 0.82rem; color: var(--ink-soft); }
+.campo-codigo-destaque.faltando { border-color: #c0392b; background: color-mix(in srgb, #c0392b 8%, var(--bg-cartao)); animation: tremer-campo 0.35s; }
+@keyframes tremer-campo { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+/* Visualizador: zoom e janela flutuante */
+.ferramentas-visualizador { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 0.6rem; }
+.ferramentas-visualizador:empty { display: none; }
+.grupo-ferramentas { display: inline-flex; border: 1px solid var(--borda); border-radius: 8px; overflow: hidden; }
+.btn-ferramenta { min-width: 36px; height: 34px; padding: 0 0.6em; border: none; background: var(--bg-cartao); color: var(--ink); font-weight: 600; cursor: pointer; }
+.grupo-ferramentas .btn-ferramenta + .btn-ferramenta { border-left: 1px solid var(--borda); }
+.btn-ferramenta:disabled { opacity: 0.4; cursor: default; }
+.btn-ferramenta.valor-zoom { min-width: 58px; font-variant-numeric: tabular-nums; }
+.btn-flutuante { border: 1px solid var(--borda); border-radius: 8px; }
+.btn-ferramenta:hover:not(:disabled) { background: var(--bg); }
+/* Sem centralizar com flex: com zoom, centralizado cortava a parte da esquerda */
+.corpo-visualizador { display: block; text-align: center; }
+.corpo-visualizador .imagem-documento { display: block; margin: 0 auto; }
+.corpo-visualizador.com-zoom .imagem-documento { max-width: none; max-height: none; }
+.corpo-visualizador.com-zoom { cursor: grab; text-align: left; }
+.corpo-visualizador.com-zoom.arrastando { cursor: grabbing; }
+.paginas-pdf { align-items: safe center; }
+.corpo-visualizador.com-zoom .paginas-pdf canvas { max-width: none; }
+.texto-documento { text-align: left; }
+
+/* Aula acontecendo agora */
+.badge-status-em-andamento { background: rgba(47, 128, 237, 0.14); color: #1d5fbf; }
+.badge-status-em-andamento::before { content: "●"; margin-right: 0.3em; animation: piscar-andamento 1.6s infinite; }
+@keyframes piscar-andamento { 50% { opacity: 0.25; } }
+html[data-tema="noturno"] .badge-status-em-andamento { background: rgba(127, 166, 201, 0.18); color: #9CC0E4; }
+
+/* ✎ para corrigir a palavra (mesmo jeito do ✎ da tradução) */
+.btn-editar-palavra { background: none; border: none; padding: 0 0.2rem; font-size: 0.85rem; color: var(--ink-soft); cursor: pointer; opacity: 0.6; vertical-align: middle; }
+.btn-editar-palavra:hover { opacity: 1; color: var(--acento-forte); }
+
+/* Reposição em minutos */
+.campo-reposicao-minutos .btn-contador { min-width: 40px; padding: 0 0.4em; font-size: 0.82rem; }
+.campo-reposicao-minutos .saldo-reposicoes { min-width: 3.4em; text-align: center; }
+.minutos-reposicao { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.35rem; }
+.minutos-reposicao input { width: 4.2em; padding: 0.35em 0.4em; border-radius: 6px; border: 1px solid var(--borda); text-align: center; }
+.campo-duracao-marcar input { width: 100%; }
+.creditos-reposicao { display: block; font-size: 0.78rem; color: var(--ink-soft); margin-top: 0.2rem; }

@@ -475,6 +475,7 @@ function htmlDoRelatorio({ aluno, semApp, mes, aulas, registros, documentos, pal
   const canceladas = conta((a) => a.status === "cancelada");
   const semConfirmar = conta((a) => a.status === "agendada" && fimDaAula(a) <= new Date());
   const reposicoes = conta((a) => a.reposicao && a.status === "concluida");
+  const minutosRepostos = aulas.filter((a) => a.reposicao && a.status === "concluida").reduce((t, a) => t + duracaoDaAula(a), 0);
   const nomeProfessor = document.getElementById("nome-usuario").textContent;
   const plano = !semApp ? idiomasAtuaisProfessor.map((id) => {
     const p = planoNoIdioma(aluno, id);
@@ -527,7 +528,7 @@ function htmlDoRelatorio({ aluno, semApp, mes, aulas, registros, documentos, pal
     <p class="sub">Emitido em ${new Date().toLocaleDateString("pt-BR")}</p>
     <div class="resumo">
       <div><strong>${realizadas}</strong>aulas realizadas</div>
-      <div><strong>${reposicoes}</strong>reposições feitas</div>
+      <div><strong>${reposicoes}</strong>reposições feitas${minutosRepostos ? ` (${formatarMinutos(minutosRepostos)})` : ""}</div>
       <div><strong>${naoRealizadas}</strong>não realizadas</div>
       <div><strong>${canceladas}</strong>canceladas</div>
       ${semConfirmar ? `<div><strong>${semConfirmar}</strong>sem confirmar</div>` : ""}
