@@ -362,11 +362,12 @@ function renderizarTela() {
     montarBoasVindas(document.getElementById("frase-boas-vindas"), idiomaDoAluno, "aluno");
     tituloTopo.textContent = nomeDoAlunoAtual || "Olá!";
     renderizarProgresso();
-    renderizarPalavrasRecentes();
   } else {
     eyebrowTopo.textContent = `VOCABULÁRIO DE ${IDIOMAS[idiomaDoAluno].nome.toUpperCase()}`;
     tituloTopo.textContent = `Palavras aprendidas com a inicial "${letraSelecionada}"`;
   }
+  // Também aparecem na Sala de aula, aberta de qualquer tela
+  renderizarPalavrasRecentes();
   renderizarPalavras();
 }
 
@@ -1000,6 +1001,7 @@ function abrirSalaDeAula() {
   document.body.classList.add("tela-sala");
   document.getElementById("tela-sala-aula").hidden = false;
   renderizarSalaDeAula();
+  renderizarPalavrasRecentes();
   window.scrollTo(0, 0);
 }
 
@@ -1037,7 +1039,7 @@ function desenharSalaDeAula(corpo) {
   const proxima = aulasFuturasDoAluno()[0];
   const linhaProxima = proxima
     ? `<p class="proxima-na-sala"><span>Próxima aula</span><strong>${escapeHtml(rotuloDiaDaAula(proxima.data))} · ${escapeHtml(faixaHorario(proxima.horaInicio, proxima.horaFim))}</strong><em>${escapeHtml(contagemParaAula(proxima))}</em></p>`
-    : `<p class="proxima-na-sala"><span>Próxima aula</span><strong>Nenhuma aula marcada</strong><button type="button" class="link-trocar" onclick="abrirAgendamento()">Marcar uma aula</button></p>`;
+    : `<p class="proxima-na-sala"><span>Próxima aula</span><strong>Nenhuma aula marcada</strong><button type="button" class="btn btn-destaque btn-marcar-aula btn-mini" onclick="abrirAgendamento()">Marcar uma aula</button></p>`;
 
   const todos = documentosDaSala();
   const doTipo = filtroTipoDocumentos ? todos.filter((d) => categoriaDoDocumento(d) === filtroTipoDocumentos) : todos;
@@ -1234,7 +1236,7 @@ function renderizarMinhasAulas() {
         <div class="rotulo-destaque">Próxima aula${deQualIdioma}</div>
         <p class="titulo-destaque">Nenhuma aula marcada</p>
         <p class="texto-destaque">Escolha um dia e um horário livre na agenda do seu professor.</p>
-        <button class="btn btn-destaque" onclick="abrirAgendamento()">Marcar uma aula</button>
+        <button class="btn btn-destaque btn-marcar-aula" onclick="abrirAgendamento()">Marcar uma aula</button>
       </div>`;
     renderizarProgresso();
     return;
@@ -1626,8 +1628,9 @@ function renderizarAgendamento() {
     corpo.innerHTML = `
       <div class="agendamento-sucesso">
         <div class="selo-sucesso${c.pedido ? " selo-pedido" : ""}">${icone(c.pedido ? "hourglass" : "check")}</div>
-        <h3>${c.pedido ? "Pedido de reposição enviado" : "Aula confirmada"}</h3>
+        <h3>${c.pedido ? "Pedido de reposição enviado" : c.registro ? "Aula registrada" : "Aula confirmada"}</h3>
         ${c.pedido ? `<p class="dica-pedido-enviado">O horário está reservado. Você recebe uma notificação quando o professor aprovar ou recusar.</p>` : ""}
+        ${c.registro && !c.pedido ? `<p class="dica-pedido-enviado">Seu professor foi avisado e vai confirmar que a aula aconteceu.</p>` : ""}
         <p>${escapeHtml(rotuloDiaCurto(c.data))} às ${escapeHtml(c.hora)} · ${escolheIdiomaNoAgendamento() ? `${IDIOMAS[c.idioma].nome} · ` : ""}${c.modalidade === "online" ? "Online" : "Presencial"}${c.reposicao ? " · Reposição" : ""}</p>
         ${c.linkWhatsapp ? `<a class="btn btn-secundario" href="${c.linkWhatsapp}" target="_blank" rel="noopener">Não abriu? ${c.pedido ? "Avisar" : "Confirmar"} pelo WhatsApp</a>` : ""}
         <div class="acoes-sucesso">
@@ -1754,6 +1757,7 @@ function montarCalendarioAgendamento() {
   const diasNoMes = new Date(ano, mes + 1, 0).getDate();
   const offsetInicio = primeiroDoMes.getDay();
   const liberado = mesLiberado(primeiroDoMes);
+  const limiteRegistro = inicioDoRegistroRetroativo();
 
   const celulas = [];
   for (let i = 0; i < offsetInicio; i++) celulas.push(`<div class="cal-day cal-empty"></div>`);
@@ -1761,7 +1765,9 @@ function montarCalendarioAgendamento() {
     const dataIso = chaveDataISO(new Date(ano, mes, dia));
     const passou = dataIso < hojeIso;
     const hoje = dataIso === hojeIso;
-    const disponivel = !passou && liberado && diaTemDisponibilidade(dataIso);
+    // Dia que já passou: só os últimos dias, para registrar uma aula esquecida
+    const registravel = passou && dataIso >= limiteRegistro && diaTemDisponibilidade(dataIso);
+    const disponivel = registravel || (!passou && liberado && diaTemDisponibilidade(dataIso));
     const selecionado = dataIso === agendamento.data;
 
     const classes = ["cal-day"];
@@ -1770,6 +1776,7 @@ function montarCalendarioAgendamento() {
     else if (!disponivel) classes.push("is-off");
     if (hoje) classes.push("is-today");
     if (disponivel) classes.push("is-available");
+    if (registravel) classes.push("is-retro");
     if (selecionado) classes.push("is-selected");
 
     celulas.push(`
@@ -1785,7 +1792,7 @@ function montarCalendarioAgendamento() {
   container.innerHTML = `
     <div class="cal-wrap">
       <div class="cal-head">
-        <div class="cal-nav"><button type="button" id="btn-cal-mes-anterior" ${eMesAtual ? "disabled" : ""} aria-label="Mês anterior">${icone("chevron-left")}</button></div>
+        <div class="cal-nav"><button type="button" id="btn-cal-mes-anterior" ${eMesAtual && limiteRegistro >= chaveDataISO(primeiroDoMes) ? "disabled" : ""} aria-label="Mês anterior">${icone("chevron-left")}</button></div>
         <div class="cal-title">${NOMES_MESES[mes]} de ${ano}</div>
         <div class="cal-nav"><button type="button" id="btn-cal-mes-proximo" aria-label="Próximo mês">${icone("chevron-right")}</button></div>
       </div>
@@ -1795,6 +1802,8 @@ function montarCalendarioAgendamento() {
         <span><span class="dot dot-disponivel"></span> Disponível</span>
         <span><span class="dot dot-indisponivel"></span> Indisponível</span>
         <span><span class="dot dot-selecionado"></span> Selecionado</span>
+        <span><span class="dot dot-hoje"></span> Hoje</span>
+        <span><span class="dot dot-retro"></span> Já passou: registrar aula esquecida</span>
       </div>
       ${liberado ? "" : `<p class="aviso-mes-bloqueado">A agenda de ${NOMES_MESES[mes].toLowerCase()} ainda não foi liberada pelo seu professor.</p>`}
     </div>
@@ -1813,6 +1822,21 @@ function montarCalendarioAgendamento() {
     celula.onclick = escolher;
     celula.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); escolher(); } };
   });
+}
+
+// Registro de aula esquecida: o aluno pode escolher os últimos dias (e os horários
+// de hoje que já passaram) para marcar uma aula que aconteceu e não foi marcada.
+// Ela fica em "aulas para confirmar" na Agenda do professor.
+const DIAS_REGISTRO_RETROATIVO = 7;
+
+function inicioDoRegistroRetroativo() {
+  const d = new Date();
+  d.setDate(d.getDate() - DIAS_REGISTRO_RETROATIVO);
+  return chaveDataISO(d);
+}
+
+function horarioDoAgendamentoPassou(dataIso, hora) {
+  return !!(dataIso && hora) && new Date(`${dataIso}T${hora}:00`) < new Date();
 }
 
 // Ao escolher uma data, busca as aulas já marcadas do professor naquele dia e calcula os horários livres
@@ -1849,12 +1873,8 @@ async function carregarHorariosLivres(dataEscolhida) {
   const duracao = config.duracaoAulaMinutos || 50;
   let horarios = slotsSemConflito(gerarSlotsDoDia(blocos, duracao, config.intervaloMinutos), duracao, marcadas);
 
-  // Se a data escolhida for hoje, esconde horários que já passaram
-  if (dataEscolhida === dataDeHojeISO()) {
-    const agora = new Date();
-    const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
-    horarios = horarios.filter((h) => minutosDoHorario(h) > minutosAgora);
-  }
+  // Horários que já passaram continuam na lista: servem para registrar uma aula
+  // que aconteceu e o aluno esqueceu de marcar (o professor confirma depois)
   agendamento.horarios = horarios;
 }
 
@@ -1877,12 +1897,16 @@ function renderizarHorariosAgendamento() {
     container.innerHTML = `<p class="vazio">Nenhum horário livre em ${escapeHtml(rotuloDiaCurto(agendamento.data))}. Tente outro dia.</p>`;
     return;
   }
-  container.innerHTML = `<div class="slots-grade" id="slots-grade"></div>`;
+  const algumPassou = agendamento.horarios.some((h) => horarioDoAgendamentoPassou(agendamento.data, h));
+  container.innerHTML = (algumPassou
+    ? `<p class="dica-plano dica-registro">Esqueceu de marcar uma aula que já aconteceu? Os horários que já passaram (mais claros) servem para registrá-la — seu professor confirma depois.</p>`
+    : "") + `<div class="slots-grade" id="slots-grade"></div>`;
   const grade = document.getElementById("slots-grade");
   agendamento.horarios.forEach((horaInicio) => {
     const botao = document.createElement("button");
     botao.type = "button";
-    botao.className = "btn-slot-horario";
+    botao.className = "btn-slot-horario" + (horarioDoAgendamentoPassou(agendamento.data, horaInicio) ? " slot-passado" : "");
+    if (horarioDoAgendamentoPassou(agendamento.data, horaInicio)) botao.title = "Já passou: registra uma aula que você fez e esqueceu de marcar";
     // textContent: seguro, sem risco de injeção
     botao.textContent = faixaHorario(horaInicio, somarMinutos(horaInicio, configDoAgendamento().duracaoAulaMinutos || 50));
     botao.setAttribute("aria-pressed", "false");
@@ -1924,12 +1948,14 @@ async function confirmarAgendamento() {
 
   const { data, hora, modalidade, reposicao, idioma } = agendamento;
   const duracao = configDoAgendamento().duracaoAulaMinutos || 50;
+  // Horário que já passou: o aluno está registrando uma aula que esqueceu de marcar
+  const registro = horarioDoAgendamentoPassou(data, hora);
 
   // A aba do WhatsApp é aberta em branco JÁ AQUI, antes do "await" — celulares
   // (principalmente Safari/iOS) bloqueiam window.open() se ele só acontecer depois de uma
   // pausa assíncrona, porque nesse ponto deixa de contar como resposta direta a um toque
   // do usuário. Preenchendo o destino da aba só depois que a gravação terminar, o popup nunca é bloqueado.
-  const linkConfirmacao = configAgendaProfessor.whatsapp
+  const linkConfirmacao = configAgendaProfessor.whatsapp && !registro
     ? linkWhatsapp(configAgendaProfessor.whatsapp, mensagemConfirmacaoAula(data, hora, modalidade, reposicao, idioma, pedido))
     : null;
   const abaWhatsapp = linkConfirmacao ? window.open("", "_blank") : null;
@@ -1956,8 +1982,10 @@ async function confirmarAgendamento() {
   if (abaWhatsapp) abaWhatsapp.location = linkConfirmacao;
   avisarProfessor(pedido ? "aluno-pediu-reposicao" : "aluno-marcou-aula", pedido
     ? `${nomeDoAlunoAtual} pediu uma reposição para ${descricaoAulaParaProfessor(data, hora, idioma)}. Aprove ou recuse na Agenda.`
-    : `${nomeDoAlunoAtual} marcou ${reposicao ? "uma reposição" : "uma aula"} para ${descricaoAulaParaProfessor(data, hora, idioma)}.`, idioma);
+    : registro
+      ? `${nomeDoAlunoAtual} registrou ${reposicao ? "uma reposição" : "uma aula"} que já aconteceu: ${descricaoAulaParaProfessor(data, hora, idioma)}. Confirme na Agenda se ela foi realizada.`
+      : `${nomeDoAlunoAtual} marcou ${reposicao ? "uma reposição" : "uma aula"} para ${descricaoAulaParaProfessor(data, hora, idioma)}.`, idioma);
   agendamento.salvando = false;
-  agendamento.confirmada = { data, hora, modalidade, reposicao, idioma, pedido, linkWhatsapp: linkConfirmacao };
+  agendamento.confirmada = { data, hora, modalidade, reposicao, idioma, pedido, registro, linkWhatsapp: linkConfirmacao };
   renderizarAgendamento();
 }

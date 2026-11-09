@@ -1574,7 +1574,7 @@ function renderizarDestaqueProximaAula(proxima, proximas, agora, hojeIso, amanha
         <div class="rotulo-destaque">Próxima aula</div>
         <p class="titulo-destaque">Nenhuma aula nos próximos ${DIAS_PAINEL_HOJE} dias</p>
         <p class="texto-destaque">Quando um aluno marcar uma aula, ela aparece aqui.</p>
-        <button class="btn btn-destaque" onclick="abrirMarcarAula()">Marcar uma aula</button>
+        <button class="btn btn-destaque btn-marcar-aula" onclick="abrirMarcarAula()">Marcar uma aula</button>
       </div>`;
     return;
   }
@@ -2454,6 +2454,7 @@ function montarCalendarioProfessor() {
       <div class="cal-grid">${celulas.join("")}</div>
       <div class="cal-legend">
         <span><span class="dot dot-hoje"></span> Hoje</span>
+        <span><span class="dot dot-selecionado"></span> Dia escolhido</span>
         <span><span class="dot dot-atende"></span> Atende nesse dia</span>
         <span><span class="dot dot-tem-aula"></span> Tem aula</span>
         <span><span class="dot dot-nao-atende"></span> Não atende</span>

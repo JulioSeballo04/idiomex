@@ -527,7 +527,16 @@ html[data-tema="noturno"] .btn-destaque { color: #223247; }
 /* ============================================================
    SALA DE AULA DO ALUNO — tela própria (no lugar da janela)
    ============================================================ */
-.tela-sala .conteudo > :not(.cabecalho-app):not(#tela-sala-aula):not([id^="modal-"]) { display: none !important; }
+.tela-sala .conteudo > :not(.cabecalho-app):not(#tela-sala-aula):not(.layout-inicio):not([id^="modal-"]) { display: none !important; }
+/* Na Sala de aula também ficam: Nova palavra, Palavras recentes e Minhas anotações
+   (as mesmas seções do Início, sem a próxima aula, o progresso e os recados) */
+.tela-sala .layout-inicio { margin-top: 1.4rem; }
+.tela-sala .coluna-principal > :not(.secao-nova-palavra):not(#painel-palavras-recentes),
+.tela-sala .coluna-lateral > :not(#painel-anotacoes) { display: none !important; }
+.tela-sala .coluna-lateral.so-inicio { display: flex !important; }
+.tela-sala #painel-palavras-recentes.so-inicio,
+.tela-sala #titulo-nova-palavra.so-inicio { display: block !important; }
+@media (min-width: 1000px) { .tela-sala .layout-inicio { grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); } }
 .tela-sala-aula { animation: entrarTelaSala 0.2s ease-out; }
 @keyframes entrarTelaSala { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .btn-voltar-sala {

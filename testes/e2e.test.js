@@ -373,7 +373,9 @@ function dataDaqui(dias) {
     await aluno.click('.letra-tab[title="Início"]');
     await aluno.click('#btn-sala-aula');
     await aluno.waitForSelector('#tela-sala-aula:not([hidden]) #corpo-sala-aula .secao-aula-online', { timeout: 5000 });
-    esperar(await aluno.isHidden('#painel-minhas-aulas') && await aluno.isHidden('.formulario-palavra'), 'o painel do Início continuou à mostra');
+    // Do Início, só ficam Nova palavra, Palavras recentes e Minhas anotações
+    esperar(await aluno.isHidden('#painel-minhas-aulas') && await aluno.isHidden('#numeros-progresso'), 'o painel do Início continuou à mostra');
+    esperar(await aluno.isVisible('.formulario-palavra'), 'Nova palavra não aparece na Sala de aula');
     esperar(!(await aluno.$('#modal-sala-aula')), 'ainda existe a janela flutuante da sala');
     await aluno.goBack();
     await aluno.waitForSelector('#tela-sala-aula', { state: 'hidden', timeout: 3000 });
@@ -1253,10 +1255,10 @@ function dataDaqui(dias) {
     await p.click('.opcao-idioma-aula:has-text("Espanhol")');
     await p.waitForSelector('.resumo-passo:has-text("Espanhol")', { timeout: 3000 });
     // primeiro dia disponível no calendário (avança de mês se precisar)
-    for (let i = 0; i < 3 && !(await p.$('[data-calday]')); i++) await p.click('#btn-cal-mes-proximo');
-    await p.click('[data-calday] >> nth=0');
-    await p.waitForSelector('.btn-slot-horario', { timeout: 8000 });
-    await p.click('.btn-slot-horario >> nth=0');
+    for (let i = 0; i < 3 && !(await p.$('[data-calday]:not(.is-retro)')); i++) await p.click('#btn-cal-mes-proximo');
+    await p.click('[data-calday]:not(.is-retro) >> nth=0');
+    await p.waitForSelector('.btn-slot-horario:not(.slot-passado)', { timeout: 8000 });
+    await p.click('.btn-slot-horario:not(.slot-passado) >> nth=0');
     await p.click('#btn-confirmar-agendamento');
     await p.waitForSelector('.agendamento-sucesso:has-text("Espanhol")', { timeout: 8000 });
     const idioma = await p.evaluate(() => aulasFuturasDoAluno('es')[0] && aulasFuturasDoAluno('es')[0].idioma);
@@ -1349,8 +1351,8 @@ function dataDaqui(dias) {
       await iris.click('button:has-text("Agendar aula")');
       await iris.waitForSelector('.opcao-idioma-aula', { timeout: 8000 });
       await iris.click(`.opcao-idioma-aula:has-text("${nomeIdioma}")`);
-      for (let i = 0; i < 3 && !(await iris.$('[data-calday]')); i++) await iris.click('#btn-cal-mes-proximo');
-      await iris.click('[data-calday] >> nth=0');
+      for (let i = 0; i < 3 && !(await iris.$('[data-calday]:not(.is-retro)')); i++) await iris.click('#btn-cal-mes-proximo');
+      await iris.click('[data-calday]:not(.is-retro) >> nth=0');
       await iris.waitForSelector('.btn-slot-horario', { timeout: 8000 });
       const texto = await iris.textContent('.btn-slot-horario >> nth=0');
       await iris.evaluate(() => fecharAgendamento());
@@ -1482,6 +1484,62 @@ function dataDaqui(dias) {
     await prof.click('#lista-alunos .aluno-bloco >> nth=1 >> .item-aluno');
     const abertos = await prof.$$eval('#lista-alunos .item-aluno.aberto .nome-aluno', (els) => els.map((e) => e.textContent.trim()));
     esperar(abertos.length === 1 && abertos[0] === nomes[1], 'abertos: ' + abertos.join(', '));
+  });
+
+  await caso('Sala de aula do aluno também tem Nova palavra, Palavras recentes e Minhas anotações', async () => {
+    await aluno.click('.letra-tab[title="Início"]').catch(() => {});
+    await aluno.click('#btn-sala-aula');
+    await aluno.waitForSelector('#tela-sala-aula:not([hidden])', { timeout: 5000 });
+    for (const sel of ['#input-palavra-en', '#lista-palavras-recentes', '#input-anotacoes']) {
+      esperar(await aluno.isVisible(sel), `${sel} não aparece na Sala de aula`);
+    }
+    esperar(!(await aluno.isVisible('#numeros-progresso')), 'o progresso apareceu na Sala de aula');
+    await aluno.fill('#input-palavra-en', 'whiteboard'); await aluno.fill('#input-palavra-pt', 'lousa');
+    await aluno.click('#btn-adicionar-palavra');
+    await aluno.waitForSelector('#lista-palavras-recentes .chip-palavra:has-text("whiteboard")', { timeout: 8000 });
+    esperar(await aluno.isVisible('#tela-sala-aula'), 'adicionar a palavra tirou o aluno da Sala de aula');
+    await aluno.click('.btn-voltar-sala');
+  });
+
+  console.log('\nAula esquecida');
+  await caso('aluno registra uma aula que já aconteceu (esqueceu de marcar); o professor confirma', async () => {
+    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const ctxPr = await h.novoContexto(browser); const pr = await h.novaPagina(ctxPr);
+    await h.cadastrar(pr, { tipo: 'professor', nome: 'Rafa', email: `rafa-${id}@t.com` });
+    await pr.waitForURL('**/professor.html', { timeout: 10000 });
+    await pr.waitForFunction(() => /^PROF-/.test(document.getElementById('codigo-professor').textContent), null, { timeout: 10000 });
+    const codigoRafa = await pr.textContent('#codigo-professor');
+    await pr.evaluate(async () => {
+      const manha = [{ inicio: '07:00', fim: '12:00' }];
+      await db.collection('usuarios').doc(professorIdAtual).collection('configuracaoAgenda').doc('dados').set({
+        duracaoAulaMinutos: 60, intervaloMinutos: 0, modalidades: ['online'], whatsapp: '', mesesLiberados: [],
+        disponibilidade: { dom: manha, seg: manha, ter: manha, qua: manha, qui: manha, sex: manha, sab: manha } });
+    });
+    const ctxAl = await h.novoContexto(browser); const al = await h.novaPagina(ctxAl);
+    await h.cadastrar(al, { tipo: 'aluno', nome: 'Léo', email: `leo-${id}@t.com`, codigo: codigoRafa });
+    await al.waitForURL('**/dicionario.html', { timeout: 10000 }); await al.waitForSelector('#input-palavra-en');
+    await al.waitForFunction(() => professorIdDoAluno, null, { timeout: 8000 });
+    const doisDiasAtras = new Date(); doisDiasAtras.setDate(doisDiasAtras.getDate() - 2);
+    const dia = iso(doisDiasAtras);
+    await al.click('#lista-minhas-aulas .btn-marcar-aula');
+    await al.waitForSelector('#calendario-agendamento .cal-grid', { timeout: 8000 });
+    if (!(await al.$(`[data-calday="${dia}"]`))) await al.click('#btn-cal-mes-anterior');
+    esperar(await al.$(`[data-calday="${dia}"].is-retro`), 'dia de 2 dias atrás não pode ser escolhido');
+    const oitoDiasAtras = new Date(); oitoDiasAtras.setDate(oitoDiasAtras.getDate() - 8);
+    esperar(!(await al.$(`[data-calday="${iso(oitoDiasAtras)}"]`)), 'dia de 8 dias atrás pode ser escolhido');
+    await al.click(`[data-calday="${dia}"]`);
+    await al.waitForSelector('.btn-slot-horario.slot-passado:text-matches("^08:00 – ")', { timeout: 8000 });
+    await al.waitForSelector('.dica-registro', { timeout: 3000 });
+    await al.click('.btn-slot-horario:text-matches("^08:00 – ")');
+    await al.click('#btn-confirmar-agendamento');
+    await al.waitForSelector('.agendamento-sucesso h3:has-text("Aula registrada")', { timeout: 8000 });
+    // O professor é avisado e confirma em "aulas para confirmar"
+    await pr.waitForFunction(() => notificacoesProfessorCache.some((n) => /registrou uma aula que já aconteceu/.test(n.texto)), null, { timeout: 8000 });
+    await pr.click('#btn-aba-agenda');
+    await pr.waitForSelector('#confirmar-aulas .cartao-aula:has-text("Léo")', { timeout: 5000 });
+    await pr.click('#confirmar-aulas .cartao-aula:has-text("Léo") button:has-text("Foi realizada")');
+    await pr.waitForFunction((d) => aulasCache.some((a) => a.data === d && a.horaInicio === '08:00' && a.status === 'concluida'), dia, { timeout: 5000 });
+    await ctxAl.close(); await ctxPr.close();
   });
 
   console.log('\nCelular (375 px)');

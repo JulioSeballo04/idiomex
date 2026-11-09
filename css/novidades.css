@@ -1097,3 +1097,60 @@ html[data-tema="noturno"] .badge-status-em-andamento { background: rgba(127, 166
 .minutos-reposicao input { width: 4.2em; padding: 0.35em 0.4em; border-radius: 6px; border: 1px solid var(--borda); text-align: center; }
 .campo-duracao-marcar input { width: 100%; }
 .creditos-reposicao { display: block; font-size: 0.78rem; color: var(--ink-soft); margin-top: 0.2rem; }
+
+/* ---------- Calendários: dia de hoje e dia escolhido bem diferentes ----------
+   Antes, "hoje" e "tem aula" usavam o mesmo contorno colorido e se confundiam.
+   Agora: hoje = número num círculo cheio (cor de destaque) + "hoje" escrito;
+   dia escolhido = célula cheia na cor principal, com um anel em volta;
+   tem aula = uma faixa embaixo da célula (e o número de aulas no canto). */
+.cal-day .cal-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9em;
+  height: 1.9em;
+  border-radius: 50%;
+  line-height: 1;
+}
+.cal-day.is-today { border-color: var(--acento-secundario); border-width: 1px; opacity: 1; }
+.cal-day.is-today .cal-num { background: var(--acento-secundario); color: #fff; font-weight: 800; }
+.cal-day.is-today::before {
+  content: "hoje";
+  position: absolute;
+  top: 2px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--acento-secundario);
+}
+.cal-day.is-selected {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--acento) 35%, transparent);
+  transform: scale(1.06);
+  z-index: 1;
+}
+.cal-day.is-selected:hover { background: var(--acento-forte); }
+.cal-day.is-today.is-selected .cal-num { background: #fff; color: var(--acento-forte); }
+.cal-day.is-today.is-selected::before { color: #fff; }
+.cal-day.has-appts { border-width: 1px; box-shadow: inset 0 -3px 0 var(--acento-secundario); }
+.cal-day.has-appts.is-selected { box-shadow: 0 0 0 3px color-mix(in srgb, var(--acento) 35%, transparent), inset 0 -3px 0 #fff; }
+/* Dias que já passaram e ainda podem ser escolhidos (registrar aula esquecida) */
+.cal-day.is-past.is-retro { opacity: 0.85; border-style: dashed; border-color: var(--acento); }
+.dot-hoje { background: var(--acento-secundario); border: none; }
+.dot-selecionado { background: var(--acento); box-shadow: 0 0 0 2px color-mix(in srgb, var(--acento) 35%, transparent); }
+.dot-retro { background: var(--bg); border: 1px dashed var(--acento); }
+.dica-registro { margin: 0 0 0.5rem; }
+.btn-slot-horario.slot-passado:not(.escolhido) { border-style: dashed; opacity: 0.7; }
+
+/* Botão "Marcar uma aula" (no cartão da próxima aula) em vermelho */
+.btn-destaque.btn-marcar-aula,
+html[data-tema="noturno"] .btn-destaque.btn-marcar-aula { background: #D64541; color: #fff; border: none; }
+.btn-destaque.btn-marcar-aula:hover,
+html[data-tema="noturno"] .btn-destaque.btn-marcar-aula:hover { background: #B8332F; }

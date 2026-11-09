@@ -30,6 +30,10 @@ professor em Configurações → Mensagens do WhatsApp, com campos como `{aluno}
 `{data}`. As listas de documentos mostram 6 por página, e cada notificação tem um
 ✓ (visto) que a tira da lista.
 
+O aluno que esqueceu de marcar uma aula registra no próprio agendamento: os
+horários que já passaram hoje e os dos últimos 7 dias aparecem (mais claros), e a
+aula registrada fica em "aulas para confirmar" na Agenda do professor.
+
 Uma aula registrada pelo professor enquanto acontece fica **em andamento** e
 vira concluída sozinha no fim do horário. O aluno corrige a própria palavra (✎),
 e as frases de exemplo são geradas de novo quando a palavra muda.
