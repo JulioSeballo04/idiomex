@@ -584,6 +584,13 @@ function dataDaqui(dias) {
     await aluno.waitForFunction(() => documentosDaSala().length > 6, null, { timeout: 8000 });
     await aluno.click('#btn-sala-aula');
     await aluno.waitForSelector('#corpo-sala-aula .paginacao', { timeout: 3000 });
+    // Agrupados pelo dia em que o professor enviou (não pelo mês)
+    await aluno.waitForSelector('#corpo-sala-aula .titulo-grupo-documentos:text-is("Hoje")', { timeout: 3000 });
+    const rotulos = await aluno.evaluate(() => {
+      const d = (n) => { const x = new Date(); x.setDate(x.getDate() - n); return x; };
+      return [rotuloDoDiaDoDocumento(d(1)), rotuloDoDiaDoDocumento(d(3))];
+    });
+    esperar(rotulos[0] === 'Ontem' && /-feira|sábado|domingo/.test(rotulos[1]) && /\d/.test(rotulos[1]), 'rótulos dos dias: ' + rotulos.join(' / '));
     esperar((await aluno.$$('#corpo-sala-aula .documento-aula')).length === 6, 'aluno vê mais de 6 por página');
     await aluno.click('#corpo-sala-aula .paginacao [aria-label="Próxima página"]');
     await aluno.waitForSelector('#corpo-sala-aula .paginacao:has-text("Página 2 de")', { timeout: 3000 });

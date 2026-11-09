@@ -854,7 +854,8 @@ async function apagarPartesDoDocumento(documentoRef) {
 }
 
 // Lista de documentos da sala de aula, pensada para muitos arquivos (aluno e
-// professor): busca por título/nome do arquivo, agrupamento por mês e páginas
+// professor): busca por título/nome do arquivo, agrupamento pelo dia em que o
+// professor enviou e páginas
 // de 6 documentos.
 const DOCUMENTOS_POR_PAGINA = 6;
 
@@ -892,6 +893,17 @@ function semAcentos(texto) {
 
 // opcoes: busca, pagina, idBusca, aoBuscar / aoMudarPagina (código do oninput/onclick, com "%n"),
 // item(documento) -> html, vazio (texto quando não há documento nenhum)
+// "Hoje", "Ontem", "Segunda-feira, 9 de novembro" (com o ano, se não for o atual)
+function rotuloDoDiaDoDocumento(data) {
+  const dia = chaveDataISO(data);
+  const ontem = new Date(); ontem.setDate(ontem.getDate() - 1);
+  if (dia === dataDeHojeISO()) return "Hoje";
+  if (dia === chaveDataISO(ontem)) return "Ontem";
+  const opcoes = { weekday: "long", day: "numeric", month: "long" };
+  if (data.getFullYear() !== new Date().getFullYear()) opcoes.year = "numeric";
+  return data.toLocaleDateString("pt-BR", opcoes);
+}
+
 function montarListaDocumentosAula(documentos, opcoes) {
   if (documentos.length === 0) return `<p class="vazio">${opcoes.vazio}</p>`;
 
@@ -904,7 +916,7 @@ function montarListaDocumentosAula(documentos, opcoes) {
   const grupos = [];
   visiveis.forEach((d) => {
     const data = d.criadoEm ? d.criadoEm.toDate() : new Date(); // recém-criado: data do servidor ainda não chegou
-    const rotulo = data.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+    const rotulo = rotuloDoDiaDoDocumento(data);
     const ultimo = grupos[grupos.length - 1];
     if (ultimo && ultimo.rotulo === rotulo) ultimo.itens.push(d);
     else grupos.push({ rotulo, itens: [d] });
