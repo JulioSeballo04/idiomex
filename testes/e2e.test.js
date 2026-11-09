@@ -1112,7 +1112,10 @@ function dataDaqui(dias) {
     await prof.fill(`${blocoHugo} .minutos-reposicao input`, '15');
     await prof.click(`${blocoHugo} .minutos-reposicao button:has-text("Descontar")`);
     await prof.waitForSelector(`${blocoHugo} .saldo-reposicoes:text-is("2h45")`, { timeout: 5000 });
-    esperar((await prof.inputValue(`${blocoHugo} .minutos-reposicao input`)) === '', 'o campo de minutos não foi limpo');
+    // O campo é limpo quando a gravação termina (o saldo novo pode aparecer um instante antes)
+    let limpo = false;
+    for (let i = 0; i < 25 && !limpo; i++) { limpo = (await prof.inputValue(`${blocoHugo} .minutos-reposicao input`)) === ''; if (!limpo) await dormir(200); }
+    esperar(limpo, 'o campo de minutos não foi limpo');
     await hugo.waitForFunction(() => notificacoesCache.some((n) => /descontados 15 min.*2 créditos \(2h45\)/.test(n.texto)), null, { timeout: 5000 });
     await prof.waitForSelector(`${blocoHugo} .creditos-reposicao:has-text("2 créditos · faltam 15 min")`, { timeout: 3000 });
     const plano = await hugo.evaluate(async () => (await db.collection('usuarios').doc(auth.currentUser.uid).get()).data().plano);
