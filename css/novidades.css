@@ -990,7 +990,7 @@ audio.player-documento { background: transparent; }
 }
 
 /* ---------- Caixas de aviso do app (no lugar das do navegador) ---------- */
-#modal-caixa, #modal-confirmar-whatsapp {
+#modal-caixa, #modal-confirmar-whatsapp, #modal-editar-aula {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
@@ -1154,3 +1154,6 @@ html[data-tema="noturno"] .badge-status-em-andamento { background: rgba(127, 166
 html[data-tema="noturno"] .btn-destaque.btn-marcar-aula { background: #D64541; color: #fff; border: none; }
 .btn-destaque.btn-marcar-aula:hover,
 html[data-tema="noturno"] .btn-destaque.btn-marcar-aula:hover { background: #B8332F; }
+#modal-editar-aula .modal-conteudo { max-width: 440px; }
+#modal-editar-aula input, #modal-editar-aula select { width: 100%; padding: 0.55em 0.6em; border-radius: 8px; border: 1px solid var(--borda); color: var(--ink); }
+#modal-editar-aula .campo-perfil { margin-bottom: 0.7rem; }

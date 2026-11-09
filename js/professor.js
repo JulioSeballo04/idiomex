@@ -1407,8 +1407,8 @@ function rotuloQuandoAula(a, agora, hojeIso, amanhaIso) {
 function linhaAulaPainel(a, mostrarData) {
   const concluida = a.status === "concluida";
   const acoes = concluida
-    ? `<span class="selo-concluida">${icone("circle-check")} Concluída</span><button class="btn btn-secundario btn-mini" onclick="desfazerConclusaoAula('${a.id}')">Desfazer</button>`
-    : `<button class="btn btn-secundario btn-mini" onclick="concluirAula('${a.id}')">Concluir</button><button class="excluir" onclick="cancelarAulaComoProfessor('${a.id}')">Cancelar</button>`;
+    ? `<span class="selo-concluida">${icone("circle-check")} Concluída</span><button class="btn btn-secundario btn-mini" onclick="abrirEditarAula('${a.id}')">Editar</button><button class="btn btn-secundario btn-mini" onclick="desfazerConclusaoAula('${a.id}')">Desfazer</button>`
+    : `<button class="btn btn-secundario btn-mini" onclick="abrirEditarAula('${a.id}')">Editar</button><button class="btn btn-secundario btn-mini" onclick="concluirAula('${a.id}')">Concluir</button><button class="excluir" onclick="cancelarAulaComoProfessor('${a.id}')">Cancelar</button>`;
   return `
     <div class="cartao-aula${concluida ? " aula-concluida" : ""}">
       <div class="aula-info">
@@ -1514,6 +1514,7 @@ function renderizarHojeProfessor() {
             </div>
             ${escolhaNaoRealizada.aulaId === a.id ? montarEscolhaIdiomaReposicao(a) : `
             <div class="aula-acoes">
+              <button class="btn btn-secundario btn-mini" onclick="abrirEditarAula('${a.id}')">Editar</button>
               <button class="btn btn-primario btn-mini" onclick="concluirAula('${a.id}')">Foi realizada</button>
               <button class="btn btn-secundario btn-mini" onclick="marcarAulaNaoRealizada('${a.id}')">Não foi realizada</button>
             </div>`}
@@ -2342,6 +2343,7 @@ function legendaStatusAula(status) {
 function acoesAulaHtml(a) {
   if (a.status === "agendada") return `
         <div class="aula-acoes">
+          <button class="btn btn-secundario btn-mini" onclick="abrirEditarAula('${a.id}')">Editar</button>
           <button class="btn btn-secundario" style="padding:0.35em 0.8em; font-size:0.8rem;" onclick="concluirAula('${a.id}')">Concluir</button>
           <button class="excluir" onclick="cancelarAulaComoProfessor('${a.id}')">Cancelar</button>
         </div>`;
@@ -2353,6 +2355,10 @@ function acoesAulaHtml(a) {
   if (a.status === "nao-realizada") return `
         <div class="aula-acoes">
           <button class="btn btn-secundario btn-mini" onclick="desfazerAulaNaoRealizada('${a.id}')">Desfazer</button>
+        </div>`;
+  if (a.status === "concluida") return `
+        <div class="aula-acoes">
+          <button class="btn btn-secundario btn-mini" onclick="abrirEditarAula('${a.id}')">Editar</button>
         </div>`;
   return "";
 }
@@ -2511,7 +2517,7 @@ function renderizarResumoDoMes(ano, mes, prefixoMes) {
   const container = document.getElementById("resumo-mes-professor");
   if (!container) return;
   const agora = new Date();
-  const doMes = aulasCache.filter(noFiltroAgenda).filter((a) => (a.data || "").startsWith(prefixoMes));
+  const doMes = aulasCache.filter(noFiltroAgenda).filter((a) => (a.data || "").startsWith(prefixoMes) && !a.remarcadaPara);
   const realizadas = doMes.filter((a) => a.status === "concluida");
   const aindaVao = doMes.filter((a) => (a.status === "agendada" && fimDaAula(a) > agora) || a.status === "pendente");
   const paraConfirmar = doMes.filter((a) => a.status === "agendada" && fimDaAula(a) <= agora);
@@ -2866,6 +2872,122 @@ function cancelarAulaComoProfessor(aulaId) {
   });
 }
 
+// -------------------- EDITAR AULA --------------------
+// Ajusta o horário e a modalidade de uma aula (ex: marcada das 10 às 11, mas foi das
+// 10 às 12). Mudar só o término (ou a modalidade) atualiza a própria aula. Mudar o
+// início remarca: o id da aula é "professor_data_hora", então nasce uma aula no
+// horário novo (com a mesma situação) e a antiga fica cancelada, marcada como
+// remarcada — sem ocupar o horário e sem contar como cancelada.
+
+function abrirEditarAula(aulaId) {
+  const aula = aulasCache.find((a) => a.id === aulaId);
+  if (!aula) return;
+  let modal = document.getElementById("modal-editar-aula");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "modal-editar-aula";
+    modal.className = "modal-oculto";
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `
+    <div class="modal-conteudo">
+      <div class="modal-cabecalho">
+        <h3>Editar aula</h3>
+        <button type="button" class="btn-fechar-modal" title="Fechar" onclick="fecharEditarAula()">${icone("x")}</button>
+      </div>
+      <p class="data-msg">${escapeHtml(aula.alunoNome)} · ${formatarDataBR(aula.data)}${aula.reposicao ? " · Reposição" : ""}</p>
+      <div class="linha-marcar-aula">
+        <div class="campo-perfil"><label for="editar-inicio">Início</label><input type="time" id="editar-inicio" value="${escapeHtml(aula.horaInicio)}"></div>
+        <div class="campo-perfil"><label for="editar-fim">Término</label><input type="time" id="editar-fim" value="${escapeHtml(aula.horaFim || somarMinutos(aula.horaInicio, duracaoDaAula(aula)))}"></div>
+      </div>
+      <div class="campo-perfil">
+        <label for="editar-modalidade">Modalidade</label>
+        <select id="editar-modalidade">${["online", "presencial"].map((m) => `<option value="${m}" ${m === aula.modalidade ? "selected" : ""}>${legendaModalidade(m)}</option>`).join("")}</select>
+      </div>
+      <p class="dica-plano" id="duracao-editar-aula"></p>
+      <button class="btn btn-primario" id="btn-salvar-edicao-aula" onclick="salvarEdicaoAula('${aula.id}')">Salvar</button>
+      <p class="status-msg" id="status-editar-aula"></p>
+    </div>`;
+  const mostrarDuracao = () => {
+    const ini = document.getElementById("editar-inicio").value, fim = document.getElementById("editar-fim").value;
+    const min = ini && fim ? minutosDoHorario(fim) - minutosDoHorario(ini) : 0;
+    document.getElementById("duracao-editar-aula").textContent = min > 0
+      ? `Duração: ${formatarMinutos(min)}${aula.reposicao ? " (é a duração descontada da reposição)" : ""}` : "";
+  };
+  modal.querySelectorAll("input").forEach((c) => c.addEventListener("input", mostrarDuracao));
+  mostrarDuracao();
+  modal.classList.remove("modal-oculto");
+}
+
+function fecharEditarAula() {
+  const modal = document.getElementById("modal-editar-aula");
+  if (modal) modal.classList.add("modal-oculto");
+}
+
+async function salvarEdicaoAula(aulaId) {
+  const aula = aulasCache.find((a) => a.id === aulaId);
+  const status = document.getElementById("status-editar-aula");
+  if (!aula) return;
+  const inicio = document.getElementById("editar-inicio").value;
+  const fim = document.getElementById("editar-fim").value;
+  const modalidade = document.getElementById("editar-modalidade").value;
+  const duracao = inicio && fim ? minutosDoHorario(fim) - minutosDoHorario(inicio) : 0;
+  if (!inicio || !fim || duracao < 10 || duracao > 300) {
+    status.textContent = "Confira os horários: o término precisa ser depois do início (aula de 10 min a 5 horas).";
+    return;
+  }
+  // Não pode encavalar com outra aula do dia (a própria não conta)
+  const choque = aulasQueOcupam(aula.data, inicio).find((a) => a.id !== aula.id &&
+    minutosDoHorario(a.horaInicio) < minutosDoHorario(fim) && minutosDoHorario(a.horaFim || somarMinutos(a.horaInicio, 60)) > minutosDoHorario(inicio));
+  if (choque) {
+    status.textContent = `Esse horário bate com a aula de ${choque.alunoNome} às ${choque.horaInicio}.`;
+    return;
+  }
+  const nada = inicio === aula.horaInicio && fim === aula.horaFim && modalidade === aula.modalidade;
+  if (nada) { fecharEditarAula(); return; }
+
+  document.getElementById("btn-salvar-edicao-aula").disabled = true;
+  status.textContent = "Salvando...";
+  try {
+    if (inicio === aula.horaInicio) {
+      await db.collection("aulas").doc(aula.id).update({ horaFim: fim, modalidade });
+    } else {
+      await remarcarAula(aula, inicio, fim, modalidade);
+    }
+  } catch (e) {
+    console.error(e);
+    document.getElementById("btn-salvar-edicao-aula").disabled = false;
+    status.textContent = e.message && /reservado/.test(e.message) ? e.message : mensagemErroGravacao(e, "Não foi possível salvar a aula.").replace(/\n+/g, " ");
+    return;
+  }
+  if (alunosCache.some((a) => a.id === aula.alunoId)) {
+    db.collection("usuarios").doc(aula.alunoId).collection("notificacoes")
+      .add(notificacaoParaAluno("aula-marcada", `Seu professor ajustou a aula de ${formatarDataBR(aula.data)}: agora é ${faixaHorario(inicio, fim)}, ${legendaModalidade(modalidade).toLowerCase()}.`, aula.idioma))
+      .catch((e) => console.warn("Não foi possível avisar o aluno do ajuste:", e));
+  }
+  fecharEditarAula();
+}
+
+// Novo início: cria a aula no horário novo (como "agendada", o que as regras pedem
+// para uma aula marcada pelo professor) e devolve a situação dela; a antiga fica
+// cancelada com "remarcadaPara"
+async function remarcarAula(aula, inicio, fim, modalidade) {
+  const novoId = await agendarAula(professorIdAtual, aula.data, inicio, fim, modalidade, aula.alunoId, aula.alunoNome,
+    !!aula.reposicao, aula.idioma, "agendada");
+  const extras = {};
+  if (aula.status !== "agendada") extras.status = aula.status;
+  if (aula.concluirAoTerminar) extras.concluirAoTerminar = true;
+  if (Object.keys(extras).length) await db.collection("aulas").doc(novoId).update(extras);
+  await db.collection("aulas").doc(aula.id).update({ status: "cancelada", canceladoPor: "professor", remarcadaPara: novoId });
+  // As anotações da aula vão junto
+  const nota = anotacoesAgendaCache[aula.id];
+  if (nota && nota.texto) {
+    const col = db.collection("usuarios").doc(professorIdAtual).collection("anotacoesAgenda");
+    await col.doc(novoId).set({ ...nota, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp() });
+    await col.doc(aula.id).delete();
+  }
+}
+
 async function concluirAula(aulaId) {
   const aula = aulasCache.find((a) => a.id === aulaId);
   const agora = new Date();
@@ -2884,7 +3006,7 @@ async function concluirAula(aulaId) {
 
 function montarAbaAulas(alunoId) {
   const aulasDoAluno = aulasCache
-    .filter((a) => a.alunoId === alunoId && noFiltroAgenda(a))
+    .filter((a) => a.alunoId === alunoId && noFiltroAgenda(a) && !a.remarcadaPara)
     .sort((a, b) => (b.data + b.horaInicio).localeCompare(a.data + a.horaInicio)); // mais recente primeiro
 
   if (aulasDoAluno.length === 0) {
@@ -3100,7 +3222,7 @@ const STATUS_QUE_OCUPAM = ["agendada", "pendente", "concluida"];
 // realizada...) já ocupa o horário.
 function aulasQueOcupam(dataIso, hora) {
   const passou = horarioJaPassou(dataIso, hora);
-  return aulasCache.filter((a) => a.data === dataIso && (passou || STATUS_QUE_OCUPAM.includes(a.status)));
+  return aulasCache.filter((a) => a.data === dataIso && !a.remarcadaPara && (passou || STATUS_QUE_OCUPAM.includes(a.status)));
 }
 
 function renderizarHorariosMarcarAula() {
