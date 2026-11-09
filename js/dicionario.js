@@ -397,7 +397,7 @@ function renderizarProgresso() {
     </div>`;
   container.innerHTML =
     numero(palavras.length, palavras.length === 1 ? "palavra aprendida" : "palavras aprendidas", "book-open") +
-    numero(novasNaSemana, novasNaSemana === 1 ? "nova nesta semana" : "novas nesta semana", "sparkles") +
+    numero(novasNaSemana, novasNaSemana === 1 ? "nova palavra aprendida na semana" : "novas palavras aprendidas na semana", "sparkles") +
     numero(aulasNoMes, aulasNoMes === 1 ? "aula feita no mês" : "aulas feitas no mês", "graduation-cap");
   renderizarAulasDoMes();
 }
