@@ -1157,3 +1157,14 @@ html[data-tema="noturno"] .btn-destaque.btn-marcar-aula:hover { background: #B83
 #modal-editar-aula .modal-conteudo { max-width: 440px; }
 #modal-editar-aula input, #modal-editar-aula select { width: 100%; padding: 0.55em 0.6em; border-radius: 8px; border: 1px solid var(--borda); color: var(--ink); }
 #modal-editar-aula .campo-perfil { margin-bottom: 0.7rem; }
+
+/* Início do aluno: aulas feitas no mês */
+.resumo-aulas-mes { margin: 0 0 0.6rem; font-size: 0.88rem; color: var(--ink-soft); }
+.resumo-aulas-mes strong { color: var(--ink); }
+.lista-aulas-mes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; max-height: 320px; overflow-y: auto; }
+.lista-aulas-mes li { display: flex; align-items: center; gap: 0.7rem; padding: 0.45rem 0.6rem; border-radius: 10px; background: var(--bg); }
+.dia-aula-mes { display: flex; flex-direction: column; align-items: center; min-width: 2.4em; font-size: 0.7rem; text-transform: uppercase; color: var(--ink-soft); line-height: 1.1; }
+.dia-aula-mes strong { font-size: 1.05rem; color: var(--acento-forte); }
+.info-aula-mes { flex: 1; display: flex; flex-direction: column; font-size: 0.88rem; font-weight: 600; }
+.info-aula-mes small { font-weight: 400; color: var(--ink-soft); font-size: 0.78rem; }
+.selo-aula-feita { color: #2f9e57; display: inline-flex; }

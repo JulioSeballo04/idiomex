@@ -1579,6 +1579,12 @@ function dataDaqui(dias) {
     await pr.waitForSelector('#confirmar-aulas .cartao-aula:has-text("Léo")', { timeout: 5000 });
     await pr.click('#confirmar-aulas .cartao-aula:has-text("Léo") button:has-text("Foi realizada")');
     await pr.waitForFunction((d) => aulasCache.some((a) => a.data === d && a.horaInicio === '08:00' && a.status === 'concluida'), dia, { timeout: 5000 });
+    // A aula confirmada aparece em "Aulas feitas no mês" no Início do aluno (se for deste mês)
+    if (dia.slice(0, 7) === iso(new Date()).slice(0, 7)) {
+      await al.keyboard.press('Escape');
+      await al.waitForSelector(`#lista-aulas-mes li:has-text("08:00 – 09:00")`, { timeout: 8000 });
+      esperar(/1\s*aula/.test(await al.textContent('#lista-aulas-mes .resumo-aulas-mes')), 'resumo das aulas do mês errado');
+    }
     await ctxAl.close(); await ctxPr.close();
   });
 
