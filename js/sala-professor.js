@@ -443,7 +443,7 @@ async function emitirRelatorioMensal(alunoId) {
   aba.document.write("<p style='font-family:sans-serif'>Montando o relatório...</p>");
 
   const noMes = (ts) => ts && chaveDoMes(ts.toDate()) === mes;
-  const aulas = aulasCache.filter((a) => a.alunoId === alunoId && a.data.startsWith(mes))
+  const aulas = aulasCache.filter((a) => a.alunoId === alunoId && a.data.startsWith(mes) && !a.remarcadaPara)
     .sort((a, b) => (a.data + a.horaInicio).localeCompare(b.data + b.horaInicio));
   let registros = [], documentos = [];
   if (alunoApp) {

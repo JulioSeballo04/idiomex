@@ -920,6 +920,39 @@ function dataDaqui(dias) {
     esperar(!(await prof.$(`#confirmar-aulas .cartao-aula:has-text("${hora}")`)), 'a aula concluída sozinha caiu em "para confirmar"');
   });
 
+  await caso('professor edita uma aula: 10–11 vira 10–12; mudar o início remarca a aula', async () => {
+    const dia = dataDaqui(15);
+    const aulaId = await prof.evaluate(async (d) => {
+      const ze = alunosSemAppCache.find((a) => a.nome === 'Seu Zé');
+      return agendarAula(professorIdAtual, d, '10:00', '11:00', 'online', ze.id, ze.nome, false, 'en', 'agendada');
+    }, dia);
+    await prof.waitForFunction((id) => aulasCache.some((a) => a.id === id), aulaId, { timeout: 5000 });
+    await prof.evaluate((id) => abrirEditarAula(id), aulaId);
+    await prof.waitForSelector('#modal-editar-aula:not(.modal-oculto)', { timeout: 3000 });
+    await prof.fill('#editar-fim', '12:00');
+    await prof.waitForSelector('#duracao-editar-aula:has-text("2h")', { timeout: 3000 });
+    await prof.click('#btn-salvar-edicao-aula');
+    await prof.waitForSelector('#modal-editar-aula.modal-oculto', { state: 'attached', timeout: 5000 });
+    await prof.waitForFunction((id) => aulasCache.find((a) => a.id === id).horaFim === '12:00', aulaId, { timeout: 5000 });
+    // Término antes do início é recusado
+    await prof.evaluate((id) => abrirEditarAula(id), aulaId);
+    await prof.fill('#editar-fim', '09:00');
+    await prof.click('#btn-salvar-edicao-aula');
+    await prof.waitForSelector('#status-editar-aula:has-text("término precisa ser depois")', { timeout: 3000 });
+    // Novo início: a aula vai para as 13:00 e a antiga sai de cena (sem contar como cancelada)
+    await prof.fill('#editar-inicio', '13:00');
+    await prof.fill('#editar-fim', '14:30');
+    await prof.click('#btn-salvar-edicao-aula');
+    await prof.waitForSelector('#modal-editar-aula.modal-oculto', { state: 'attached', timeout: 5000 });
+    const r = await prof.waitForFunction(({ id, d }) => {
+      const antiga = aulasCache.find((a) => a.id === id);
+      const nova = aulasCache.find((a) => a.data === d && a.horaInicio === '13:00');
+      return antiga && nova && antiga.remarcadaPara === nova.id && { antiga: antiga.status, nova: nova.status, fim: nova.horaFim };
+    }, { id: aulaId, d: dia }, { timeout: 5000 }).then((x) => x.jsonValue());
+    esperar(r.antiga === 'cancelada' && r.nova === 'agendada' && r.fim === '14:30', 'remarcação errada: ' + JSON.stringify(r));
+    esperar(await prof.evaluate((d) => aulasQueOcupam(d, '10:00').every((a) => a.horaInicio !== '10:00'), dia), 'o horário antigo continuou ocupado');
+  });
+
   await caso('calendário volta para os meses anteriores e mostra as aulas dadas', async () => {
     const ze = await prof.evaluate(() => alunosSemAppCache.find((a) => a.nome === 'Seu Zé').id);
     const dia = dataDaqui(-40);
