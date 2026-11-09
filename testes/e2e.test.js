@@ -503,6 +503,34 @@ function dataDaqui(dias) {
     await aluno.click('#tela-sala-aula .btn-voltar-sala');
   });
 
+  await caso('com a imagem aberta, o aluno abre ao lado a janela "Nova palavra" e adiciona palavras', async () => {
+    await aluno.click('#btn-sala-aula');
+    await aluno.click('#corpo-sala-aula button:has-text("Quadro da aula")');
+    await aluno.waitForSelector('#modal-visualizador:not(.modal-oculto) img.imagem-documento', { timeout: 8000 });
+    await aluno.click('#btn-nova-palavra-visualizador');
+    await aluno.waitForSelector('#painel-palavra-visualizador:not([hidden]) #painel-palavra-en', { timeout: 3000 });
+    esperar(await aluno.isVisible('#modal-visualizador img.imagem-documento'), 'a imagem sumiu ao abrir a janela de palavras');
+    await aluno.fill('#painel-palavra-en', 'pairwork');
+    await aluno.fill('#painel-palavra-pt', 'trabalho em dupla');
+    await aluno.click('#btn-painel-palavra');
+    await aluno.waitForSelector('#status-painel-palavra:has-text("adicionada")', { timeout: 10000 });
+    await aluno.waitForSelector('#lista-painel-palavra .chip-palavra:has-text("pairwork")', { timeout: 3000 });
+    esperar(await aluno.evaluate(() => cacheDePalavras.some((p) => p.palavraEn === 'pairwork' && p.traducaoPt === 'trabalho em dupla')), 'a palavra não foi gravada');
+    esperar((await aluno.inputValue('#painel-palavra-en')) === '', 'o campo não foi limpo');
+    // Repetida é recusada sem fechar nada
+    await aluno.fill('#painel-palavra-en', 'Pairwork'); await aluno.fill('#painel-palavra-pt', 'x');
+    await aluno.click('#btn-painel-palavra');
+    await aluno.waitForSelector('#status-painel-palavra:has-text("já está")', { timeout: 3000 });
+    await aluno.click('#modal-visualizador .modal-cabecalho .btn-fechar-modal');
+    await aluno.evaluate(() => fecharSalaDeAula());
+    // O professor não tem essa janela (não tem vocabulário próprio)
+    await prof.click('#btn-aba-sala').catch(() => {});
+    await prof.click('.item-biblioteca:has-text("Quadro da aula") .titulo-documento');
+    await prof.waitForSelector('#modal-visualizador:not(.modal-oculto) img', { timeout: 8000 });
+    esperar(!(await prof.$('#btn-nova-palavra-visualizador')), 'o professor ganhou o botão "Nova palavra"');
+    await prof.click('#modal-visualizador .modal-cabecalho .btn-fechar-modal');
+  });
+
   await caso('Documentos de aula recusa tipo que não abre no app (ex: Word)', async () => {
     await prof.setInputFiles('#arquivo-biblioteca', { name: 'apostila.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: Buffer.alloc(100) });
     await prof.waitForSelector('#status-biblioteca:has-text("PDF")', { timeout: 3000 });

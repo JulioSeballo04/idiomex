@@ -87,7 +87,10 @@ function garantirModalVisualizador() {
         <button type="button" class="btn-fechar-modal" title="Fechar" aria-label="Fechar" onclick="fecharVisualizador()">${icone("x")}</button>
       </div>
       <div id="ferramentas-visualizador" class="ferramentas-visualizador"></div>
-      <div id="corpo-visualizador" class="corpo-visualizador"></div>
+      <div class="area-visualizador">
+        <div id="corpo-visualizador" class="corpo-visualizador"></div>
+        <aside id="painel-palavra-visualizador" class="painel-palavra-visualizador" hidden aria-label="Nova palavra"></aside>
+      </div>
       <div id="rodape-visualizador" class="rodape-visualizador"></div>
     </div>`;
   // Sem "Salvar vídeo/imagem como..." no clique direito
@@ -135,7 +138,77 @@ function montarFerramentas(categoria) {
     </div>` : "";
   const flutuante = categoria === "imagem" || (categoria === "video" && document.pictureInPictureEnabled)
     ? `<button type="button" class="btn-ferramenta btn-flutuante" onclick="abrirJanelaFlutuante()" title="Abrir numa janela pequena por cima das outras, para continuar usando o app">⧉ Janela flutuante</button>` : "";
-  return zoom + flutuante;
+  // Na tela do aluno: anotar palavras novas sem fechar o documento
+  const palavra = podeAnotarPalavras()
+    ? `<button type="button" class="btn-ferramenta btn-nova-palavra-visualizador" id="btn-nova-palavra-visualizador" onclick="alternarPainelPalavra()" title="Abrir, ao lado do documento, uma janela para adicionar palavras novas">＋ Nova palavra</button>` : "";
+  return zoom + flutuante + palavra;
+}
+
+// -------------------- NOVA PALAVRA AO LADO DO DOCUMENTO --------------------
+// O aluno lê o material (ex: a foto de uma página do livro) e, numa janela ao
+// lado, já adiciona as palavras novas ao vocabulário — usa o mesmo cadastro do
+// Início (adicionarPalavra, em dicionario.js), com tradução e frases da IA.
+
+function podeAnotarPalavras() {
+  return typeof adicionarPalavra === "function" && !!document.getElementById("input-palavra-en");
+}
+
+let palavrasDoPainel = []; // as adicionadas por este painel desde que ele abriu
+
+function alternarPainelPalavra(abrir) {
+  const painel = document.getElementById("painel-palavra-visualizador");
+  const mostrar = abrir === undefined ? painel.hidden : abrir;
+  painel.hidden = !mostrar;
+  document.querySelector("#modal-visualizador .modal-visualizador").classList.toggle("com-painel", mostrar);
+  const botao = document.getElementById("btn-nova-palavra-visualizador");
+  if (botao) botao.classList.toggle("ativa", mostrar);
+  if (mostrar && !painel.innerHTML) {
+    palavrasDoPainel = [];
+    painel.innerHTML = `
+      <div class="cabecalho-painel-palavra">
+        <h4>Nova palavra</h4>
+        <button type="button" class="btn-fechar-modal" title="Fechar a janela de palavras" aria-label="Fechar a janela de palavras" onclick="alternarPainelPalavra(false)">${icone("x")}</button>
+      </div>
+      <form onsubmit="event.preventDefault(); adicionarPalavraDoPainel();">
+        <input type="text" id="painel-palavra-en" placeholder="${escapeHtml(document.getElementById("input-palavra-en").placeholder)}" autocomplete="off">
+        <input type="text" id="painel-palavra-pt" placeholder="${escapeHtml(document.getElementById("input-palavra-pt").placeholder)}" autocomplete="off">
+        <textarea id="painel-palavra-nota" placeholder="Anotação (opcional)"></textarea>
+        <button type="submit" class="btn btn-primario" id="btn-painel-palavra">Adicionar</button>
+      </form>
+      <p class="status-msg" id="status-painel-palavra"></p>
+      <div id="lista-painel-palavra"></div>`;
+  }
+  if (mostrar) document.getElementById("painel-palavra-en").focus();
+  definirZoom(zoomVisualizador); // a área do documento mudou de largura
+}
+
+async function adicionarPalavraDoPainel() {
+  const campo = (id) => document.getElementById(id);
+  const status = campo("status-painel-palavra");
+  const palavra = campo("painel-palavra-en").value.trim();
+  const traducao = campo("painel-palavra-pt").value.trim();
+  const nota = campo("painel-palavra-nota").value.trim();
+  if (!palavra || !traducao) { status.textContent = "Escreva a palavra e a tradução."; return; }
+  const existe = () => palavrasDoIdiomaAtual().some((p) => p.palavraEn.trim().toLowerCase() === palavra.toLowerCase());
+  if (existe()) { status.textContent = `"${palavra}" já está no seu vocabulário.`; return; }
+  campo("btn-painel-palavra").disabled = true;
+  status.textContent = "Salvando...";
+  await adicionarPalavra(palavra, traducao, nota);
+  if (!document.getElementById("painel-palavra-en")) return; // fechou o visualizador
+  campo("btn-painel-palavra").disabled = false;
+  if (!existe()) {
+    status.textContent = (document.getElementById("status-palavra") || {}).textContent || "Não foi possível salvar a palavra. Tente de novo.";
+    return;
+  }
+  campo("painel-palavra-en").value = "";
+  campo("painel-palavra-pt").value = "";
+  campo("painel-palavra-nota").value = "";
+  status.textContent = `"${palavra}" adicionada ao seu vocabulário.`;
+  palavrasDoPainel.unshift({ palavra, traducao });
+  campo("lista-painel-palavra").innerHTML = `
+    <p class="rotulo-painel-palavra">Adicionadas agora</p>
+    <div class="chips-palavras">${palavrasDoPainel.map((p) => `<span class="chip-palavra"><strong>${escapeHtml(p.palavra)}</strong><span>${escapeHtml(p.traducao)}</span></span>`).join("")}</div>`;
+  campo("painel-palavra-en").focus();
 }
 
 function mudarZoom(direcao) {
@@ -256,6 +329,10 @@ function fecharVisualizador() {
   document.getElementById("corpo-visualizador").innerHTML = "";
   document.getElementById("ferramentas-visualizador").innerHTML = "";
   document.getElementById("rodape-visualizador").innerHTML = "";
+  const painel = document.getElementById("painel-palavra-visualizador");
+  painel.hidden = true;
+  painel.innerHTML = "";
+  modal.querySelector(".modal-visualizador").classList.remove("com-painel");
   if (urlDoVisualizador) { URL.revokeObjectURL(urlDoVisualizador); urlDoVisualizador = null; }
   blobDoVisualizador = null;
 }
