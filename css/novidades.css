@@ -1168,3 +1168,28 @@ html[data-tema="noturno"] .btn-destaque.btn-marcar-aula:hover { background: #B83
 .info-aula-mes { flex: 1; display: flex; flex-direction: column; font-size: 0.88rem; font-weight: 600; }
 .info-aula-mes small { font-weight: 400; color: var(--ink-soft); font-size: 0.78rem; }
 .selo-aula-feita { color: #2f9e57; display: inline-flex; }
+
+/* Visualizador com a janela "Nova palavra" ao lado do documento */
+.modal-conteudo.modal-visualizador.com-painel { max-width: 1280px; }
+.area-visualizador { display: flex; gap: 1rem; flex: 1; min-height: 0; }
+.area-visualizador .corpo-visualizador { flex: 1; min-width: 0; }
+.painel-palavra-visualizador {
+  width: 300px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--borda);
+  padding-left: 1rem;
+}
+.painel-palavra-visualizador[hidden] { display: none; }
+.cabecalho-painel-palavra { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+.cabecalho-painel-palavra h4 { margin: 0; font-size: 0.95rem; }
+.painel-palavra-visualizador form { display: flex; flex-direction: column; gap: 0.5rem; }
+.painel-palavra-visualizador input, .painel-palavra-visualizador textarea { width: 100%; padding: 0.55em 0.65em; border-radius: 8px; border: 1px solid var(--borda); font-family: inherit; }
+.painel-palavra-visualizador textarea { min-height: 64px; resize: vertical; }
+.rotulo-painel-palavra { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); margin: 0.8rem 0 0.4rem; }
+.btn-ferramenta.ativa { background: var(--acento); color: #fff; }
+.btn-nova-palavra-visualizador { border: 1px solid var(--borda); border-radius: 8px; }
+@media (max-width: 760px) {
+  .area-visualizador { flex-direction: column; }
+  .painel-palavra-visualizador { width: auto; border-left: none; border-top: 1px solid var(--borda); padding: 0.8rem 0 0; max-height: 45vh; }
+}
