@@ -399,6 +399,36 @@ function renderizarProgresso() {
     numero(palavras.length, palavras.length === 1 ? "palavra aprendida" : "palavras aprendidas", "book-open") +
     numero(novasNaSemana, novasNaSemana === 1 ? "nova nesta semana" : "novas nesta semana", "sparkles") +
     numero(aulasNoMes, aulasNoMes === 1 ? "aula feita no mês" : "aulas feitas no mês", "graduation-cap");
+  renderizarAulasDoMes();
+}
+
+// Lista das aulas feitas (concluídas) no mês, no idioma atual, da mais recente para
+// a mais antiga — no canto do Início, abaixo das anotações
+const NOMES_DIAS_ALUNO = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+function renderizarAulasDoMes() {
+  const container = document.getElementById("lista-aulas-mes");
+  if (!container) return;
+  const hoje = new Date();
+  const mesAtual = dataDeHojeISO().slice(0, 7);
+  document.getElementById("titulo-aulas-mes").textContent = `Aulas feitas em ${NOMES_MESES[hoje.getMonth()].toLowerCase()}`;
+  const feitas = minhasAulasCache
+    .filter((a) => a.status === "concluida" && (a.data || "").startsWith(mesAtual) &&
+      (idiomasDisponiveis.length < 2 || aulaDoIdioma(a, idiomaDoAluno)))
+    .sort((a, b) => (b.data + b.horaInicio).localeCompare(a.data + a.horaInicio));
+  if (!feitas.length) {
+    container.innerHTML = `<p class="vazio-inline">Nenhuma aula feita este mês ainda. Elas aparecem aqui depois que o professor confirma.</p>`;
+    return;
+  }
+  const minutos = feitas.reduce((t, a) => t + duracaoDaAula(a), 0);
+  container.innerHTML = `
+    <p class="resumo-aulas-mes"><strong>${feitas.length}</strong> ${feitas.length === 1 ? "aula" : "aulas"} · <strong>${formatarMinutos(minutos)}</strong> de aula</p>
+    <ul class="lista-aulas-mes">${feitas.map((a) => `
+      <li>
+        <span class="dia-aula-mes"><strong>${formatarDataBR(a.data).slice(0, 2)}</strong>${NOMES_DIAS_ALUNO[new Date(`${a.data}T12:00:00`).getDay()]}</span>
+        <span class="info-aula-mes">${escapeHtml(faixaHorario(a.horaInicio, a.horaFim))}<small>${a.modalidade === "online" ? "Online" : "Presencial"}${a.reposicao ? " · Reposição" : ""}</small></span>
+        <span class="selo-aula-feita" title="Aula feita">${icone("check")}</span>
+      </li>`).join("")}
+    </ul>`;
 }
 
 // As últimas palavras adicionadas, como fichinhas: um toque leva pra letra dela
