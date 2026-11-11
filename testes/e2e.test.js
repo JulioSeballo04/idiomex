@@ -22,18 +22,18 @@ function dataDaqui(dias) {
   let codigo = '';
 
   console.log('\nCadastro e login');
-  await caso('tela de login só tem "Entrar com Google" (sem e-mail, senha ou "Esqueci minha senha")', async () => {
+  await caso('tela de login: "Entrar com Google" e também e-mail e senha, com "Esqueci minha senha"', async () => {
     await prof.goto(`${SITE}/index.html`);
     esperar(await prof.isVisible('button:has-text("Entrar com Google")'), 'sem botão do Google');
-    esperar(!(await prof.$('input[type=email]')) && !(await prof.$('input[type=password]')), 'ainda tem campo de e-mail ou senha');
-    esperar(!(await prof.$('text=Esqueci minha senha')), 'ainda tem "Esqueci minha senha"');
+    esperar(await prof.isVisible('#loginEmail') && await prof.isVisible('#loginSenha'), 'sem campos de e-mail e senha');
+    esperar(await prof.isVisible('text=Esqueci minha senha'), 'sem "Esqueci minha senha"');
   });
 
-  await caso('cadastro não tem mais e-mail e senha (só Google)', async () => {
+  await caso('cadastro: com Google ou com qualquer e-mail e senha', async () => {
     await prof.goto(`${SITE}/index.html`);
     await prof.click('#btn-aba-cadastro');
-    esperar(!(await prof.$('#cadEmail')) && !(await prof.$('#cadSenha')), 'ainda tem campos de e-mail/senha no cadastro');
     esperar(await prof.$('#form-cadastro button:has-text("Criar conta com Google")'), 'sem botão "Criar conta com Google"');
+    esperar(await prof.isVisible('#cadEmail') && await prof.isVisible('#cadSenha') && await prof.isVisible('#btn-cadastro-email'), 'sem cadastro com e-mail');
   });
 
   await caso('cadastro do aluno: o código do professor vem logo depois de "Sou", em destaque', async () => {
@@ -76,6 +76,78 @@ function dataDaqui(dias) {
     codigo = await prof.textContent('#codigo-professor');
     await prof.waitForFunction(() => document.getElementById('nome-usuario').textContent === 'Ana Google', null, { timeout: 5000 });
   });
+
+  console.log('\nConta com e-mail e senha (sem Google)');
+  {
+    const ctxE = await h.novoContexto(browser);
+    const ze = await h.novaPagina(ctxE);
+    const emailZe = `ze-${id}@outlook.com`;
+    const linkDeConfirmacao = async (email) => {
+      const r = await fetch('http://127.0.0.1:9099/emulator/v1/projects/demo-idiomex/oobCodes');
+      const codigos = (await r.json()).oobCodes.filter((c) => c.email === email && c.requestType === 'VERIFY_EMAIL');
+      return codigos.length ? codigos[codigos.length - 1].oobLink : null;
+    };
+    // Sai da conta (o painel volta sozinho para a tela inicial) e espera a tela carregar
+    const sairDaConta = async () => {
+      if (!ze.url().endsWith('index.html')) {
+        await Promise.all([ze.waitForURL('**/index.html', { timeout: 10000 }), ze.evaluate(() => auth.signOut())]);
+      } else await ze.evaluate(() => auth.signOut());
+      await ze.waitForLoadState('load');
+      await ze.waitForFunction(() => typeof auth !== 'undefined' && !auth.currentUser, null, { timeout: 8000 });
+    };
+    await caso('aluno cria conta com e-mail: recebe o link de confirmação e ainda não entra', async () => {
+      await ze.goto(`${SITE}/index.html`);
+      await ze.click('#btn-aba-cadastro');
+      await ze.selectOption('#cadTipo', 'aluno');
+      await ze.fill('#cadNome', 'Zé Sem Google');
+      await ze.fill('#cadCodigo', codigo);
+      await ze.fill('#cadEmail', emailZe);
+      await ze.fill('#cadSenha', 'senha123');
+      await ze.click('#btn-cadastro-email');
+      await ze.waitForSelector('#aviso-confirmar-email:not([hidden])', { timeout: 8000 });
+      esperar((await ze.textContent('#texto-confirmar-email')).includes(emailZe), 'aviso sem o e-mail');
+      esperar(await linkDeConfirmacao(emailZe), 'o e-mail de confirmação não foi enviado');
+      await ze.click('button:has-text("Já confirmei meu e-mail")');
+      await ze.waitForFunction(() => /Ainda não está confirmado/.test(document.getElementById('status-confirmar-email').textContent), null, { timeout: 8000 });
+      esperar(ze.url().endsWith('index.html'), 'entrou sem confirmar o e-mail');
+    });
+    await caso('depois de clicar no link do e-mail, "Já confirmei" termina o cadastro e abre o painel do aluno', async () => {
+      await fetch(await linkDeConfirmacao(emailZe));
+      await ze.click('button:has-text("Já confirmei meu e-mail")');
+      await ze.waitForURL('**/dicionario.html', { timeout: 10000 });
+      await ze.waitForFunction(() => document.getElementById('titulo-topo').textContent === 'Zé Sem Google', null, { timeout: 8000 });
+    });
+    await caso('entrar com e-mail e senha: senha errada avisa; certa abre o painel', async () => {
+      await sairDaConta();
+      await ze.fill('#loginEmail', emailZe);
+      await ze.fill('#loginSenha', 'errada99');
+      await ze.click('#form-login button:has-text("Entrar"):not(:has-text("Google"))');
+      await ze.waitForFunction(() => /incorretos/.test(document.getElementById('status-login').textContent), null, { timeout: 8000 });
+      await ze.fill('#loginSenha', 'senha123');
+      await ze.click('#form-login button:has-text("Entrar"):not(:has-text("Google"))');
+      await ze.waitForURL('**/dicionario.html', { timeout: 10000 });
+    });
+    await caso('"Esqueci minha senha" manda o link para criar uma senha nova', async () => {
+      await sairDaConta();
+      await ze.fill('#loginEmail', emailZe);
+      await ze.click('text=Esqueci minha senha');
+      await ze.waitForFunction(() => /enviamos um link/.test(document.getElementById('status-login').textContent), null, { timeout: 8000 });
+      const r = await fetch('http://127.0.0.1:9099/emulator/v1/projects/demo-idiomex/oobCodes');
+      esperar((await r.json()).oobCodes.some((c) => c.email === emailZe && c.requestType === 'PASSWORD_RESET'), 'e-mail de nova senha não foi enviado');
+    });
+    await caso('conta de e-mail que entra sem ter confirmado volta para o aviso de confirmação', async () => {
+      const outro = `nao-confirmou-${id}@t.com`;
+      await ze.evaluate(([e]) => auth.createUserWithEmailAndPassword(e, 'senha123').then(() => auth.signOut()), [outro]);
+      await ze.goto(`${SITE}/index.html`);
+      await ze.fill('#loginEmail', outro);
+      await ze.fill('#loginSenha', 'senha123');
+      await ze.click('#form-login button:has-text("Entrar"):not(:has-text("Google"))');
+      await ze.waitForSelector('#aviso-confirmar-email:not([hidden])', { timeout: 8000 });
+      esperar(ze.url().endsWith('index.html'), 'entrou sem confirmar');
+    });
+    esperar(ze.erros.length === 0, 'erros na página: ' + ze.erros.join('; '));
+    await ctxE.close();
+  }
 
   await caso('código inválido não deixa conta "presa": dá pra cadastrar de novo com o mesmo e-mail', async () => {
     await h.cadastrar(aluno, { tipo: 'aluno', nome: 'Bia', nomeGoogle: 'Beatriz Souza', email: `bia-${id}@t.com`, codigo: 'PROF-ZZZZ' });
