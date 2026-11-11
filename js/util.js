@@ -71,7 +71,7 @@ function normalizarLink(texto) {
 
 let filaDeCaixas = Promise.resolve();
 
-function caixaDoApp({ texto, botoes, campo }) {
+function caixaDoApp({ texto, botoes, campo, senha }) {
   const vez = filaDeCaixas.then(() => new Promise((resolve) => {
     // Nos testes automáticos, a caixa é registrada e respondida sozinha
     const teste = window.__caixasDeTeste;
@@ -96,6 +96,7 @@ function caixaDoApp({ texto, botoes, campo }) {
     document.getElementById("texto-caixa").textContent = texto;
     const entrada = document.getElementById("campo-caixa");
     entrada.hidden = campo === undefined;
+    entrada.type = senha ? "password" : "text";
     entrada.value = campo === undefined ? "" : campo;
     const area = document.getElementById("botoes-caixa");
     area.innerHTML = "";
@@ -141,10 +142,10 @@ function confirmar(texto, opcoes = {}) {
   ] });
 }
 
-// Devolve o texto digitado, ou null se a pessoa desistiu
-function perguntar(texto, valorInicial) {
-  return caixaDoApp({ texto, campo: valorInicial || "", botoes: [
-    { rotulo: "Salvar", classe: "btn-primario", valor: true },
+// Devolve o texto digitado, ou null se a pessoa desistiu. opcoes.senha: campo de senha
+function perguntar(texto, valorInicial, opcoes = {}) {
+  return caixaDoApp({ texto, campo: valorInicial || "", senha: !!opcoes.senha, botoes: [
+    { rotulo: opcoes.senha ? "Confirmar" : "Salvar", classe: "btn-primario", valor: true },
     { rotulo: "Voltar", classe: "btn-secundario", valor: null }
   ] });
 }
