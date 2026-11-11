@@ -1193,3 +1193,9 @@ html[data-tema="noturno"] .btn-destaque.btn-marcar-aula:hover { background: #B83
   .area-visualizador { flex-direction: column; }
   .painel-palavra-visualizador { width: auto; border-left: none; border-top: 1px solid var(--borda); padding: 0.8rem 0 0; max-height: 45vh; }
 }
+.situacao-editar-aula { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px dashed var(--borda); display: flex; flex-direction: column; gap: 0.5rem; }
+.rotulo-situacao { font-size: 0.88rem; color: var(--ink-soft); }
+.rotulo-situacao strong { color: var(--ink); }
+.situacao-editar-aula .aula-acoes { flex-wrap: wrap; justify-content: flex-start; }
+.aviso-quiz-banco { font-size: 0.8rem; color: var(--ink-soft); background: var(--bg); border-radius: 8px; padding: 0.45rem 0.6rem; margin: 0 0 0.8rem; }
+.acoes-frases { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; align-items: center; }

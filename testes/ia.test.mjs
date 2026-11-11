@@ -38,7 +38,12 @@ globalThis.fetch = async (url, opts = {}) => {
   if (modo === "404") return json(404, { error: { message: `models/${modelo} is not found` } });
   if (modo === "403") return json(403, { error: { message: "API key not valid" } });
   if (modo === "vazio") return json(200, { candidates: [{ content: { parts: [{ text: "pensando...", thought: true }] }, finishReason: "MAX_TOKENS" }] });
-  return json(200, { candidates: [{ content: { parts: [{ text: "**TRADUÇÕES:** mundo, Terra\nHallo Welt | Olá mundo" }] } }] });
+  if (prompt.includes("monta um quiz")) {
+    const linhas = ["house | casa | My house is big. | Minha casa é grande.", "car | carro | I drive a car. | Eu dirijo um carro.",
+      "1. dog | cachorro | The dog runs. | O cachorro corre.", "**book** | livro | I read a book. | Eu leio um livro.", "linha sem formato", "water | água | I drink water."];
+    return json(200, { candidates: [{ content: { parts: [{ text: linhas.join("\n") }] } }] });
+  }
+  return json(200, { candidates: [{ content: { parts: [{ text: simulado.resposta || "**TRADUÇÕES:** mundo, Terra\nHallo Welt | Olá mundo" }] } }] });
 };
 
 const { default: handler, limparCacheDeModelos } = await import(new URL("../api/gerar-frase.js", import.meta.url));
@@ -81,7 +86,7 @@ await caso("gera frases e separa frase | tradução", async () => {
 await caso("devolve as traduções corretas da palavra (linha TRADUÇÕES)", async () => {
   const r = await chamar(logado, { palavra: "Welt", traducao: "juros", idioma: "de" });
   assert.deepEqual(r.j.traducoes, ["mundo", "Terra"]);
-  assert.ok(simulado.pedidosGemini[0].prompt.includes('anotou a tradução "juros" (pode estar errada)'));
+  assert.ok(simulado.pedidosGemini[0].prompt.includes('anotou a tradução "juros" (pode estar errada'));
 });
 await caso("modelo inexistente (404) passa para o próximo", async () => {
   simulado.modelos = { "gemini-3.5-flash-lite": "404" };
@@ -127,6 +132,27 @@ await caso("quando todos falham, o aviso traz o motivo de cada modelo", async ()
   assert.deepEqual(r.j.frases, []);
   assert.match(r.j.aviso, /gemini-3\.5-flash-lite: models\/gemini-3\.5-flash-lite is not found/);
   assert.match(r.j.aviso, /gemini-3\.1-flash-lite: resposta vazia/);
+});
+await caso("pede traduções e frases cobrindo os vários sentidos (e cada palavra, se vier mais de uma)", async () => {
+  await chamar(logado, { palavra: "still / yet", traducao: "ainda" });
+  const prompt = simulado.pedidosGemini[0].prompt;
+  assert.match(prompt, /até 5 traduções/);
+  assert.match(prompt, /mais de um sentido/);
+  assert.match(prompt, /faça frases com cada uma delas/);
+});
+await caso("devolve até 5 traduções", async () => {
+  simulado.resposta = "TRADUÇÕES: pegar, conseguir, receber, ficar, chegar, entender\nI get it. | Eu entendo.";
+  const r = await chamar(logado, { palavra: "get" });
+  simulado.resposta = null;
+  assert.deepEqual(r.j.traducoes, ["pegar", "conseguir", "receber", "ficar", "chegar"]);
+});
+await caso("monta o banco de palavras do quiz (palavra | tradução | frase | tradução)", async () => {
+  const r = await chamar(logado, { tipo: "quiz", idioma: "en" });
+  assert.equal(r.c, 200);
+  assert.deepEqual(r.j.palavras.map((p) => p.palavra), ["house", "car", "dog", "book", "water"]);
+  assert.equal(r.j.palavras[0].frase, "My house is big.");
+  assert.equal(r.j.palavras[4].fraseTraducao, "");
+  assert.match(simulado.pedidosGemini[0].prompt, /inglês/);
 });
 for (const [codigo, nome] of [["de", "alemão"], ["ko", "coreano"], ["ja", "japonês"], ["es", "espanhol"]]) {
   await caso(`pede as frases em ${nome}`, async () => {

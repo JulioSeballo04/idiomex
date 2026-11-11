@@ -2354,6 +2354,7 @@ function acoesAulaHtml(a) {
         </div>`;
   if (a.status === "nao-realizada") return `
         <div class="aula-acoes">
+          <button class="btn btn-secundario btn-mini" onclick="abrirEditarAula('${a.id}')">Editar</button>
           <button class="btn btn-secundario btn-mini" onclick="desfazerAulaNaoRealizada('${a.id}')">Desfazer</button>
         </div>`;
   if (a.status === "concluida") return `
@@ -2905,8 +2906,9 @@ function abrirEditarAula(aulaId) {
         <select id="editar-modalidade">${["online", "presencial"].map((m) => `<option value="${m}" ${m === aula.modalidade ? "selected" : ""}>${legendaModalidade(m)}</option>`).join("")}</select>
       </div>
       <p class="dica-plano" id="duracao-editar-aula"></p>
-      <button class="btn btn-primario" id="btn-salvar-edicao-aula" onclick="salvarEdicaoAula('${aula.id}')">Salvar</button>
+      <button class="btn btn-primario" id="btn-salvar-edicao-aula" onclick="salvarEdicaoAula('${aula.id}')">Salvar horário</button>
       <p class="status-msg" id="status-editar-aula"></p>
+      ${montarSituacaoNaEdicao(aula)}
     </div>`;
   const mostrarDuracao = () => {
     const ini = document.getElementById("editar-inicio").value, fim = document.getElementById("editar-fim").value;
@@ -2917,6 +2919,45 @@ function abrirEditarAula(aulaId) {
   modal.querySelectorAll("input").forEach((c) => c.addEventListener("input", mostrarDuracao));
   mostrarDuracao();
   modal.classList.remove("modal-oculto");
+}
+
+// Situação da aula na janela "Editar": dizer se ela aconteceu ou não, ou cancelar —
+// inclusive numa aula que já tinha sido dada como concluída (ex: a aluna faltou)
+function montarSituacaoNaEdicao(aula) {
+  const jaComecou = inicioDaAula(aula) <= new Date();
+  const botoes = [];
+  if (aula.status !== "concluida" && jaComecou) {
+    botoes.push(`<button type="button" class="btn btn-secundario btn-mini" onclick="situacaoPelaEdicao('${aula.id}', 'realizada')">Foi realizada</button>`);
+  }
+  if (aula.status !== "nao-realizada" && jaComecou) {
+    botoes.push(`<button type="button" class="btn btn-secundario btn-mini" onclick="situacaoPelaEdicao('${aula.id}', 'nao-realizada')">Não foi realizada</button>`);
+  }
+  botoes.push(`<button type="button" class="excluir" onclick="situacaoPelaEdicao('${aula.id}', 'cancelar')">Cancelar aula</button>`);
+  return `
+    <div class="situacao-editar-aula">
+      <span class="rotulo-situacao">Situação: <strong>${legendaStatusAula(statusExibido(aula))}</strong></span>
+      <div class="aula-acoes">${botoes.join("")}</div>
+    </div>`;
+}
+
+async function situacaoPelaEdicao(aulaId, acao) {
+  const aula = aulasCache.find((a) => a.id === aulaId);
+  if (!aula) return;
+  fecharEditarAula();
+  if (acao === "cancelar") {
+    cancelarAulaComoProfessor(aulaId);
+    return;
+  }
+  if (acao === "realizada") {
+    // Não realizada -> realizada: tira antes a reposição que ela tinha gerado
+    if (aula.status === "nao-realizada") await desfazerAulaNaoRealizada(aulaId);
+    await concluirAula(aulaId);
+    return;
+  }
+  // Não foi realizada (também a partir de "concluída"): a reposição vale no idioma da aula
+  const ganho = aula.reposicao ? "Os minutos de reposição que ela usou voltam para o aluno." : `O aluno ganha ${formatarMinutos(duracaoDaAula(aula))} de reposição para marcar outra aula.`;
+  if (!(await confirmar(`A aula de ${aula.alunoNome} (${descricaoAula(aula)}) não foi realizada?\n\n${ganho}`, { botao: "Não foi realizada" }))) return;
+  registrarAulaNaoRealizada(aula, idiomaValido(aula.idioma));
 }
 
 function fecharEditarAula() {

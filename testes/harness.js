@@ -66,6 +66,12 @@ async function novoContexto(browser, opts = {}) {
     const corpo = JSON.parse(req.postData() || '{}');
     ctx.pedidosIA.push({ auth: req.headers()['authorization'] || '', corpo });
     if (ctx.iaFalha) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ frases: [], aviso: 'falhou' }) });
+    // Banco de palavras básicas do quiz
+    if (corpo.tipo === 'quiz') {
+      const palavras = [['house', 'casa'], ['car', 'carro'], ['water', 'água'], ['book', 'livro'], ['friend', 'amigo'], ['school', 'escola']]
+        .map(([palavra, traducao]) => ({ palavra, traducao, frase: `I see the ${palavra} today.`, fraseTraducao: 'Eu vejo hoje.' }));
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ palavras }) });
+    }
     const p = corpo.palavra;
     r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ frases: [
       { en: `I like the ${p} a lot.`, pt: 'Eu gosto muito.' }, { en: `This ${p} is new.`, pt: 'Isso é novo.' }],
