@@ -8,13 +8,14 @@
 // a cada atualização — só se mudar a lista ARQUIVOS_BASE.
 // ============================================================
 
-const VERSAO = "idiomex-v4";
+const VERSAO = "idiomex-v5";
 
 const ARQUIVOS_BASE = [
   "./",
   "index.html",
   "dicionario.html",
   "professor.html",
+  "acao.html",
   "css/style.css",
   "css/novidades.css",
   "css/inicio.css",

@@ -1227,3 +1227,30 @@ html[data-tema="noturno"] .btn-destaque.btn-marcar-aula:hover { background: #B83
 }
 .aviso-confirmar-email p { margin: 0 0 0.6rem; }
 .acoes-confirmar-email { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.aviso-spam {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin: 0 0 0.8rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  background: #FFF4D6;
+  border: 1px solid #F0C75E;
+  color: #5C4300;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  text-align: left;
+}
+.aviso-spam .icone { flex-shrink: 0; width: 1.2rem; height: 1.2rem; color: #C98A00; margin-top: 0.1rem; }
+[data-tema="noturno"] .aviso-spam { background: #3A3016; border-color: #7A6220; color: #F5E3B0; }
+.aviso-spam-solto { margin-top: 0.8rem; }
+
+/* ---------- Página do link do e-mail (acao.html) ---------- */
+.cartao-acao { text-align: center; }
+.cartao-acao h1 { font-size: 1.35rem; margin: 0.6rem 0 0.4rem; }
+.cartao-acao p { color: var(--ink-soft); margin: 0 0 1rem; }
+.icone-acao { width: 3.2rem; height: 3.2rem; color: #5F8567; }
+.icone-acao.erro { color: #B3412E; }
+.cartao-acao .form-email { text-align: left; max-width: 340px; margin: 0 auto 0.6rem; }
+.cartao-acao .btn { min-width: 200px; }
+.cartao-acao a.btn { display: inline-block; text-decoration: none; }
