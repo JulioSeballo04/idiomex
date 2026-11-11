@@ -628,7 +628,7 @@ async function pedirFrasesDaIA(palavra, traducao, idioma) {
     });
     const dados = await resposta.json().catch(() => ({}));
     if (dados.frases && dados.frases.length > 0) {
-      const traducoes = Array.isArray(dados.traducoes) ? dados.traducoes.filter((t) => typeof t === "string" && t.trim()).slice(0, 3) : [];
+      const traducoes = Array.isArray(dados.traducoes) ? dados.traducoes.filter((t) => typeof t === "string" && t.trim()).slice(0, 5) : [];
       return { frasesExemplo: dados.frases, traducoesSugeridas: traducoes };
     }
     // A IA respondeu mas não trouxe frases (quota, sobrecarga etc.): o motivo aparece

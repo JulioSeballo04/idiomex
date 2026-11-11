@@ -535,8 +535,12 @@ function desenharPalavras(grade) {
       }).join("");
       const temTraducao = p.frasesExemplo.some((f) => typeof f !== "string" && f.pt);
       // Palavras antigas guardavam as frases sem tradução: dá pra gerar de novo, já traduzidas
+      // "Outras frases": gera de novo (ex: palavra com vários sentidos, como "get")
+      const outrasFrases = frasesSendoGeradas.has(p.id)
+        ? `<span class="btn-ver-traducao">Gerando...</span>`
+        : `<button class="btn-ver-traducao btn-outras-frases" title="Gerar outras frases de exemplo" onclick="tentarGerarFrasesDeNovo('${p.id}')">${icone("refresh-cw")} Outras frases</button>`;
       const botaoRevelar = temTraducao
-        ? botaoVerTraducao(p.id, revelada)
+        ? `<div class="acoes-frases">${botaoVerTraducao(p.id, revelada)}${outrasFrases}</div>`
         : frasesSendoGeradas.has(p.id)
           ? `<span class="btn-ver-traducao">Gerando frases com tradução...</span>`
           : `<button class="btn-ver-traducao" onclick="tentarGerarFrasesDeNovo('${p.id}')">${icone("refresh-cw")} Gerar frases com tradução</button>`;
@@ -843,14 +847,59 @@ function palavrasElegiveisParaQuiz() {
   return palavrasDoIdiomaAtual().filter((p) => p.frasesExemplo && p.frasesExemplo.length > 0);
 }
 
-function iniciarQuiz() {
-  const elegiveis = palavrasElegiveisParaQuiz();
-  if (elegiveis.length < 2) {
-    alert("Adicione pelo menos 2 palavras com frases de exemplo geradas para jogar o quiz.");
+// Com 4 ou mais palavras próprias, o quiz é só com elas (é um reforço do que o
+// aluno já estudou). Com menos, usa um banco de palavras básicas do idioma, que a
+// IA monta uma vez e fica guardado no aparelho, junto com as palavras do aluno.
+const MIN_PALAVRAS_PROPRIAS_QUIZ = 4;
+const VALIDADE_BANCO_QUIZ_MS = 30 * 24 * 60 * 60 * 1000;
+let poolDoQuiz = [];
+let quizComBanco = false;
+
+async function carregarBancoDoQuiz(idioma) {
+  const chave = "bancoQuiz:" + idioma;
+  try {
+    const salvo = JSON.parse(localStorage.getItem(chave) || "null");
+    if (salvo && Array.isArray(salvo.palavras) && salvo.palavras.length >= 4 && Date.now() - salvo.em < VALIDADE_BANCO_QUIZ_MS) return salvo.palavras;
+  } catch (e) {}
+  const token = await auth.currentUser.getIdToken();
+  const resposta = await fetch(AI_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+    body: JSON.stringify({ tipo: "quiz", idioma })
+  });
+  const dados = await resposta.json().catch(() => ({}));
+  const palavras = Array.isArray(dados.palavras) ? dados.palavras.filter((p) => p && p.palavra && p.frase) : [];
+  if (palavras.length < 4) throw new Error(dados.aviso || dados.erro || "banco vazio");
+  try { localStorage.setItem(chave, JSON.stringify({ palavras, em: Date.now() })); } catch (e) {}
+  return palavras;
+}
+
+async function iniciarQuiz() {
+  const proprias = palavrasElegiveisParaQuiz();
+  document.getElementById("modal-quiz").classList.remove("modal-oculto");
+  quizComBanco = proprias.length < MIN_PALAVRAS_PROPRIAS_QUIZ;
+  if (!quizComBanco) {
+    poolDoQuiz = proprias;
+    gerarPerguntaQuiz(poolDoQuiz);
     return;
   }
-  document.getElementById("modal-quiz").classList.remove("modal-oculto");
-  gerarPerguntaQuiz(elegiveis);
+  document.getElementById("corpo-quiz").innerHTML = `<p class="vazio">Montando o quiz...</p>`;
+  let banco;
+  try {
+    banco = await carregarBancoDoQuiz(idiomaDoAluno);
+  } catch (e) {
+    console.warn("Não foi possível montar o banco do quiz:", e);
+    if (proprias.length >= 2) { quizComBanco = false; poolDoQuiz = proprias; gerarPerguntaQuiz(poolDoQuiz); return; }
+    document.getElementById("corpo-quiz").innerHTML = `<p class="vazio">Não foi possível montar o quiz agora. Confira sua internet e tente de novo — ou adicione palavras ao seu vocabulário.</p>`;
+    return;
+  }
+  if (document.getElementById("modal-quiz").classList.contains("modal-oculto")) return; // fechou enquanto carregava
+  // As palavras do aluno entram junto (sem repetir as que já estão no banco)
+  const jaTem = new Set(proprias.map((p) => p.palavraEn.trim().toLowerCase()));
+  poolDoQuiz = proprias.concat(banco
+    .filter((b) => !jaTem.has(b.palavra.trim().toLowerCase()))
+    .map((b, i) => ({ id: `banco-${i}`, palavraEn: b.palavra, traducaoPt: b.traducao, frasesExemplo: [{ en: b.frase, pt: b.fraseTraducao || "" }] })));
+  gerarPerguntaQuiz(poolDoQuiz);
 }
 
 function gerarPerguntaQuiz(elegiveis) {
@@ -877,7 +926,7 @@ function gerarPerguntaQuiz(elegiveis) {
   const distratores = embaralhar(outrasPalavras).slice(0, Math.min(3, outrasPalavras.length));
   const opcoes = embaralhar([alvo.palavraEn, ...distratores]);
 
-  quizAtual = { respostaCerta: alvo.palavraEn, fraseComLacuna, opcoes };
+  quizAtual = { respostaCerta: alvo.palavraEn, traducao: alvo.traducaoPt || "", fraseComLacuna, opcoes };
   renderizarQuiz();
 }
 
@@ -894,6 +943,7 @@ function renderizarQuiz() {
   if (!quizAtual) return;
   const corpo = document.getElementById("corpo-quiz");
   corpo.innerHTML = `
+    ${quizComBanco ? `<p class="aviso-quiz-banco">Quiz com palavras básicas. Quando você tiver ${MIN_PALAVRAS_PROPRIAS_QUIZ} ou mais palavras no seu vocabulário, o quiz passa a usar só as suas.</p>` : ""}
     <p class="quiz-frase">${escapeHtml(quizAtual.fraseComLacuna)}</p>
     <div class="quiz-opcoes" id="quiz-opcoes"></div>
     <p class="quiz-feedback" id="quiz-feedback"></p>
@@ -918,16 +968,16 @@ function responderQuiz(botaoClicado, escolha) {
   });
   if (!acertou) botaoClicado.classList.add("opcao-errada");
 
+  const traducao = quizAtual.traducao ? ` (${quizAtual.traducao})` : "";
   document.getElementById("quiz-feedback").textContent = acertou
-    ? "Boa! Resposta certa."
-    : `Quase! A resposta certa era "${quizAtual.respostaCerta}".`;
+    ? `Boa! Resposta certa: "${quizAtual.respostaCerta}"${traducao}.`
+    : `Quase! A resposta certa era "${quizAtual.respostaCerta}"${traducao}.`;
   document.getElementById("btn-proxima-quiz").style.display = "inline-block";
 }
 
 function proximaPerguntaQuiz() {
-  const elegiveis = palavrasElegiveisParaQuiz();
-  if (elegiveis.length < 2) { fecharQuiz(); return; }
-  gerarPerguntaQuiz(elegiveis);
+  if (poolDoQuiz.length < 2) { fecharQuiz(); return; }
+  gerarPerguntaQuiz(poolDoQuiz);
 }
 
 function fecharQuiz() {

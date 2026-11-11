@@ -246,6 +246,47 @@ function dataDaqui(dias) {
     esperar(frase.includes('_____'), 'frase sem lacuna: ' + frase);
   });
 
+  await caso('quiz: aluno sem palavras joga com o banco de palavras básicas; com 4 ou mais, só com as dele', async () => {
+    // Quem já tem 4 palavras (a Bia): o quiz é só com as dela
+    await aluno.waitForSelector('.quiz-frase', { timeout: 8000 });
+    if (await aluno.evaluate(() => palavrasElegiveisParaQuiz().length >= MIN_PALAVRAS_PROPRIAS_QUIZ)) {
+      // reabre: o quiz aberto antes pode ter começado quando ainda havia menos palavras com frases
+      await aluno.keyboard.press('Escape');
+      await aluno.click('button:has-text("Quiz rápido")');
+      await aluno.waitForSelector('.quiz-frase', { timeout: 8000 });
+      esperar(!(await aluno.$('.aviso-quiz-banco')), 'com 4 palavras o quiz usou o banco');
+      esperar(await aluno.evaluate(() => poolDoQuiz.every((p) => !String(p.id).startsWith('banco-'))), 'palavra do banco no quiz de quem tem 4 palavras');
+    }
+    // Aluno novo, sem nenhuma palavra: vem o banco, com o aviso
+    const ctx = await h.novoContexto(browser); const p = await h.novaPagina(ctx);
+    await h.cadastrar(p, { tipo: 'aluno', nome: 'Nina', email: `nina-${id}@t.com`, codigo });
+    await p.waitForURL('**/dicionario.html', { timeout: 10000 }); await p.waitForSelector('#input-palavra-en');
+    await p.waitForFunction(() => professorIdDoAluno, null, { timeout: 8000 });
+    await p.click('button:has-text("Quiz rápido")');
+    await p.waitForSelector('.aviso-quiz-banco', { timeout: 8000 });
+    await p.waitForSelector('.quiz-frase:has-text("_____")', { timeout: 3000 });
+    esperar(await p.evaluate(() => poolDoQuiz.length >= 4 && poolDoQuiz.every((x) => String(x.id).startsWith('banco-'))), 'o banco não montou o quiz');
+    await p.click('.btn-opcao-quiz >> nth=0');
+    await p.waitForSelector('#quiz-feedback:has-text("(")', { timeout: 3000 }); // mostra a tradução da resposta
+    // O banco fica guardado no aparelho: abrir de novo não pede à IA outra vez
+    const pedidos = ctx.pedidosIA.filter((x) => x.corpo.tipo === 'quiz').length;
+    await p.keyboard.press('Escape');
+    await p.click('button:has-text("Quiz rápido")');
+    await p.waitForSelector('.aviso-quiz-banco', { timeout: 5000 });
+    esperar(ctx.pedidosIA.filter((x) => x.corpo.tipo === 'quiz').length === pedidos, 'pediu o banco de novo à IA');
+    await ctx.close();
+  });
+
+  await caso('"Outras frases" gera os exemplos de novo', async () => {
+    await aluno.keyboard.press('Escape');
+    await aluno.click('.letra-tab:has-text("D")');
+    await aluno.waitForSelector('.cartao-palavra:has-text("dog") .btn-outras-frases', { timeout: 5000 });
+    await aluno.click('.cartao-palavra:has-text("dog") .btn-outras-frases');
+    await aluno.waitForSelector('.cartao-palavra:has-text("dog") .btn-outras-frases', { timeout: 8000 });
+    await aluno.click('button:has-text("Quiz rápido")'); // volta a abrir o quiz para o próximo teste (Esc)
+    await aluno.waitForSelector('#modal-quiz:not(.modal-oculto)', { timeout: 5000 });
+  });
+
   await caso('tecla Esc fecha a janela aberta', async () => {
     await aluno.keyboard.press('Escape');
     await dormir(300);
@@ -979,6 +1020,40 @@ function dataDaqui(dias) {
     }, { id: aulaId, d: dia }, { timeout: 5000 }).then((x) => x.jsonValue());
     esperar(r.antiga === 'cancelada' && r.nova === 'agendada' && r.fim === '14:30', 'remarcação errada: ' + JSON.stringify(r));
     esperar(await prof.evaluate((d) => aulasQueOcupam(d, '10:00').every((a) => a.horaInicio !== '10:00'), dia), 'o horário antigo continuou ocupado');
+  });
+
+  await caso('Editar: aula concluída vira "não foi realizada" (ganha reposição) ou é cancelada', async () => {
+    const ze = await prof.evaluate(() => alunosSemAppCache.find((a) => a.nome === 'Seu Zé').id);
+    const dia = dataDaqui(-3);
+    const ids = await prof.evaluate(async ({ d, ze }) => {
+      const ids = [];
+      for (const h of ['05:10', '05:40']) {
+        const id = await agendarAula(professorIdAtual, d, h, somarMinutos(h, 20), 'online', ze, 'Seu Zé', false, 'en', 'agendada');
+        await db.collection('aulas').doc(id).update({ status: 'concluida' });
+        ids.push(id);
+      }
+      return ids;
+    }, { d: dia, ze });
+    await prof.waitForFunction((ids) => ids.every((id) => (aulasCache.find((a) => a.id === id) || {}).status === 'concluida'), ids, { timeout: 5000 });
+    const saldoAntes = await prof.evaluate((ze) => creditosDoAluno(ze, 'en').saldo, ze);
+    // 1ª: não foi realizada
+    await prof.evaluate((id) => abrirEditarAula(id), ids[0]);
+    await prof.waitForSelector('#modal-editar-aula .situacao-editar-aula:has-text("Concluída")', { timeout: 3000 });
+    esperar(!(await prof.$('#modal-editar-aula button:text-is("Foi realizada")')), 'aula concluída oferece "Foi realizada"');
+    await prof.click('#modal-editar-aula button:has-text("Não foi realizada")');
+    await prof.waitForFunction((id) => aulasCache.find((a) => a.id === id).status === 'nao-realizada', ids[0], { timeout: 5000 });
+    await prof.waitForFunction(({ ze, n }) => creditosDoAluno(ze, 'en').saldo === n + 20, { ze, n: saldoAntes }, { timeout: 5000 });
+    // Volta a "foi realizada" pela edição: a reposição dada sai
+    await prof.evaluate((id) => abrirEditarAula(id), ids[0]);
+    await prof.click('#modal-editar-aula button:text-is("Foi realizada")');
+    await prof.waitForFunction((id) => aulasCache.find((a) => a.id === id).status === 'concluida', ids[0], { timeout: 5000 });
+    await prof.waitForFunction(({ ze, n }) => creditosDoAluno(ze, 'en').saldo === n, { ze, n: saldoAntes }, { timeout: 5000 });
+    // 2ª: cancelar uma aula já concluída
+    await prof.evaluate((id) => abrirEditarAula(id), ids[1]);
+    await prof.click('#modal-editar-aula button:has-text("Cancelar aula")');
+    await prof.click('#btn-confirmar-whatsapp');
+    await prof.waitForFunction((id) => aulasCache.find((a) => a.id === id).status === 'cancelada', ids[1], { timeout: 5000 });
+    await prof.click('#btn-fechar-confirmar-whatsapp').catch(() => {});
   });
 
   await caso('calendário volta para os meses anteriores e mostra as aulas dadas', async () => {

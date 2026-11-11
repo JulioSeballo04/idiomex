@@ -189,6 +189,83 @@ async function diagnostico(req, res) {
   return res.status(200).json(resultado);
 }
 
+// Pergunta ao Gemini e devolve {texto, erros}: o texto da resposta (vazio se nenhum
+// modelo respondeu) e o motivo de cada modelo que falhou.
+async function perguntarAoGemini(apiKey, prompt, maxTokens) {
+  // Tenta os modelos em ordem. Passa pro próximo se o modelo não existir (404),
+  // estiver sem cota (429), sobrecarregado (5xx) ou responder vazio — modelos mais
+  // novos "pensam" antes de responder e esse raciocínio também gasta o limite de
+  // tokens da resposta, por isso o limite é folgado. Erros de chave (400/401/403)
+  // valem para todos os modelos, então param na hora.
+  // Guarda o motivo de cada modelo que falhou: só o último escondia por que os
+  // anteriores não deram certo.
+  let texto = "";
+  const erros = [];
+  for (const modelo of await modelosParaTentar(apiKey)) {
+    let resposta;
+    try {
+      resposta = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: maxTokens }
+          }),
+          signal: AbortSignal.timeout(TEMPO_MAXIMO_MODELO_MS)
+        }
+      );
+    } catch (e) {
+      erros.push(`${modelo}: sem resposta (${e.name === "TimeoutError" ? "demorou demais" : e.message})`);
+      console.warn("Gemini falhou, tentando o próximo modelo —", erros[erros.length - 1]);
+      continue;
+    }
+    const dados = await resposta.json().catch(() => ({}));
+
+    if (resposta.ok) {
+      texto = (dados?.candidates?.[0]?.content?.parts || [])
+        .filter((p) => !p.thought && typeof p.text === "string")
+        .map((p) => p.text).join("").trim();
+      if (texto) break;
+      erros.push(`${modelo}: resposta vazia (${dados?.candidates?.[0]?.finishReason || "sem motivo"})`);
+    } else {
+      erros.push(`${modelo}: ${dados?.error?.message || `HTTP ${resposta.status}`}`);
+      if ([400, 401, 403].includes(resposta.status)) break;
+    }
+    console.warn("Gemini falhou, tentando o próximo modelo —", erros[erros.length - 1]);
+  }
+  return { texto, erros };
+}
+
+// Banco de palavras do quiz para o aluno que ainda tem poucas palavras: palavras
+// comuns de nível iniciante, cada uma com uma frase de exemplo. O app guarda o
+// banco no aparelho (um pedido só, para muitas partidas).
+const PALAVRAS_DO_BANCO = 40;
+
+async function gerarBancoDoQuiz(res, nomeIdioma) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return res.status(500).json({ erro: "Chave da IA não configurada no servidor." });
+  const prompt = `Você monta um quiz para um aluno brasileiro iniciante em ${nomeIdioma}.
+Liste ${PALAVRAS_DO_BANCO} palavras diferentes, muito comuns no dia a dia (substantivos, verbos e adjetivos variados), uma por linha, sem numeração, sem aspas e sem explicações, no formato:
+palavra em ${nomeIdioma} | tradução em português | frase curta e simples em ${nomeIdioma} que usa a palavra exatamente como escrita | tradução da frase em português`;
+  try {
+    const { texto, erros } = await perguntarAoGemini(apiKey, prompt, 6144);
+    const palavras = texto.split("\n")
+      .map((linha) => linha.replace(/\*\*/g, "").replace(/^[\s\-•\d.)]+/, "").split("|").map((p) => p.trim().replace(/^"|"$/g, "")))
+      .filter((p) => p.length >= 3 && p[0] && p[1] && p[2] && p[0].length <= TAMANHO_MAXIMO_CAMPO)
+      .map(([palavra, traducao, frase, fraseTraducao]) => ({ palavra, traducao, frase, fraseTraducao: fraseTraducao || "" }))
+      .slice(0, PALAVRAS_DO_BANCO);
+    if (palavras.length < 4) {
+      return res.status(200).json({ palavras: [], aviso: erros.join(" · ") || "A IA não montou o quiz desta vez." });
+    }
+    return res.status(200).json({ palavras });
+  } catch (erro) {
+    console.error(erro);
+    return res.status(500).json({ erro: "Falha ao montar o quiz." });
+  }
+}
+
 const REGEX_TRADUCOES = /^TRADU[ÇC][ÕO]ES?\s*:\s*/i;
 
 const TAMANHO_MAXIMO_CAMPO = 60; // caracteres — suficiente para qualquer palavra/expressão real
@@ -224,9 +301,10 @@ export default async function handler(req, res) {
     return res.status(429).json({ frases: [], aviso: "Muitos pedidos seguidos. Espere alguns minutos e tente de novo." });
   }
 
-  const { palavra, traducao, idioma } = req.body || {};
+  const { palavra, traducao, idioma, tipo } = req.body || {};
   // Sem "idioma" (ou desconhecido) cai em inglês, o comportamento de antes
   const nomeIdioma = IDIOMAS[idioma] || IDIOMAS.en;
+  if (tipo === "quiz") return gerarBancoDoQuiz(res, nomeIdioma);
   if (!palavra || typeof palavra !== "string" || !palavra.trim()) {
     return res.status(400).json({ erro: "Informe a palavra." });
   }
@@ -242,54 +320,19 @@ export default async function handler(req, res) {
   try {
     // A primeira linha traz as traduções corretas da palavra: o app compara com a
     // tradução que o aluno digitou e avisa quando ela não bate (ex: "fees" = "juros").
-    const prompt = `Você ajuda um aluno brasileiro a estudar ${nomeIdioma}. A palavra é "${palavra}"${traducao ? ` e o aluno anotou a tradução "${traducao}" (pode estar errada)` : ""}.
-Responda APENAS com 6 linhas, sem numeração, sem aspas e sem explicações:
-- Linha 1: TRADUÇÕES: até 3 traduções corretas e usuais da palavra em português, separadas por vírgula.
-- Linhas 2 a 6: 5 frases curtas, simples e naturais em ${nomeIdioma} (nível iniciante/intermediário), cada uma usando a palavra exatamente como foi escrita, no sentido correto dela, no formato: frase em ${nomeIdioma} | tradução natural em português.`;
+    // Palavras "coringa" (get, still...) têm vários sentidos: as traduções e as frases
+    // cobrem os principais. Se o aluno escreveu mais de uma palavra com a mesma
+    // tradução (ex: "still / yet"), as frases usam cada uma delas.
+    const prompt = `Você ajuda um aluno brasileiro a estudar ${nomeIdioma}. A palavra (ou expressão) é "${palavra}"${traducao ? ` e o aluno anotou a tradução "${traducao}" (pode estar errada ou incompleta)` : ""}.
+Responda APENAS com 7 linhas, sem numeração, sem aspas e sem explicações:
+- Linha 1: TRADUÇÕES: até 5 traduções corretas e usuais em português, separadas por vírgula, cobrindo os principais sentidos da palavra (ex: "get" = pegar, conseguir, receber, ficar, chegar).
+- Linhas 2 a 7: 6 frases curtas, simples e naturais em ${nomeIdioma} (nível iniciante/intermediário), no formato: frase em ${nomeIdioma} | tradução natural em português.
+Regras para as frases:
+- Use a palavra exatamente como foi escrita.
+- Se a palavra tiver mais de um sentido ou uso comum, distribua as frases entre esses sentidos (no máximo 2 frases por sentido), e a tradução de cada frase deve deixar claro qual sentido foi usado.
+- Se o aluno escreveu mais de uma palavra (separadas por "/", "," ou "ou", ex: "still / yet"), faça frases com cada uma delas, mostrando a diferença de uso (ex: posição na frase).`;
 
-    // Tenta os modelos em ordem. Passa pro próximo se o modelo não existir (404),
-    // estiver sem cota (429), sobrecarregado (5xx) ou responder vazio — modelos mais
-    // novos "pensam" antes de responder e esse raciocínio também gasta o limite de
-    // tokens da resposta, por isso o limite é folgado. Erros de chave (400/401/403)
-    // valem para todos os modelos, então param na hora.
-    // Guarda o motivo de cada modelo que falhou: só o último escondia por que os
-    // anteriores não deram certo.
-    let texto = "";
-    const erros = [];
-    for (const modelo of await modelosParaTentar(apiKey)) {
-      let resposta;
-      try {
-        resposta = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: { maxOutputTokens: 2048 }
-            }),
-            signal: AbortSignal.timeout(TEMPO_MAXIMO_MODELO_MS)
-          }
-        );
-      } catch (e) {
-        erros.push(`${modelo}: sem resposta (${e.name === "TimeoutError" ? "demorou demais" : e.message})`);
-        console.warn("Gemini falhou, tentando o próximo modelo —", erros[erros.length - 1]);
-        continue;
-      }
-      const dados = await resposta.json().catch(() => ({}));
-
-      if (resposta.ok) {
-        texto = (dados?.candidates?.[0]?.content?.parts || [])
-          .filter((p) => !p.thought && typeof p.text === "string")
-          .map((p) => p.text).join("").trim();
-        if (texto) break;
-        erros.push(`${modelo}: resposta vazia (${dados?.candidates?.[0]?.finishReason || "sem motivo"})`);
-      } else {
-        erros.push(`${modelo}: ${dados?.error?.message || `HTTP ${resposta.status}`}`);
-        if ([400, 401, 403].includes(resposta.status)) break;
-      }
-      console.warn("Gemini falhou, tentando o próximo modelo —", erros[erros.length - 1]);
-    }
+    const { texto, erros } = await perguntarAoGemini(apiKey, prompt, 2048);
 
     if (!texto) {
       console.error("Nenhum modelo do Gemini gerou frases:", erros.join(" | "));
@@ -304,7 +347,7 @@ Responda APENAS com 6 linhas, sem numeração, sem aspas e sem explicações:
       .filter((linha) => linha.length > 0);
     const linhaTraducoes = linhas.find((linha) => REGEX_TRADUCOES.test(linha));
     const traducoes = linhaTraducoes
-      ? linhaTraducoes.replace(REGEX_TRADUCOES, "").split(/[,;]/).map((t) => t.trim().replace(/^"|"$/g, "")).filter(Boolean).slice(0, 3)
+      ? linhaTraducoes.replace(REGEX_TRADUCOES, "").split(/[,;]/).map((t) => t.trim().replace(/^"|"$/g, "")).filter(Boolean).slice(0, 5)
       : [];
     const frases = linhas
       .filter((linha) => linha !== linhaTraducoes)
@@ -316,7 +359,7 @@ Responda APENAS com 6 linhas, sem numeração, sem aspas e sem explicações:
         };
       })
       .filter((item) => item.en.length > 0)
-      .slice(0, 5);
+      .slice(0, 6);
 
     return res.status(200).json({ frases, traducoes });
   } catch (erro) {
