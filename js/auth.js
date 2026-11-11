@@ -198,14 +198,20 @@ function cadastroPendenteDe(email) {
   } catch (e) { return null; }
 }
 
+// O link dos e-mails (confirmar e-mail, senha nova) termina na página do Idiomex
+// (acao.html), que aplica o código, em vez da página padrão do Firebase. Feito por
+// aqui porque o projeto não pode mudar os modelos de e-mail no console.
 function urlDeVolta() {
-  return `${location.origin}${location.pathname.replace(/[^/]*$/, "")}index.html`;
+  return {
+    url: `${location.origin}${location.pathname.replace(/[^/]*$/, "")}acao.html`,
+    handleCodeInApp: true
+  };
 }
 
 async function enviarConfirmacao(user) {
   auth.languageCode = "pt-BR"; // o e-mail do Firebase em português
   try {
-    await user.sendEmailVerification({ url: urlDeVolta() });
+    await user.sendEmailVerification(urlDeVolta());
   } catch (e) {
     // Endereço de volta não autorizado no Firebase: manda sem ele
     if (e.code === "auth/unauthorized-continue-uri" || e.code === "auth/invalid-continue-uri") await user.sendEmailVerification();
@@ -358,7 +364,7 @@ async function esqueciMinhaSenha(email) {
   }
   auth.languageCode = "pt-BR";
   try {
-    await auth.sendPasswordResetEmail(email, { url: urlDeVolta() });
+    await auth.sendPasswordResetEmail(email, urlDeVolta());
   } catch (erro) {
     // Por segurança, a mesma resposta exista ou não uma conta com esse e-mail
     if (!["auth/user-not-found", "auth/invalid-email"].includes(erro.code)) {

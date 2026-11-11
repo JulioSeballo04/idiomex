@@ -107,7 +107,9 @@ function dataDaqui(dias) {
       await ze.waitForSelector('#aviso-confirmar-email:not([hidden])', { timeout: 8000 });
       esperar((await ze.textContent('#texto-confirmar-email')).includes(emailZe), 'aviso sem o e-mail');
       esperar(await ze.isVisible('.aviso-spam:has-text("pasta Spam")'), 'sem o aviso de que o e-mail cai no spam');
-      esperar(await linkDeConfirmacao(emailZe), 'o e-mail de confirmação não foi enviado');
+      const link = await linkDeConfirmacao(emailZe);
+      esperar(link, 'o e-mail de confirmação não foi enviado');
+      esperar(decodeURIComponent(link.oobLink).includes('/acao.html'), 'o link do e-mail não leva para a página do Idiomex');
       await ze.click('button:has-text("Já confirmei meu e-mail")');
       await ze.waitForFunction(() => /Ainda não está confirmado/.test(document.getElementById('status-confirmar-email').textContent), null, { timeout: 8000 });
       esperar(ze.url().endsWith('index.html'), 'entrou sem confirmar o e-mail');

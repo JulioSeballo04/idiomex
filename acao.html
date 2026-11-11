@@ -110,7 +110,14 @@ async function recuperarEmail() {
 
 (async () => {
   try {
-    if (!codigoDoLink) throw { code: "auth/invalid-action-code" };
+    // Sem código: o Firebase já resolveu o link na página dele e mandou pra cá
+    if (!codigoDoLink) {
+      area.innerHTML = `${icone("i-circle-check")}
+        <h1>Tudo certo!</h1>
+        <p>Volte ao Idiomex para continuar.</p>
+        ${botaoVoltar("Continuar no Idiomex")}`;
+      return;
+    }
     if (modo === "verifyEmail") await confirmarEmail();
     else if (modo === "resetPassword") await criarSenhaNova();
     else if (modo === "recoverEmail") await recuperarEmail();
