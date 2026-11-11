@@ -55,8 +55,13 @@ gratuita, sem cartão).
 4. Cole esses valores no arquivo `js/firebase-config.js` (substitua os campos `SEU_...`).
 5. No menu lateral, vá em **Build > Authentication** → aba "Sign-in method" → ative **Google** e
    **E-mail/senha** (sem a opção "link de e-mail"). Quem cria conta com e-mail recebe um link
-   de confirmação; o cadastro só vale depois que a pessoa clica nele. Em Authentication →
-   Templates dá para deixar os e-mails (confirmação e nova senha) em português.
+   de confirmação; o cadastro só vale depois que a pessoa clica nele.
+   Para deixar os e-mails com a cara do Idiomex: **Authentication → Templates**, em
+   "Verificação de endereço de e-mail" e em "Redefinição de senha", clique no lápis e:
+   - Nome do remetente: `Idiomex`; Assunto: `Confirme seu e-mail no Idiomex` / `Crie uma senha nova no Idiomex`;
+   - Mensagem: cole o HTML de `emails/confirmar-email.html` / `emails/nova-senha.html`;
+   - "Personalizar URL de ação": `https://SEU-SITE/acao.html` (a página do Idiomex que
+     confirma o e-mail e cria a senha nova, no lugar da página padrão do Firebase).
    Ainda em Authentication → **Settings → Authorized domains**, adicione o endereço
    do site (ex: `seu-app.vercel.app`) — sem isso, a janela do Google não abre.
 6. Vá em **Build > Firestore Database** → "Criar banco de dados" → modo produção → escolha uma região (ex: `southamerica-east1`, mais perto do Brasil).

@@ -218,7 +218,7 @@ function mostrarAvisoConfirmacao(email) {
   if (!aviso) return;
   aviso.hidden = false;
   document.getElementById("texto-confirmar-email").innerHTML =
-    `Enviamos um link de confirmação para <strong>${escapeHtml(email)}</strong>. Abra o e-mail (veja também a caixa de spam), clique no link e depois volte aqui.`;
+    `Enviamos um link de confirmação para <strong>${escapeHtml(email)}</strong>. Abra o e-mail, clique no link e depois volte aqui.`;
   document.getElementById("status-confirmar-email").textContent = "";
 }
 
@@ -238,7 +238,7 @@ async function cadastrarComEmail(nome, tipo, codigoProfessor, idiomas, email, se
       if (!senha || senha.length < 6) { statusEl.textContent = "Crie uma senha com pelo menos 6 caracteres."; return; }
       statusEl.textContent = "Criando sua conta...";
       user = (await auth.createUserWithEmailAndPassword(email, senha)).user;
-      user.updateProfile({ displayName: nome }).catch(() => {});
+      await user.updateProfile({ displayName: nome }).catch(() => {}); // o e-mail diz "Olá, <nome>"
     }
     guardarCadastroPendente({ email, nome, tipo, codigoProfessor: normalizarCodigo(codigoProfessor), idiomas });
     await user.reload();
@@ -267,7 +267,7 @@ async function jaConfirmeiMeuEmail() {
   try {
     await user.reload();
     if (!auth.currentUser.emailVerified) {
-      status.textContent = "Ainda não está confirmado. Abra o e-mail que enviamos e clique no link (veja também o spam).";
+      status.textContent = "Ainda não está confirmado. Abra o e-mail que enviamos e clique no link. Não achou? Procure por \"Idiomex\" na pasta Spam.";
       return;
     }
     await auth.currentUser.getIdToken(true);
@@ -286,7 +286,7 @@ async function reenviarConfirmacao() {
   if (!user) return;
   try {
     await enviarConfirmacao(user);
-    status.textContent = "Enviamos de novo. Confira sua caixa de entrada e o spam.";
+    status.textContent = "Enviamos de novo. Confira a caixa de entrada e, principalmente, a pasta Spam.";
   } catch (erro) {
     status.textContent = traduzErro(erro);
   }
@@ -370,7 +370,7 @@ async function esqueciMinhaSenha(email) {
       }
     }
   }
-  statusEl.textContent = `Se existir uma conta com ${email}, enviamos um link para criar uma senha nova. Confira também o spam.`;
+  statusEl.textContent = `Se existir uma conta com ${email}, enviamos um link para criar uma senha nova. Ele costuma cair na pasta Spam: procure por "Idiomex".`;
 }
 
 // Grava o perfil do professor junto com a entrada do código dele no índice

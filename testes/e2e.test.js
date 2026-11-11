@@ -85,11 +85,11 @@ function dataDaqui(dias) {
     const linkDeConfirmacao = async (email) => {
       const r = await fetch('http://127.0.0.1:9099/emulator/v1/projects/demo-idiomex/oobCodes');
       const codigos = (await r.json()).oobCodes.filter((c) => c.email === email && c.requestType === 'VERIFY_EMAIL');
-      return codigos.length ? codigos[codigos.length - 1].oobLink : null;
+      return codigos.length ? codigos[codigos.length - 1] : null;
     };
     // Sai da conta (o painel volta sozinho para a tela inicial) e espera a tela carregar
     const sairDaConta = async () => {
-      if (!ze.url().endsWith('index.html')) {
+      if (!ze.url().includes('index.html')) {
         await Promise.all([ze.waitForURL('**/index.html', { timeout: 10000 }), ze.evaluate(() => auth.signOut())]);
       } else await ze.evaluate(() => auth.signOut());
       await ze.waitForLoadState('load');
@@ -106,13 +106,23 @@ function dataDaqui(dias) {
       await ze.click('#btn-cadastro-email');
       await ze.waitForSelector('#aviso-confirmar-email:not([hidden])', { timeout: 8000 });
       esperar((await ze.textContent('#texto-confirmar-email')).includes(emailZe), 'aviso sem o e-mail');
+      esperar(await ze.isVisible('.aviso-spam:has-text("pasta Spam")'), 'sem o aviso de que o e-mail cai no spam');
       esperar(await linkDeConfirmacao(emailZe), 'o e-mail de confirmação não foi enviado');
       await ze.click('button:has-text("Já confirmei meu e-mail")');
       await ze.waitForFunction(() => /Ainda não está confirmado/.test(document.getElementById('status-confirmar-email').textContent), null, { timeout: 8000 });
       esperar(ze.url().endsWith('index.html'), 'entrou sem confirmar o e-mail');
     });
+    await caso('o link do e-mail abre a página do Idiomex: "E-mail confirmado!"', async () => {
+      const pg = await h.novaPagina(ctxE);
+      const { oobCode } = await linkDeConfirmacao(emailZe);
+      await pg.goto(`${SITE}/acao.html?mode=verifyEmail&oobCode=${oobCode}&apiKey=x&lang=pt-BR`);
+      await pg.waitForSelector('h1:has-text("E-mail confirmado!")', { timeout: 8000 });
+      await pg.goto(`${SITE}/acao.html?mode=verifyEmail&oobCode=${oobCode}&apiKey=x`);
+      await pg.waitForSelector('h1:has-text("Esse link não vale mais")', { timeout: 8000 });
+      esperar(pg.erros.length === 0, 'erros: ' + pg.erros.join('; '));
+      await pg.close();
+    });
     await caso('depois de clicar no link do e-mail, "Já confirmei" termina o cadastro e abre o painel do aluno', async () => {
-      await fetch(await linkDeConfirmacao(emailZe));
       await ze.click('button:has-text("Já confirmei meu e-mail")');
       await ze.waitForURL('**/dicionario.html', { timeout: 10000 });
       await ze.waitForFunction(() => document.getElementById('titulo-topo').textContent === 'Zé Sem Google', null, { timeout: 8000 });
@@ -133,7 +143,25 @@ function dataDaqui(dias) {
       await ze.click('text=Esqueci minha senha');
       await ze.waitForFunction(() => /enviamos um link/.test(document.getElementById('status-login').textContent), null, { timeout: 8000 });
       const r = await fetch('http://127.0.0.1:9099/emulator/v1/projects/demo-idiomex/oobCodes');
-      esperar((await r.json()).oobCodes.some((c) => c.email === emailZe && c.requestType === 'PASSWORD_RESET'), 'e-mail de nova senha não foi enviado');
+      const pedido = (await r.json()).oobCodes.filter((c) => c.email === emailZe && c.requestType === 'PASSWORD_RESET').pop();
+      esperar(pedido, 'e-mail de nova senha não foi enviado');
+      // O link abre a página do Idiomex para criar a senha nova
+      await ze.goto(`${SITE}/acao.html?mode=resetPassword&oobCode=${pedido.oobCode}&apiKey=x`);
+      await ze.waitForSelector('h1:has-text("Crie uma senha nova")', { timeout: 8000 });
+      await ze.fill('#senhaNova', 'novaSenha1');
+      await ze.fill('#senhaNova2', 'outra');
+      await ze.click('button:has-text("Salvar senha nova")');
+      esperar(/diferentes/.test(await ze.textContent('#status-senha')), 'não avisou senhas diferentes');
+      await ze.fill('#senhaNova2', 'novaSenha1');
+      await ze.click('button:has-text("Salvar senha nova")');
+      await ze.waitForSelector('h1:has-text("Senha alterada!")', { timeout: 8000 });
+      await ze.click('a:has-text("Entrar no Idiomex")');
+      await ze.waitForURL('**/index.html?email=*');
+      esperar((await ze.inputValue('#loginEmail')) === emailZe, 'e-mail não veio preenchido');
+      await ze.fill('#loginSenha', 'novaSenha1');
+      await ze.click('#form-login button:has-text("Entrar"):not(:has-text("Google"))');
+      await ze.waitForURL('**/dicionario.html', { timeout: 10000 });
+      await sairDaConta();
     });
     await caso('conta de e-mail que entra sem ter confirmado volta para o aviso de confirmação', async () => {
       const outro = `nao-confirmou-${id}@t.com`;

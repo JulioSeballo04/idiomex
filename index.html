@@ -83,10 +83,14 @@
         <input type="password" id="cadSenha" placeholder="Crie uma senha (mínimo 6 caracteres)" autocomplete="new-password" onkeydown="if (event.key === 'Enter') { event.preventDefault(); document.getElementById('btn-cadastro-email').click(); }">
         <button type="button" class="btn btn-primario" id="btn-cadastro-email" onclick="cadastrarComEmail(cadNome.value, cadTipo.value, cadCodigo.value, idiomasMarcadosNoCadastro(), cadEmail.value, cadSenha.value)">Criar conta com e-mail</button>
       </div>
-      <p class="dica-cadastro">Com e-mail e senha, enviamos um link de confirmação para o seu e-mail: a conta passa a valer depois que você clicar nele.</p>
+      <p class="dica-cadastro">Com e-mail e senha, enviamos um link de confirmação para o seu e-mail: a conta passa a valer depois que você clicar nele. <strong>Ele costuma cair na pasta Spam.</strong></p>
       <p class="status-msg" id="status-cadastro"></p>
       <div class="aviso-confirmar-email" id="aviso-confirmar-email" hidden>
         <p id="texto-confirmar-email"></p>
+        <div class="aviso-spam" role="note">
+          <svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-triangle-alert"></use></svg>
+          <div><strong>Não chegou? Olhe na pasta Spam!</strong> O e-mail do Idiomex costuma cair no <strong>Spam</strong> (ou Lixo eletrônico / Promoções). Procure por "Idiomex", abra e toque em <strong>"Não é spam"</strong>: assim os próximos chegam na caixa de entrada.</div>
+        </div>
         <div class="acoes-confirmar-email">
           <button type="button" class="btn btn-primario" onclick="jaConfirmeiMeuEmail()">Já confirmei meu e-mail</button>
           <button type="button" class="btn btn-secundario" onclick="reenviarConfirmacao()">Reenviar o e-mail</button>
@@ -122,6 +126,11 @@ auth.onAuthStateChanged(async function (user) {
     console.warn('Não foi possível abrir o painel automaticamente:', e);
   }
 });
+// Volta da página "Senha alterada": já deixa o e-mail preenchido
+(function () {
+  const email = new URLSearchParams(location.search).get('email');
+  if (email) document.getElementById('loginEmail').value = email;
+})();
 function mostrarAba(aba) {
   const ehLogin = aba === 'login';
   document.getElementById('form-login').classList.toggle('oculto', !ehLogin);

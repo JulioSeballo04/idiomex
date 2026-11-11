@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Idiomex</title>
+<script>
+  (function () {
+    var tema = localStorage.getItem("temaEscolhido");
+    if (tema && tema !== "classico") document.documentElement.setAttribute("data-tema", tema);
+  })();
+</script>
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="theme-color" content="#5F8567">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/novidades.css">
+</head>
+<body>
+<!--
+  Página aberta pelos links dos e-mails do Idiomex (confirmar e-mail, criar senha nova).
+  No Firebase: Authentication → Templates → (lápis) → "Personalizar URL de ação" →
+  https://SEU-SITE/acao.html. O Firebase acrescenta ?mode=...&oobCode=... ao endereço.
+-->
+<div class="tela-auth">
+  <div class="cartao-auth cartao-acao">
+    <img class="logo-hero logo-tema-claro" src="assets/logo.png" alt="Idiomex">
+    <img class="logo-hero logo-tema-noturno" src="assets/logo-noturno.png" alt="Idiomex">
+    <div id="conteudo-acao"><p>Um instante...</p></div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/util.js"></script>
+<script src="js/auth.js"></script>
+<script>
+const parametros = new URLSearchParams(location.search);
+const modo = parametros.get("mode");
+const codigoDoLink = parametros.get("oobCode");
+const area = document.getElementById("conteudo-acao");
+auth.languageCode = "pt-BR";
+
+function icone(nome, erro) {
+  return `<svg class="icone icone-acao${erro ? " erro" : ""}" aria-hidden="true" focusable="false"><use href="assets/icones.svg#${nome}"></use></svg>`;
+}
+function botaoVoltar(texto, destino) {
+  return `<a class="btn btn-primario" href="${destino || "index.html"}">${texto}</a>`;
+}
+function mostrarErro(erro) {
+  const usado = ["auth/invalid-action-code", "auth/expired-action-code"].includes(erro && erro.code);
+  area.innerHTML = `${icone("i-circle-x", true)}
+    <h1>${usado ? "Esse link não vale mais" : "Não deu certo"}</h1>
+    <p>${usado
+      ? "Ele já foi usado ou expirou. Se você já confirmou o e-mail, é só entrar. Se não, volte ao Idiomex e peça um link novo."
+      : "Não conseguimos abrir o link agora. Confira a sua internet e toque no link do e-mail de novo."}</p>
+    ${botaoVoltar("Voltar ao Idiomex")}`;
+}
+
+async function confirmarEmail() {
+  await auth.applyActionCode(codigoDoLink);
+  area.innerHTML = `${icone("i-circle-check")}
+    <h1>E-mail confirmado!</h1>
+    <p>Tudo certo. Agora volte ao Idiomex para terminar o seu cadastro e começar.</p>
+    ${botaoVoltar("Continuar no Idiomex")}`;
+}
+
+async function criarSenhaNova() {
+  const email = await auth.verifyPasswordResetCode(codigoDoLink);
+  area.innerHTML = `${icone("i-key-round")}
+    <h1>Crie uma senha nova</h1>
+    <p>Para a conta <strong>${escapeHtml(email)}</strong></p>
+    <form class="form-email" id="form-senha-nova">
+      <input type="password" id="senhaNova" placeholder="Senha nova (mínimo 6 caracteres)" autocomplete="new-password" required>
+      <input type="password" id="senhaNova2" placeholder="Repita a senha nova" autocomplete="new-password" required>
+      <button type="submit" class="btn btn-primario">Salvar senha nova</button>
+    </form>
+    <p class="status-msg" id="status-senha"></p>`;
+  document.getElementById("form-senha-nova").onsubmit = async (e) => {
+    e.preventDefault();
+    const status = document.getElementById("status-senha");
+    const senha = document.getElementById("senhaNova").value;
+    if (senha.length < 6) { status.textContent = "Use pelo menos 6 caracteres."; return; }
+    if (senha !== document.getElementById("senhaNova2").value) { status.textContent = "As duas senhas estão diferentes."; return; }
+    status.textContent = "Salvando...";
+    try {
+      await auth.confirmPasswordReset(codigoDoLink, senha);
+      area.innerHTML = `${icone("i-circle-check")}
+        <h1>Senha alterada!</h1>
+        <p>Pronto. Entre no Idiomex com o seu e-mail e a senha nova.</p>
+        ${botaoVoltar("Entrar no Idiomex", "index.html?email=" + encodeURIComponent(email))}`;
+    } catch (erro) {
+      if (["auth/invalid-action-code", "auth/expired-action-code"].includes(erro.code)) mostrarErro(erro);
+      else status.textContent = traduzErro(erro);
+    }
+  };
+}
+
+async function recuperarEmail() {
+  const info = await auth.checkActionCode(codigoDoLink);
+  await auth.applyActionCode(codigoDoLink);
+  area.innerHTML = `${icone("i-circle-check")}
+    <h1>E-mail da conta restaurado</h1>
+    <p>A sua conta voltou a usar <strong>${escapeHtml(info.data.email || "")}</strong>. Por segurança, crie uma senha nova em "Esqueci minha senha".</p>
+    ${botaoVoltar("Voltar ao Idiomex")}`;
+}
+
+(async () => {
+  try {
+    if (!codigoDoLink) throw { code: "auth/invalid-action-code" };
+    if (modo === "verifyEmail") await confirmarEmail();
+    else if (modo === "resetPassword") await criarSenhaNova();
+    else if (modo === "recoverEmail") await recuperarEmail();
+    else throw { code: "auth/invalid-action-code" };
+  } catch (erro) {
+    mostrarErro(erro);
+  }
+})();
+</script>
+</body>
+</html>
