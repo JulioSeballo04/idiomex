@@ -646,6 +646,34 @@ function dataDaqui(dias) {
     await aluno.click('#tela-sala-aula .btn-voltar-sala');
   });
 
+  await caso('notebook pequeno: folha em pé abre pela largura (legível), com "Inteira" e "Tela cheia"', async () => {
+    await prof.fill('#titulo-biblioteca', 'Folha de exercícios');
+    await prof.setInputFiles('#arquivo-biblioteca', path.join(__dirname, 'folha-em-pe.png'));
+    await prof.click('#btn-enviar-biblioteca');
+    await aluno.waitForFunction(() => documentosDaBiblioteca().some((d) => d.titulo === 'Folha de exercícios'), null, { timeout: 10000 });
+    await aluno.setViewportSize({ width: 1366, height: 657 });
+    try {
+      await aluno.click('#btn-sala-aula');
+      await aluno.click('#corpo-sala-aula button:has-text("Folha de exercícios")');
+      await aluno.waitForFunction(() => { const i = document.querySelector('#modal-visualizador img'); return i && i.style.width; }, null, { timeout: 8000 });
+      const medidas = () => aluno.evaluate(() => {
+        const i = document.querySelector('#modal-visualizador img'), c = document.getElementById('corpo-visualizador');
+        return { img: i.getBoundingClientRect(), largura: c.clientWidth, altura: c.clientHeight };
+      });
+      let m = await medidas();
+      esperar(m.img.width >= 600, `a folha abriu pequena demais (${Math.round(m.img.width)}px)`);
+      esperar(await aluno.$('#btn-ajuste-largura.ativa'), '"Largura" não ficou marcado');
+      esperar(await aluno.isVisible('#btn-tela-cheia'), 'sem botão de tela cheia');
+      await aluno.click('#btn-ajuste-pagina');
+      m = await medidas();
+      esperar(m.img.height <= m.altura + 1, 'em "Inteira" a folha não coube na altura');
+      await aluno.click('#modal-visualizador .btn-fechar-modal');
+      await aluno.click('#tela-sala-aula .btn-voltar-sala');
+    } finally {
+      await aluno.setViewportSize({ width: 1100, height: 900 });
+    }
+  });
+
   await caso('com a imagem aberta, o aluno abre ao lado a janela "Nova palavra" e adiciona palavras', async () => {
     await aluno.click('#btn-sala-aula');
     await aluno.click('#corpo-sala-aula button:has-text("Quadro da aula")');
@@ -1504,8 +1532,12 @@ function dataDaqui(dias) {
     await p.waitForSelector('.resumo-passo:has-text("Espanhol")', { timeout: 3000 });
     // primeiro dia disponível no calendário (avança de mês se precisar)
     for (let i = 0; i < 3 && !(await p.$('[data-calday]:not(.is-retro)')); i++) await p.click('#btn-cal-mes-proximo');
-    await p.click('[data-calday]:not(.is-retro) >> nth=0');
-    await p.waitForSelector('.btn-slot-horario:not(.slot-passado)', { timeout: 8000 });
+    // o primeiro dia que ainda tem horário livre (à noite, os de hoje já passaram)
+    const dias = (await p.$$('[data-calday]:not(.is-retro)')).length;
+    for (let d = 0; d < dias; d++) {
+      await p.click(`[data-calday]:not(.is-retro) >> nth=${d}`);
+      if (await p.waitForSelector('.btn-slot-horario:not(.slot-passado)', { timeout: 2500 }).catch(() => null)) break;
+    }
     await p.click('.btn-slot-horario:not(.slot-passado) >> nth=0');
     await p.click('#btn-confirmar-agendamento');
     await p.waitForSelector('.agendamento-sucesso:has-text("Espanhol")', { timeout: 8000 });

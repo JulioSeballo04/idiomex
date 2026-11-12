@@ -72,6 +72,10 @@ let urlDoVisualizador = null;
 let blobDoVisualizador = null;     // o arquivo aberto (a janela flutuante usa o dela)
 let tituloDoVisualizador = "";
 let zoomVisualizador = 1;          // 1 = do tamanho da janela
+// Como a imagem cabe na tela no zoom 100%: "pagina" (inteira, sem rolar) ou "largura"
+// (ocupa a largura e rola para baixo). Escolhido sozinho para cada tela: no notebook,
+// baixinho, uma folha em pé inteira ficaria pequena demais, então abre pela largura.
+let ajusteVisualizador = "";
 const NIVEIS_ZOOM = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 
 function garantirModalVisualizador() {
@@ -104,6 +108,11 @@ function garantirModalVisualizador() {
     mudarZoom(e.deltaY < 0 ? 1 : -1);
   }, { passive: false });
   arrastarParaMover(corpo);
+  // Mudou o tamanho da janela (ou entrou/saiu da tela cheia): reajusta o arquivo
+  let espera = null;
+  const reajustar = () => { clearTimeout(espera); espera = setTimeout(() => { if (!modal.classList.contains("modal-oculto")) definirZoom(zoomVisualizador); }, 120); };
+  window.addEventListener("resize", reajustar);
+  document.addEventListener("fullscreenchange", () => { atualizarBotaoTelaCheia(); reajustar(); });
   document.body.appendChild(modal);
   return modal;
 }
@@ -112,7 +121,7 @@ function garantirModalVisualizador() {
 function arrastarParaMover(area) {
   let inicio = null;
   area.addEventListener("pointerdown", (e) => {
-    if (e.pointerType !== "mouse" || zoomVisualizador <= 1 || !temZoom(area.dataset.categoria)) return;
+    if (e.pointerType !== "mouse" || !(zoomVisualizador > 1 || area.classList.contains("rolando")) || !temZoom(area.dataset.categoria)) return;
     inicio = { x: e.clientX, y: e.clientY, left: area.scrollLeft, top: area.scrollTop };
     area.classList.add("arrastando");
   });
@@ -136,12 +145,43 @@ function montarFerramentas(categoria) {
       <button type="button" class="btn-ferramenta valor-zoom" id="valor-zoom" title="Voltar ao tamanho da janela" onclick="definirZoom(1)">100%</button>
       <button type="button" class="btn-ferramenta" id="btn-zoom-mais" title="Aumentar" aria-label="Aumentar" onclick="mudarZoom(1)">+</button>
     </div>` : "";
+  const ajuste = categoria === "imagem" ? `
+    <div class="grupo-ferramentas" role="group" aria-label="Como a imagem cabe na tela">
+      <button type="button" class="btn-ferramenta" id="btn-ajuste-largura" onclick="escolherAjuste('largura')" title="A imagem ocupa a largura toda (role para ver o resto)">↔ Largura</button>
+      <button type="button" class="btn-ferramenta" id="btn-ajuste-pagina" onclick="escolherAjuste('pagina')" title="A imagem inteira na tela">⤢ Inteira</button>
+    </div>` : "";
+  const telaCheia = temZoom(categoria) && document.fullscreenEnabled
+    ? `<button type="button" class="btn-ferramenta btn-tela-cheia" id="btn-tela-cheia" onclick="alternarTelaCheia()" title="Usar a tela toda para o documento">⛶ Tela cheia</button>` : "";
   const flutuante = categoria === "imagem" || (categoria === "video" && document.pictureInPictureEnabled)
     ? `<button type="button" class="btn-ferramenta btn-flutuante" onclick="abrirJanelaFlutuante()" title="Abrir numa janela pequena por cima das outras, para continuar usando o app">⧉ Janela flutuante</button>` : "";
   // Na tela do aluno: anotar palavras novas sem fechar o documento
   const palavra = podeAnotarPalavras()
     ? `<button type="button" class="btn-ferramenta btn-nova-palavra-visualizador" id="btn-nova-palavra-visualizador" onclick="alternarPainelPalavra()" title="Abrir, ao lado do documento, uma janela para adicionar palavras novas">＋ Nova palavra</button>` : "";
-  return zoom + flutuante + palavra;
+  return zoom + ajuste + telaCheia + flutuante + palavra;
+}
+
+function escolherAjuste(modo) {
+  ajusteVisualizador = modo;
+  definirZoom(1);
+}
+
+// Tela cheia: o documento ocupa o monitor todo (bom no notebook, de tela pequena)
+async function alternarTelaCheia() {
+  const caixa = document.querySelector("#modal-visualizador .modal-visualizador");
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await caixa.requestFullscreen();
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+function atualizarBotaoTelaCheia() {
+  const botao = document.getElementById("btn-tela-cheia");
+  if (!botao) return;
+  const cheia = !!document.fullscreenElement;
+  botao.classList.toggle("ativa", cheia);
+  botao.textContent = cheia ? "⛶ Sair da tela cheia" : "⛶ Tela cheia";
 }
 
 // -------------------- NOVA PALAVRA AO LADO DO DOCUMENTO --------------------
@@ -233,8 +273,26 @@ function definirZoom(nivel) {
   if (categoria === "imagem") {
     const img = corpo.querySelector("img");
     if (!img || !img.naturalWidth) return;
-    const cabe = Math.min(1, (corpo.clientWidth - 8) / img.naturalWidth, (window.innerHeight * 0.68) / img.naturalHeight);
-    img.style.width = `${Math.round(img.naturalWidth * cabe * nivel)}px`;
+    // Espaço de verdade que a área do documento tem nesta tela
+    const larguraLivre = Math.max(120, corpo.clientWidth - 8);
+    const alturaLivre = Math.max(120, corpo.clientHeight - 8);
+    // Folha em pé: pela largura, mas no máximo ~1000px (mais largo que isso, no monitor
+    // grande, fica cansativo de ler e obriga a rolar muito)
+    const emPe = img.naturalHeight > img.naturalWidth;
+    const pelaLargura = Math.min(larguraLivre, emPe ? 1000 : larguraLivre) / img.naturalWidth;
+    const inteira = Math.min(pelaLargura, alturaLivre / img.naturalHeight);
+    if (!ajusteVisualizador) {
+      // Inteira só se ainda ocupar boa parte da largura; senão fica pequena demais
+      ajusteVisualizador = img.naturalWidth * inteira >= larguraLivre * 0.6 ? "pagina" : "largura";
+    }
+    // Imagem pequena pode crescer até o dobro para preencher a tela, não mais (borra)
+    const base = Math.min(ajusteVisualizador === "pagina" ? inteira : pelaLargura, 2);
+    img.style.width = `${Math.round(img.naturalWidth * base * nivel)}px`;
+    const largura = document.getElementById("btn-ajuste-largura");
+    const pagina = document.getElementById("btn-ajuste-pagina");
+    if (largura) largura.classList.toggle("ativa", ajusteVisualizador === "largura");
+    if (pagina) pagina.classList.toggle("ativa", ajusteVisualizador === "pagina");
+    corpo.classList.toggle("rolando", img.offsetHeight > corpo.clientHeight + 2 || img.offsetWidth > corpo.clientWidth + 2);
   } else if (categoria === "pdf") {
     corpo.querySelectorAll(".paginas-pdf canvas").forEach((c) => { c.style.width = `${Math.round(Number(c.dataset.largura) * nivel)}px`; });
   } else if (categoria === "texto") {
@@ -325,6 +383,7 @@ function fecharVisualizador() {
   const modal = document.getElementById("modal-visualizador");
   if (!modal) return;
   modal.classList.add("modal-oculto");
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   // Para o vídeo/áudio e libera a memória do arquivo
   document.getElementById("corpo-visualizador").innerHTML = "";
   document.getElementById("ferramentas-visualizador").innerHTML = "";
@@ -347,6 +406,8 @@ async function abrirVisualizador(docRef, documento, permitirBaixar) {
   tituloDoVisualizador = documento.titulo || documento.nomeArquivo || "Documento";
   document.getElementById("titulo-visualizador").textContent = tituloDoVisualizador;
   zoomVisualizador = 1;
+  ajusteVisualizador = "";
+  modal.querySelector(".modal-visualizador").classList.toggle("tela-grande", temZoom(categoria));
   const corpo = document.getElementById("corpo-visualizador");
   corpo.dataset.categoria = categoria;
   corpo.innerHTML = `<p class="vazio">Carregando ${CATEGORIAS_ARQUIVO[categoria].nome.toLowerCase()}...</p>`;
@@ -426,7 +487,7 @@ async function mostrarPdf(corpo, blob, permitirBaixar) {
     const pdf = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
     corpo.innerHTML = `<div class="paginas-pdf"></div>`;
     const paginas = corpo.querySelector(".paginas-pdf");
-    const largura = Math.min(900, (corpo.clientWidth || 600) - 8);
+    const largura = Math.min(1100, (corpo.clientWidth || 600) - 8);
     const total = Math.min(pdf.numPages, MAXIMO_PAGINAS_PDF);
     for (let n = 1; n <= total; n++) {
       if (!corpo.isConnected || !paginas.isConnected) return; // fechou o visualizador
