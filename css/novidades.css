@@ -942,7 +942,7 @@ html[data-tema="noturno"] .btn-opcao-quiz.opcao-certa { background: rgba(80, 190
 audio.player-documento { background: transparent; }
 .player-audio { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 1rem; padding: 1.5rem 0; }
 .icone-audio { font-size: 3rem; }
-.imagem-documento { max-width: 100%; max-height: 72vh; object-fit: contain; border-radius: 6px; pointer-events: none; }
+.imagem-documento { max-width: none; border-radius: 6px; pointer-events: none; }
 .texto-documento { white-space: pre-wrap; width: 100%; margin: 0; font-family: inherit; font-size: 0.92rem; }
 .paginas-pdf { display: flex; flex-direction: column; align-items: center; gap: 0.8rem; }
 .paginas-pdf canvas { max-width: 100%; height: auto; box-shadow: 0 2px 10px var(--sombra); background: #fff; }
@@ -1254,3 +1254,24 @@ html[data-tema="noturno"] .btn-destaque.btn-marcar-aula:hover { background: #B83
 .cartao-acao .form-email { text-align: left; max-width: 340px; margin: 0 auto 0.6rem; }
 .cartao-acao .btn { min-width: 200px; }
 .cartao-acao a.btn { display: inline-block; text-decoration: none; }
+
+/* Imagem, PDF e texto: o visualizador usa quase a tela toda, em qualquer tamanho de
+   tela (celular, notebook pequeno, monitor), e a área do documento fica com o resto */
+.modal-conteudo.modal-visualizador.tela-grande { max-width: min(1400px, 100%); height: 94vh; max-height: none; }
+.modal-visualizador.tela-grande .corpo-visualizador { height: 100%; }
+.corpo-visualizador.rolando { cursor: grab; }
+.corpo-visualizador.rolando.arrastando { cursor: grabbing; }
+.btn-tela-cheia { border: 1px solid var(--borda); border-radius: 8px; }
+.modal-conteudo.modal-visualizador:fullscreen { max-width: none; width: 100vw; height: 100vh; border-radius: 0; }
+/* Notebook / tela baixa: menos margem, para sobrar mais espaço para o documento */
+@media (max-height: 820px) {
+  #modal-visualizador { padding: 0.4rem; }
+  .modal-conteudo.modal-visualizador.tela-grande { height: calc(100vh - 0.8rem); height: calc(100dvh - 0.8rem); padding: 0.7rem 0.9rem; }
+  .modal-visualizador .modal-cabecalho h3 { font-size: 1rem; }
+  .ferramentas-visualizador { margin-bottom: 0.4rem; }
+  .btn-ferramenta { height: 30px; }
+}
+@media (max-width: 600px) {
+  #modal-visualizador { padding: 0.3rem; }
+  .modal-conteudo.modal-visualizador.tela-grande { height: calc(100vh - 0.6rem); height: calc(100dvh - 0.6rem); padding: 0.7rem; }
+}
