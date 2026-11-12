@@ -46,7 +46,7 @@ function subirSite() {
 }
 
 async function novoContexto(browser, opts = {}) {
-  const ctx = await browser.newContext({ viewport: opts.viewport || { width: 1100, height: 900 } });
+  const ctx = await browser.newContext({ viewport: opts.viewport || { width: 1100, height: 900 }, ...(opts.celular ? { isMobile: true, hasTouch: true, userAgent: opts.userAgent } : {}) });
   await ctx.route('https://www.gstatic.com/firebasejs/9.23.0/*', (r) => {
     const nome = r.request().url().split('/').pop();
     r.fulfill({ path: path.join(FB, nome), contentType: 'application/javascript' });
