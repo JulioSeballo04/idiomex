@@ -77,6 +77,40 @@ function dataDaqui(dias) {
     await prof.waitForFunction(() => document.getElementById('nome-usuario').textContent === 'Ana Google', null, { timeout: 5000 });
   });
 
+  console.log('\nBaixar o app no celular');
+  await caso('no computador, sem botão "Baixar o app"', async () => {
+    await prof.goto(`${SITE}/index.html`);
+    await prof.waitForSelector('.cartao-auth');
+    esperar(!(await prof.$('#btn-baixar-app')), 'apareceu no computador');
+  });
+  {
+    const ctxCel = await h.novoContexto(browser, { celular: true, viewport: { width: 390, height: 760 },
+      userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36' });
+    const cel = await h.novaPagina(ctxCel);
+    await caso('no celular, a tela de entrar tem "Baixar o app no celular" e ensina a instalar', async () => {
+      await cel.goto(`${SITE}/index.html`);
+      await cel.waitForSelector('#btn-baixar-app', { timeout: 5000 });
+      await cel.click('#btn-baixar-app');
+      await cel.waitForFunction(() => true);
+      await new Promise((r) => setTimeout(r, 300));
+      esperar(/tela inicial/i.test(cel.ultimoDialogo || ''), 'sem instruções de instalação: ' + cel.ultimoDialogo);
+    });
+    await caso('no celular, o botão usa o "instalar" do navegador quando ele oferece', async () => {
+      await cel.goto(`${SITE}/index.html`);
+      await cel.waitForSelector('#btn-baixar-app');
+      await cel.evaluate(() => {
+        const e = new Event('beforeinstallprompt');
+        e.prompt = () => { window.__pediuInstalar = true; };
+        e.userChoice = Promise.resolve({ outcome: 'accepted' });
+        window.dispatchEvent(e);
+      });
+      await cel.click('#btn-baixar-app');
+      await cel.waitForFunction(() => window.__pediuInstalar && !document.getElementById('btn-baixar-app'), null, { timeout: 3000 });
+    });
+    esperar(cel.erros.length === 0, 'erros: ' + cel.erros.join('; '));
+    await ctxCel.close();
+  }
+
   console.log('\nConta com e-mail e senha (sem Google)');
   {
     const ctxE = await h.novoContexto(browser);

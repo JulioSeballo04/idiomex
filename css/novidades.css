@@ -1275,3 +1275,33 @@ html[data-tema="noturno"] .btn-destaque.btn-marcar-aula:hover { background: #B83
   #modal-visualizador { padding: 0.3rem; }
   .modal-conteudo.modal-visualizador.tela-grande { height: calc(100vh - 0.6rem); height: calc(100dvh - 0.6rem); padding: 0.7rem; }
 }
+
+/* ---------- Baixar o app no celular ---------- */
+.btn-baixar-app { display: inline-flex; align-items: center; justify-content: center; gap: 0.5em; background: var(--acento); color: #fff; }
+.btn-baixar-app:hover { background: var(--acento-forte); }
+.btn-baixar-app .icone { width: 1.15em; height: 1.15em; }
+.area-baixar-app { margin-top: 1.1rem; }
+.area-baixar-app .btn-baixar-app { width: 100%; padding: 0.8em 1em; font-size: 0.95rem; }
+.faixa-baixar-app {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.4rem 0 0.8rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  background: var(--bg-cartao);
+  font-size: 0.85rem;
+}
+.texto-faixa-app { flex: 1; color: var(--ink); }
+.btn-fechar-faixa-app { background: none; border: none; font-size: 1.3rem; line-height: 1; color: var(--ink-soft); cursor: pointer; padding: 0 0.2rem; }
+.form-email input {
+  padding: 0.7em 0.8em;
+  border-radius: 8px;
+  border: 1px solid var(--borda);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+}
+.form-email input:focus { outline: 2px solid var(--acento); outline-offset: 0; border-color: transparent; }
