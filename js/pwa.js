@@ -16,6 +16,8 @@ let pedidoDeInstalacao = null; // o "instalar" do navegador (Android/Chrome)
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault(); // o app mostra o próprio botão, na hora certa
   pedidoDeInstalacao = e;
+  // No computador (Chrome/Edge), o botão só aparece quando o navegador oferece instalar
+  if (document.readyState !== "loading") mostrarBotaoBaixarApp();
 });
 window.addEventListener("appinstalled", () => {
   pedidoDeInstalacao = null;
@@ -55,7 +57,8 @@ async function baixarApp() {
 }
 
 function botaoBaixarApp(classeExtra) {
-  return `<button type="button" class="btn btn-baixar-app ${classeExtra || ""}" id="btn-baixar-app" onclick="baixarApp()">${ICONE_BAIXAR}<span>Baixar o app no celular</span></button>`;
+  const rotulo = ehCelular() ? "Baixar o app no celular" : "Instalar o app no computador";
+  return `<button type="button" class="btn btn-baixar-app ${classeExtra || ""}" id="btn-baixar-app" onclick="baixarApp()">${ICONE_BAIXAR}<span>${rotulo}</span></button>`;
 }
 
 const CHAVE_FAIXA_APP = "faixaBaixarAppFechadaEm";
@@ -73,7 +76,7 @@ function faixaFechadaHaPouco() {
 }
 
 function mostrarBotaoBaixarApp() {
-  if (appJaInstalado() || !ehCelular() || document.querySelector(".baixar-app")) return;
+  if (appJaInstalado() || (!ehCelular() && !pedidoDeInstalacao) || document.querySelector(".baixar-app")) return;
   // Tela de entrar: botão dentro do cartão, acima do texto do rodapé
   const cartao = document.querySelector(".cartao-auth");
   if (cartao) {
@@ -89,7 +92,7 @@ function mostrarBotaoBaixarApp() {
   if (!topo || faixaFechadaHaPouco()) return;
   const faixa = document.createElement("div");
   faixa.className = "baixar-app faixa-baixar-app";
-  faixa.innerHTML = `<span class="texto-faixa-app">Use o Idiomex como app no seu celular</span>
+  faixa.innerHTML = `<span class="texto-faixa-app">${ehCelular() ? "Use o Idiomex como app no seu celular" : "Abra o Idiomex como app, direto da área de trabalho"}</span>
     ${botaoBaixarApp("btn-mini")}
     <button type="button" class="btn-fechar-faixa-app" title="Fechar" aria-label="Fechar" onclick="fecharFaixaBaixarApp()">×</button>`;
   topo.insertAdjacentElement("afterend", faixa);

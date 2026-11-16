@@ -216,6 +216,19 @@ await t("student still cannot write messages", assertFails(setDoc(doc(db("S1"), 
 // Professor deletes own code entry
 await t("other cannot delete code", assertFails(deleteDoc(doc(db("P0"), "codigosProfessor/PROF-BBBB"))));
 await t("owner deletes code", deleteDoc(doc(db("P1"), "codigosProfessor/PROF-BBBB")));
+// Aparelhos que recebem os lembretes antes das aulas
+const aparelho = { token: "tok-abc", antecedencia: 60, fuso: "America/Sao_Paulo" };
+await t("professor registers own device for reminders", setDoc(doc(db("P0"), "usuarios/P0/dispositivos/d1"), aparelho));
+await t("professor changes reminder time", updateDoc(doc(db("P0"), "usuarios/P0/dispositivos/d1"), { antecedencia: 30 }));
+await t("reminder time outside the options denied", assertFails(updateDoc(doc(db("P0"), "usuarios/P0/dispositivos/d1"), { antecedencia: 5 })));
+await t("device without token denied", assertFails(setDoc(doc(db("P0"), "usuarios/P0/dispositivos/d2"), { antecedencia: 60 })));
+await t("others cannot read a professor's devices", assertFails(getDoc(doc(db("S1"), "usuarios/P0/dispositivos/d1"))));
+await t("others cannot add a device to a professor", assertFails(setDoc(doc(db("S1"), "usuarios/P0/dispositivos/d3"), aparelho)));
+await t("professor removes own device", deleteDoc(doc(db("P0"), "usuarios/P0/dispositivos/d1")));
+await t("app cannot read or write sent reminders (server only)", assertFails(setDoc(doc(db("P0"), "lembretesEnviados/x"), { professorId: "P0" })));
+// Compromisso na agenda: é uma anotação privada como as outras
+await t("professor saves an appointment in the agenda", setDoc(doc(db("P0"), "usuarios/P0/anotacoesAgenda/c1"), { tipo: "compromisso", data: "2026-11-18", horaInicio: "14:00", horaFim: "16:00", texto: "Médico" }));
+await t("student cannot read the professor's appointments", assertFails(getDoc(doc(db("S1"), "usuarios/P0/anotacoesAgenda/c1"))));
 console.log(`\n${ok} ok, ${bad} failed`);
 await env.cleanup();
 process.exit(bad ? 1 : 0);

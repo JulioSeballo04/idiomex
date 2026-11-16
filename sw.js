@@ -8,7 +8,7 @@
 // a cada atualização — só se mudar a lista ARQUIVOS_BASE.
 // ============================================================
 
-const VERSAO = "idiomex-v5";
+const VERSAO = "idiomex-v6";
 
 const ARQUIVOS_BASE = [
   "./",
@@ -26,6 +26,7 @@ const ARQUIVOS_BASE = [
   "js/tema.js",
   "js/dicionario.js",
   "js/professor.js",
+  "js/lembretes.js",
   "js/sala-professor.js",
   "assets/icones.svg",
   "assets/logo.png",
@@ -67,5 +68,39 @@ self.addEventListener("fetch", (evento) => {
       .catch(() => caches.match(pedido).then((guardada) =>
         guardada || (pedido.mode === "navigate" ? caches.match("index.html") : Response.error())
       ))
+  );
+});
+
+// -------------------- LEMBRETES (notificações) --------------------
+// O servidor (api/lembretes.js) manda, pelo Firebase Cloud Messaging, uma mensagem
+// com {titulo, corpo, tag, url}. Aqui ela vira a notificação do celular, mesmo com
+// o app fechado. A "tag" evita aviso repetido do mesmo lembrete.
+self.addEventListener("push", (evento) => {
+  let dados = {};
+  try {
+    const recebido = evento.data ? evento.data.json() : {};
+    dados = recebido.data || recebido;
+  } catch (e) {
+    dados = { corpo: evento.data ? evento.data.text() : "" };
+  }
+  evento.waitUntil(self.registration.showNotification(dados.titulo || "Idiomex", {
+    body: dados.corpo || "",
+    tag: dados.tag || undefined,
+    icon: "assets/icon-192.png",
+    badge: "assets/favicon-32.png",
+    data: { url: dados.url || "professor.html" }
+  }));
+});
+
+// Tocar na notificação abre (ou traz para a frente) o painel
+self.addEventListener("notificationclick", (evento) => {
+  evento.notification.close();
+  const destino = new URL((evento.notification.data && evento.notification.data.url) || "professor.html", self.location.href).href;
+  evento.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((janelas) => {
+      const aberta = janelas.find((j) => j.url.split("#")[0].split("?")[0] === destino);
+      if (aberta) return aberta.focus();
+      return self.clients.openWindow(destino);
+    })
   );
 });

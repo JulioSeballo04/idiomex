@@ -83,6 +83,17 @@ function dataDaqui(dias) {
     await prof.waitForSelector('.cartao-auth');
     esperar(!(await prof.$('#btn-baixar-app')), 'apareceu no computador');
   });
+  await caso('no computador (Chrome/Edge), "Instalar o app no computador" aparece quando o navegador oferece', async () => {
+    await prof.evaluate(() => {
+      const e = new Event('beforeinstallprompt');
+      e.prompt = () => { window.__pediuInstalar = true; };
+      e.userChoice = Promise.resolve({ outcome: 'dismissed' });
+      window.dispatchEvent(e);
+    });
+    await prof.waitForSelector('#btn-baixar-app:has-text("Instalar o app no computador")', { timeout: 3000 });
+    await prof.$eval('#btn-baixar-app', (b) => b.click()); // o aviso do emulador cobre o rodapé
+    await prof.waitForFunction(() => window.__pediuInstalar === true, null, { timeout: 3000 });
+  });
   {
     const ctxCel = await h.novoContexto(browser, { celular: true, viewport: { width: 390, height: 760 },
       userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36' });
@@ -1870,6 +1881,92 @@ function dataDaqui(dias) {
       const { sw, cw } = await pg.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
       esperar(sw <= cw + 1, `largura ${sw}px > ${cw}px`);
     });
+  }
+
+  console.log('\nAgenda do professor: compromissos e lembretes');
+  {
+    const ctxL = await h.novoContexto(browser);
+    await ctxL.grantPermissions(['notifications'], { origin: SITE });
+    await ctxL.addInitScript(() => { window.__tokenNotificacaoTeste = async () => 'tok-e2e-123'; });
+    // O servidor dos lembretes ainda não configurado (como antes de pôr as chaves na Vercel)
+    await ctxL.route('**/api/lembretes', (r) => r.fulfill({ status: 503, contentType: 'application/json', body: '{"erro":"servidor-nao-configurado"}' }));
+    const pl = await h.novaPagina(ctxL);
+    await h.cadastrar(pl, { tipo: 'professor', nome: 'Lia Lembretes', email: `lia-${id}@t.com` });
+    await pl.waitForURL('**/professor.html', { timeout: 10000 });
+    await pl.waitForFunction(() => typeof professorIdAtual !== 'undefined' && professorIdAtual, null, { timeout: 10000 });
+    await pl.click('#btn-aba-agenda');
+    const hoje = await pl.evaluate(() => dataDeHojeISO());
+
+    await caso('professor anota um compromisso no dia (aparece no dia, no calendário e no topo da agenda)', async () => {
+      await pl.click(`[data-calday="${hoje}"]`);
+      await pl.waitForSelector('#compromisso-texto');
+      await pl.fill('#compromisso-texto', 'Médico');
+      await pl.fill('#compromisso-fim', '15:00');
+      await pl.click('#btn-adicionar-compromisso');
+      esperar(/horário de início/.test(await pl.textContent('#status-compromisso')), 'aceitou fim sem início');
+      await pl.fill('#compromisso-fim', '');
+      await pl.click('#btn-adicionar-compromisso');
+      await pl.waitForSelector('#lista-compromissos-dia .item-compromisso:has-text("Médico"):has-text("Dia todo")', { timeout: 5000 });
+      await pl.waitForSelector(`[data-calday="${hoje}"] .cal-compromisso`, { timeout: 3000 });
+      await pl.waitForSelector('#compromissos-proximos:has-text("Médico")', { timeout: 3000 });
+      esperar((await pl.inputValue('#compromisso-texto')) === '', 'o campo não limpou');
+    });
+
+    await caso('professor apaga o compromisso', async () => {
+      await pl.click('#lista-compromissos-dia .btn-remover-compromisso');
+      await pl.waitForFunction(() => !document.querySelector('#lista-compromissos-dia .item-compromisso'), null, { timeout: 5000 });
+      esperar(!(await pl.$(`[data-calday="${hoje}"] .cal-compromisso`)), 'o marcador continuou no calendário');
+      esperar(!(await pl.$('#compromissos-proximos')), 'continuou no topo da agenda');
+    });
+
+    await caso('professor liga os lembretes neste aparelho (1 hora antes, por padrão)', async () => {
+      await pl.click('#btn-lembretes-aulas');
+      await pl.click('#btn-ligar-lembretes');
+      await pl.waitForSelector('#modal-lembretes .estado-lembretes.ligado', { timeout: 8000 });
+      const aparelhos = await pl.evaluate(async () => (await db.collection('usuarios').doc(professorIdAtual).collection('dispositivos').get()).docs.map((d) => d.data()));
+      esperar(aparelhos.length === 1 && aparelhos[0].token === 'tok-e2e-123' && aparelhos[0].antecedencia === 60 && aparelhos[0].fuso, 'aparelho não foi gravado: ' + JSON.stringify(aparelhos));
+      esperar((await pl.textContent('#btn-lembretes-aulas')).includes('Lembretes ligados'), 'o botão da agenda não mudou');
+    });
+
+    await caso('professor troca para 30 minutos antes', async () => {
+      await pl.selectOption('#select-antecedencia', '30');
+      await pl.waitForFunction(async () => (await db.collection('usuarios').doc(professorIdAtual).collection('dispositivos').get()).docs[0].data().antecedencia === 30, null, { timeout: 5000, polling: 300 });
+    });
+
+    await caso('"Mandar um teste" com o servidor ainda sem configurar explica e avisa pelo próprio app', async () => {
+      await pl.evaluate(() => { window.__notificacoes = []; window.mostrarNotificacaoLocal = (n) => { window.__notificacoes.push(n); }; });
+      await pl.click('#modal-lembretes button:has-text("Mandar um teste")');
+      await pl.waitForFunction(() => /servidor ainda não está configurado/.test(document.getElementById('status-lembretes').textContent), null, { timeout: 5000 });
+      esperar((await pl.evaluate(() => window.__notificacoes.length)) === 1, 'não mostrou o aviso de teste');
+    });
+
+    await caso('com o painel aberto, o próprio app avisa antes do compromisso (uma vez só)', async () => {
+      const titulo = await pl.evaluate(() => {
+        // O Chromium sem tela informa "denied" mesmo com a permissão dada ao contexto
+        Object.defineProperty(Notification, 'permission', { get: () => 'granted', configurable: true });
+        window.__notificacoes = [];
+        const inicio = new Date(Date.now() + 20 * 60000);
+        const hora = `${String(inicio.getHours()).padStart(2, '0')}:${String(inicio.getMinutes()).padStart(2, '0')}`;
+        anotacoesAgendaCache.teste = { tipo: 'compromisso', data: chaveDataISO(inicio), horaInicio: hora, texto: 'Reunião' };
+        anotacoesAgendaCache.longe = { tipo: 'compromisso', data: chaveDataISO(inicio), horaInicio: '', texto: 'Sem hora' };
+        verificarLembretesLocais();
+        verificarLembretesLocais();
+        delete anotacoesAgendaCache.teste; delete anotacoesAgendaCache.longe;
+        return `Compromisso às ${hora}`;
+      });
+      const avisos = await pl.evaluate(() => window.__notificacoes);
+      esperar(avisos.length === 1 && avisos[0].titulo === titulo && /Reunião/.test(avisos[0].corpo), 'avisos: ' + JSON.stringify(avisos));
+    });
+
+    await caso('professor desliga os lembretes neste aparelho', async () => {
+      await pl.click('#modal-lembretes button:has-text("Desligar neste aparelho")');
+      await pl.waitForSelector('#btn-ligar-lembretes', { timeout: 5000 });
+      const total = await pl.evaluate(async () => (await db.collection('usuarios').doc(professorIdAtual).collection('dispositivos').get()).size);
+      esperar(total === 0, 'o aparelho continuou gravado');
+      esperar((await pl.textContent('#btn-lembretes-aulas')).includes('Lembretes antes das aulas'), 'o botão não voltou');
+    });
+    esperar(pl.erros.length === 0, 'erros: ' + pl.erros.join('; '));
+    await ctxL.close();
   }
 
   console.log('\nConta');

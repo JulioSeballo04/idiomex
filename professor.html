@@ -143,6 +143,7 @@
       <div class="agenda-topo">
         <button class="btn btn-secundario" onclick="abrirConfigAgenda()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-sliders-horizontal"></use></svg>Configurar disponibilidade</button>
         <button class="btn btn-secundario" onclick="abrirMarcarAula()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-calendar-plus"></use></svg>Marcar aula para um aluno</button>
+        <button class="btn btn-secundario btn-lembretes-aulas" id="btn-lembretes-aulas" onclick="abrirLembretes()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-bell"></use></svg><span class="rotulo-lembretes">Lembretes antes das aulas</span></button>
       </div>
       <div id="painel-hoje-professor"></div>
       <!-- Calendário à esquerda; ao lado, o formulário "Marcar aula" e o detalhe do dia escolhido -->
@@ -346,6 +347,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
 <script src="js/firebase-config.js"></script>
 <script src="js/util.js"></script>
 <script src="js/documentos.js"></script>
@@ -353,6 +355,7 @@
 <script src="js/tema.js"></script>
 <script src="js/professor.js"></script>
 <script src="js/sala-professor.js"></script>
+<script src="js/lembretes.js"></script>
 <script>
 function mostrarAbaProfessor(aba) {
   ["sala", "agenda", "alunos", "config"].forEach(function (nome) {

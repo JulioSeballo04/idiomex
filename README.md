@@ -116,6 +116,38 @@ firebase init hosting   # escolha "usar pasta atual" como public
 firebase deploy
 ```
 
+## Passo 6 — Lembretes antes das aulas (notificação no celular)
+
+O professor liga os lembretes na Agenda (botão **"Lembretes antes das aulas"**) e
+recebe uma notificação antes de cada aula marcada e de cada compromisso com horário,
+**mesmo com o app fechado**. Quem manda é a function `api/lembretes.js` (Vercel),
+chamada a cada 5 minutos por um agendador gratuito. Tudo grátis (o envio usa o
+Firebase Cloud Messaging, que é gratuito no plano Spark).
+
+1. **Chave do Firebase para o servidor:** Firebase Console → ⚙️ Configurações do
+   projeto → aba **Contas de serviço** → **Gerar nova chave privada**. Baixa um
+   arquivo `.json`. Guarde com cuidado: ele dá acesso total ao banco (nunca coloque
+   no GitHub nem mande por mensagem).
+2. **Vercel** → projeto → Settings → **Environment Variables**, adicione:
+   - `FIREBASE_SERVICE_ACCOUNT` = o conteúdo inteiro do arquivo `.json` (abra no
+     Bloco de Notas, copie tudo e cole);
+   - `CRON_SECRET` = uma senha longa inventada por você (ex: 30 letras e números).
+
+   Depois, em Deployments, faça **Redeploy** da última versão para valer.
+3. **Agendador** (grátis): crie uma conta em [cron-job.org](https://cron-job.org) →
+   **Create cronjob**:
+   - URL: `https://idiomex.vercel.app/api/lembretes?chave=SUA_CRON_SECRET`
+   - Execution schedule: **Every 5 minutes**
+   - Salve. Em "History" dá para ver se cada chamada respondeu 200.
+4. Pronto. No app, o botão **"Mandar um teste"** (na janela dos lembretes) confere a
+   ligação inteira: se o servidor ainda não estiver configurado, ele avisa.
+
+Observações: no iPhone, a notificação só funciona com o Idiomex instalado na tela de
+início (e aberto por ela ao ligar os lembretes). Enquanto o servidor não estiver
+configurado, o app avisa sozinho, mas só com o painel aberto. Para conferir a chamada
+do agendador, abra `https://idiomex.vercel.app/api/lembretes` no navegador: deve
+mostrar `{"pronto":true}`.
+
 ## Testes automáticos
 
 A pasta `testes/` tem testes das regras do Firestore, do servidor da IA e do

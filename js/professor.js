@@ -218,6 +218,7 @@ function escutarAnotacoesAgenda(uid) {
         anotacoesAgendaCache = {};
         snap.docs.forEach((d) => { anotacoesAgendaCache[d.id] = d.data(); });
         montarCalendarioProfessor();
+        renderizarHojeProfessor();
       },
       (erro) => console.warn("Não foi possível carregar as anotações da agenda:", erro)
     );
@@ -1499,6 +1500,7 @@ function renderizarHojeProfessor() {
   renderizarDestaqueProximaAula(proxima, proximas, agora, hojeIso, amanhaIso);
 
   container.innerHTML = `
+    ${montarCompromissosProximos(hojeIso, amanhaIso)}
     ${atrasadas.length ? `
       <div class="cartao-pedidos-reposicao" id="confirmar-aulas">
         <h3>${atrasadas.length === 1 ? "1 aula para confirmar" : `${atrasadas.length} aulas para confirmar`}</h3>
@@ -2400,7 +2402,10 @@ function montarCalendarioProfessor() {
   const celulas = [];
   for (let i = 0; i < offsetInicio; i++) celulas.push(`<div class="cal-day cal-empty"></div>`);
   const diasComNota = new Set(
-    Object.values(anotacoesAgendaCache).filter((n) => n.texto && n.data).map((n) => n.data)
+    Object.values(anotacoesAgendaCache).filter((n) => n.texto && n.data && n.tipo !== "compromisso").map((n) => n.data)
+  );
+  const diasComCompromisso = new Set(
+    Object.values(anotacoesAgendaCache).filter((n) => n.tipo === "compromisso" && n.data).map((n) => n.data)
   );
 
   for (let dia = 1; dia <= diasNoMes; dia++) {
@@ -2430,6 +2435,7 @@ function montarCalendarioProfessor() {
         <span class="cal-num">${dia}</span>
         ${contagem > 0 ? `<span class="cal-dot">${contagem}</span>` : ""}
         ${temNota ? `<span class="cal-nota" title="Tem anotação">${icone("pencil")}</span>` : ""}
+        ${diasComCompromisso.has(dataIso) ? `<span class="cal-compromisso" title="Tem compromisso">${icone("bell")}</span>` : ""}
         ${variosIdiomas && idiomasPorDia[dataIso] ? `<span class="cal-idiomas">${[...idiomasPorDia[dataIso]].map((id) => `<i style="background:${IDIOMAS[id].cor}" title="${IDIOMAS[id].nome}"></i>`).join("")}</span>` : ""}
       </div>
     `);
@@ -2467,6 +2473,7 @@ function montarCalendarioProfessor() {
         <span><span class="dot dot-nao-atende"></span> Não atende</span>
         <span><span class="dot dot-ajustado"></span> Horário ajustado só nesse dia</span>
         <span><span class="legenda-nota">${icone("pencil")}</span> Tem anotação</span>
+        <span><span class="legenda-compromisso">${icone("bell")}</span> Compromisso</span>
         ${variosIdiomas ? idiomasAtuaisProfessor.map((id) => `<span><i class="dot" style="background:${IDIOMAS[id].cor}"></i> Aula de ${IDIOMAS[id].nome}</span>`).join("") : ""}
       </div>
     </div>
@@ -2602,6 +2609,20 @@ function renderizarDetalheDiaProfessor() {
           <button class="btn btn-secundario btn-mini" onclick="abrirMarcarAula('', diaSelecionadoProfessor)">Marcar aula neste dia</button>
         </div>
         <div id="lista-aulas-dia-professor"></div>
+        <div class="compromissos-dia-professor">
+          <h4>${icone("bell")} Compromissos (só você vê)</h4>
+          <div id="lista-compromissos-dia"></div>
+          <form class="form-compromisso" onsubmit="event.preventDefault(); adicionarCompromisso();">
+            <input type="text" id="compromisso-texto" placeholder="Ex: médico, reunião, viagem..." maxlength="200" required>
+            <div class="horas-compromisso">
+              <label>Das <input type="time" id="compromisso-inicio"></label>
+              <label>às <input type="time" id="compromisso-fim"></label>
+            </div>
+            <button type="submit" class="btn btn-secundario btn-mini" id="btn-adicionar-compromisso">Adicionar compromisso</button>
+          </form>
+          <p class="dica-compromisso">Sem horário, vale para o dia todo. Com horário, você recebe o lembrete antes (se os lembretes estiverem ligados). Para os alunos não marcarem aula nesse horário, ajuste o horário do dia logo abaixo.</p>
+          <p class="status-msg" id="status-compromisso"></p>
+        </div>
         <div id="anotacoes-dia-wrap"></div>
         <div id="editor-dia-professor-wrap"></div>
       </div>
@@ -2611,6 +2632,7 @@ function renderizarDetalheDiaProfessor() {
 
   document.getElementById("titulo-dia-professor").textContent = formatarDataBR(diaSelecionadoProfessor);
   document.getElementById("lista-aulas-dia-professor").innerHTML = montarListaAulasDia(diaSelecionadoProfessor);
+  document.getElementById("lista-compromissos-dia").innerHTML = montarListaCompromissos(diaSelecionadoProfessor);
 
   // Anotações: só reconstrói quando muda o conjunto de aulas do dia ou algo salvo;
   // o que está digitado e não salvo é preservado em rascunhosAnotacoes.
@@ -2645,6 +2667,92 @@ function aulasAtivasDoDia(dataIso) {
   return aulasCache
     .filter((a) => a.data === dataIso && noFiltroAgenda(a) && a.status !== "cancelada" && a.status !== "recusada")
     .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+}
+
+// -------------------- COMPROMISSOS DA AGENDA --------------------
+// Lembretes pessoais do professor num dia (médico, reunião...), com horário opcional.
+// Ficam em anotacoesAgenda com tipo "compromisso" (privado: só o professor lê).
+
+function compromissosDoDia(dataIso) {
+  return Object.entries(anotacoesAgendaCache)
+    .filter(([, n]) => n.tipo === "compromisso" && n.data === dataIso)
+    .map(([id, n]) => ({ id, ...n }))
+    .sort((a, b) => (a.horaInicio || "").localeCompare(b.horaInicio || ""));
+}
+
+function horarioDoCompromisso(c) {
+  return c.horaInicio ? faixaHorario(c.horaInicio, c.horaFim) : "Dia todo";
+}
+
+function montarListaCompromissos(dataIso) {
+  const lista = compromissosDoDia(dataIso);
+  if (!lista.length) return "";
+  return `<ul class="lista-compromissos">${lista.map((c) => `
+    <li class="item-compromisso">
+      <span class="hora-compromisso">${escapeHtml(horarioDoCompromisso(c))}</span>
+      <span class="texto-compromisso">${escapeHtml(c.texto)}</span>
+      <button type="button" class="btn-remover-compromisso" title="Apagar compromisso" aria-label="Apagar compromisso" onclick="removerCompromisso('${c.id}')">${icone("x")}</button>
+    </li>`).join("")}</ul>`;
+}
+
+async function adicionarCompromisso() {
+  const dataIso = diaSelecionadoProfessor;
+  const campoTexto = document.getElementById("compromisso-texto");
+  const inicio = document.getElementById("compromisso-inicio").value;
+  const fim = document.getElementById("compromisso-fim").value;
+  const status = document.getElementById("status-compromisso");
+  const texto = campoTexto.value.trim();
+  if (!dataIso || !texto) { status.textContent = "Escreva o compromisso."; return; }
+  if (fim && !inicio) { status.textContent = "Coloque também o horário de início."; return; }
+  if (inicio && fim && fim <= inicio) { status.textContent = "O fim tem que ser depois do início."; return; }
+  // Limpa o formulário na hora (o compromisso já aparece na lista); se falhar, devolve o texto
+  const campos = ["compromisso-texto", "compromisso-inicio", "compromisso-fim"].map((id) => document.getElementById(id));
+  const digitado = campos.map((c) => c.value);
+  campos.forEach((c) => { c.value = ""; });
+  status.textContent = "";
+  try {
+    await db.collection("usuarios").doc(professorIdAtual).collection("anotacoesAgenda").add({
+      tipo: "compromisso",
+      data: dataIso,
+      texto,
+      horaInicio: inicio || "",
+      horaFim: inicio ? fim || "" : "",
+      atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (e) {
+    console.error(e);
+    campos.forEach((c, i) => { if (c.isConnected && !c.value) c.value = digitado[i]; });
+    status.textContent = "Não foi possível salvar o compromisso agora. Tente de novo.";
+  }
+}
+
+async function removerCompromisso(id) {
+  const c = anotacoesAgendaCache[id];
+  if (!c || !(await confirmar(`Apagar o compromisso "${c.texto}"?`, { botao: "Apagar", perigo: true }))) return;
+  try {
+    await db.collection("usuarios").doc(professorIdAtual).collection("anotacoesAgenda").doc(id).delete();
+  } catch (e) {
+    console.error(e);
+    avisar("Não foi possível apagar agora. Tente de novo.");
+  }
+}
+
+// Compromissos de hoje e amanhã, no topo da Agenda
+function montarCompromissosProximos(hojeIso, amanhaIso) {
+  const agora = new Date();
+  const horaAgora = `${String(agora.getHours()).padStart(2, "0")}:${String(agora.getMinutes()).padStart(2, "0")}`;
+  const proximos = [hojeIso, amanhaIso].flatMap((d) => compromissosDoDia(d).filter((c) =>
+    d !== hojeIso || !c.horaInicio || (c.horaFim || c.horaInicio) >= horaAgora));
+  if (!proximos.length) return "";
+  return `
+    <div class="cartao-compromissos-proximos" id="compromissos-proximos">
+      <h3>${icone("bell")} Seus compromissos</h3>
+      <ul class="lista-compromissos">${proximos.map((c) => `
+        <li class="item-compromisso">
+          <span class="hora-compromisso">${escapeHtml(rotuloDiaPainel(c.data, hojeIso, amanhaIso))} · ${escapeHtml(horarioDoCompromisso(c))}</span>
+          <span class="texto-compromisso">${escapeHtml(c.texto)}</span>
+        </li>`).join("")}</ul>
+    </div>`;
 }
 
 // Muda quando as aulas do dia mudam ou quando uma anotação salva daquele dia muda

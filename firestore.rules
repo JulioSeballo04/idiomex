@@ -397,6 +397,17 @@ service cloud.firestore {
       match /anotacoesAgenda/{notaId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
+
+      // Aparelhos do professor que recebem lembretes antes das aulas (notificação no
+      // celular). Só o dono lê e grava; o servidor (api/lembretes.js) lê com a conta
+      // de serviço. O "token" é o endereço de notificação do aparelho.
+      match /dispositivos/{dispositivoId} {
+        allow read, delete: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null && request.auth.uid == userId &&
+          request.resource.data.token is string &&
+          request.resource.data.token.size() > 0 && request.resource.data.token.size() < 4096 &&
+          request.resource.data.antecedencia in [15, 30, 60, 120];
+      }
     }
 
     // Aulas agendadas. Coleção no nível raiz (não dentro de "usuarios") porque tanto o
