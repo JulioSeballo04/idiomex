@@ -1305,3 +1305,70 @@ html[data-tema="noturno"] .btn-destaque.btn-marcar-aula:hover { background: #B83
   font-size: 0.95rem;
 }
 .form-email input:focus { outline: 2px solid var(--acento); outline-offset: 0; border-color: transparent; }
+
+/* ---------- Compromissos da agenda do professor ---------- */
+.cal-day .cal-compromisso {
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  font-size: 0.62rem;
+  line-height: 1;
+  color: #C27A00;
+}
+.cal-compromisso .icone, .legenda-compromisso .icone { width: 0.85em; height: 0.85em; vertical-align: -0.1em; }
+.cal-day.is-selected .cal-compromisso { color: #fff; }
+.legenda-compromisso { font-size: 0.72rem; color: #C27A00; line-height: 1; }
+.compromissos-dia-professor { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--borda); }
+.compromissos-dia-professor h4 { font-size: 0.85rem; margin: 0 0 0.6rem; display: flex; align-items: center; gap: 0.35rem; }
+.lista-compromissos { list-style: none; margin: 0 0 0.6rem; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.item-compromisso {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 10px;
+  background: #FFF4D6;
+  border: 1px solid #F0C75E;
+  color: #5C4300;
+  font-size: 0.88rem;
+}
+html[data-tema="noturno"] .item-compromisso { background: #3A3016; border-color: #7A6220; color: #F5E3B0; }
+.hora-compromisso { font-weight: 700; white-space: nowrap; }
+.texto-compromisso { flex: 1; overflow-wrap: anywhere; }
+.btn-remover-compromisso { background: none; border: none; color: inherit; opacity: 0.7; cursor: pointer; padding: 0.1rem; display: inline-flex; }
+.btn-remover-compromisso:hover { opacity: 1; }
+.form-compromisso { display: flex; flex-direction: column; gap: 0.45rem; }
+.form-compromisso input[type=text], .form-compromisso input[type=time] {
+  padding: 0.5em 0.6em; border-radius: 8px; border: 1px solid var(--borda); background: var(--bg); color: var(--ink); font: inherit; font-size: 0.88rem;
+}
+.horas-compromisso { display: flex; flex-wrap: wrap; gap: 0.6rem; font-size: 0.85rem; color: var(--ink-soft); }
+.horas-compromisso label { display: inline-flex; align-items: center; gap: 0.35rem; }
+.form-compromisso .btn { align-self: flex-start; }
+.dica-compromisso { font-size: 0.75rem; color: var(--ink-soft); margin: 0.4rem 0 0; }
+.cartao-compromissos-proximos {
+  margin-bottom: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  background: var(--bg-cartao);
+  border: 1px solid #F0C75E;
+}
+.cartao-compromissos-proximos h3 { font-size: 0.95rem; margin: 0 0 0.6rem; display: flex; align-items: center; gap: 0.4rem; }
+.cartao-compromissos-proximos .lista-compromissos { margin: 0; }
+
+/* ---------- Lembretes antes das aulas ---------- */
+.btn-lembretes-aulas.lembretes-ligados { border-color: var(--acento); color: var(--acento-forte); }
+.modal-conteudo.modal-lembretes { max-width: 460px; }
+.modal-lembretes h3 { display: flex; align-items: center; gap: 0.4rem; }
+.modal-lembretes p { font-size: 0.92rem; line-height: 1.5; }
+.dica-lembretes { color: var(--ink-soft); font-size: 0.85rem !important; }
+.estado-lembretes.ligado { display: flex; align-items: center; gap: 0.4rem; color: #2f9e57; font-weight: 700; }
+.campo-antecedencia { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: 0.9rem; margin: 0.4rem 0 1rem; }
+.campo-antecedencia select { padding: 0.4em 0.6em; border-radius: 8px; border: 1px solid var(--borda); background: var(--bg); color: var(--ink); font: inherit; }
+.acoes-lembretes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+.faixa-baixar-app { flex-wrap: wrap; }
+.texto-faixa-app { flex: 1 1 150px; }
+@media (max-width: 480px) {
+  .faixa-baixar-app { position: relative; padding-right: 2rem; }
+  .faixa-baixar-app .btn-fechar-faixa-app { position: absolute; top: 0.35rem; right: 0.4rem; }
+  .texto-faixa-app { flex-basis: 100%; }
+}
