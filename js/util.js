@@ -463,52 +463,68 @@ function gerarSlotsDoDia(blocos, duracaoMinutos, intervaloMinutos) {
   return [...new Set(slots)].sort();
 }
 
-// Horários livres de um dia, ajustados às aulas que já existem: quando um horário
-// bate com uma aula marcada FORA da grade (ex: 17:30, um horário sugerido pelo
-// aluno), os próximos passam a contar a partir do fim dessa aula + o intervalo.
-// Uma aula num horário normal da grade só tira aquele horário, como sempre.
-// Antes da aula fora da grade, também aparece um horário que termina quando ela
-// começa (encaixe), se couber na disponibilidade. Ex: aulas de 1h na grade
-// 16:00, 17:00, 18:00... e uma aula das 17:30 às 18:30: os horários viram 16:00,
-// 18:30, 19:30... — sem buraco perdido depois da aula fora da grade.
+// Horários livres de um dia, ajustados às aulas que já existem. O dia é dividido
+// nos espaços livres entre as aulas; em cada espaço:
+// - depois de uma aula fora da grade (ex: 16:30–17:30), os horários começam no fim
+//   dela + o intervalo (17:30, 18:30...);
+// - antes de uma aula fora da grade, os horários são deslocados para terminar bem
+//   quando ela começa (aula às 16:30 → ...13:30, 14:30, 15:30);
+// - entre aulas normais (ou sem aula), vale a grade do professor (10:00, 11:00...).
+// Assim nenhum pedaço de horário fica perdido ao redor de um horário sugerido.
+// "Fora da grade" = marcada de propósito fora dela (horário sugerido pelo aluno ou
+// "outro horário" do professor). Uma aula antiga que só ficou desalinhada porque o
+// professor mudou a duração das aulas não mexe na grade: só tira o que bate com ela.
 function gerarSlotsLivres(blocos, duracaoMinutos, intervaloMinutos, aulasMarcadas) {
   const intervalo = intervaloMinutos || 0;
+  const passo = duracaoMinutos + intervalo;
   const ocupados = (aulasMarcadas || []).map((a) => {
     const inicio = minutosDoHorario(a.horaInicio);
-    return [inicio, a.horaFim ? minutosDoHorario(a.horaFim) : inicio + duracaoMinutos];
+    return [inicio, a.horaFim ? minutosDoHorario(a.horaFim) : inicio + duracaoMinutos, !!(a.horarioSugerido || a.foraDaGrade)];
   });
   const paraHora = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
   const slots = [];
-  const passo = duracaoMinutos + intervalo;
   (blocos || []).forEach((bloco) => {
     const inicioDoBloco = minutosDoHorario(bloco.inicio);
     const fimDoBloco = minutosDoHorario(bloco.fim);
-    // Aula "na grade": começa num dos horários normais deste período
-    const naGrade = (inicio) => inicio >= inicioDoBloco && (inicio - inicioDoBloco) % passo === 0;
-    let atual = inicioDoBloco;
-    while (atual + duracaoMinutos <= fimDoBloco) {
-      const fim = atual + duracaoMinutos;
-      const choques = ocupados.filter(([oi, of]) => atual < of && oi < fim);
-      if (!choques.length) {
-        slots.push(paraHora(atual));
-        atual = fim + intervalo;
-      } else if (choques.some(([oi]) => !naGrade(oi))) {
-        // Aula fora da grade no caminho: os próximos horários começam depois dela
-        atual = Math.max(atual + 1, Math.max(...choques.map(([, of]) => of)) + intervalo);
+    // Aulas que caem neste período, juntando as que se encostam ou se sobrepõem
+    const juntas = [];
+    ocupados.filter(([oi, of]) => oi < fimDoBloco && of > inicioDoBloco)
+      .sort((a, b) => a[0] - b[0])
+      .forEach(([oi, of, fora]) => {
+        const ultima = juntas[juntas.length - 1];
+        if (ultima && oi <= ultima[1]) {
+          if (of >= ultima[1]) { ultima[1] = of; ultima[3] = fora; }
+        } else {
+          juntas.push([oi, of, fora, fora]); // [início, fim, começa fora da grade?, termina fora da grade?]
+        }
+      });
+    // Espaços livres: [início, aula fora da grade antes?, fim, aula fora da grade depois?]
+    const espacos = [];
+    let inicioDoEspaco = inicioDoBloco;
+    let foraAntes = false;
+    juntas.forEach(([oi, of, foraNoInicio, foraNoFim]) => {
+      espacos.push([inicioDoEspaco, foraAntes, oi, foraNoInicio]);
+      inicioDoEspaco = of;
+      foraAntes = foraNoFim;
+    });
+    espacos.push([inicioDoEspaco, foraAntes, fimDoBloco, false]);
+
+    espacos.forEach(([ini, foraAntesDoEspaco, fim, foraDepoisDoEspaco]) => {
+      // Depois/antes de aula fora da grade, respeita o intervalo; nas outras, como sempre
+      const de = Math.max(inicioDoBloco, foraAntesDoEspaco ? ini + intervalo : ini);
+      const ate = Math.min(fimDoBloco, foraDepoisDoEspaco ? fim - intervalo : fim);
+      if (ate - de < duracaoMinutos) return;
+      // A grade não encosta na aula fora da grade de antes / de depois?
+      const desalinhadoNoComeco = foraAntesDoEspaco && (de - inicioDoBloco) % passo !== 0;
+      const desalinhadoNoFim = foraDepoisDoEspaco && (ate - duracaoMinutos - inicioDoBloco) % passo !== 0;
+      if (desalinhadoNoComeco) {
+        for (let t = de; t + duracaoMinutos <= ate; t += passo) slots.push(paraHora(t));
+      } else if (desalinhadoNoFim) {
+        for (let t = ate - duracaoMinutos; t >= de; t -= passo) slots.push(paraHora(t));
       } else {
-        atual += passo; // aula num horário normal: só pula esse horário
+        const primeiro = inicioDoBloco + Math.ceil((de - inicioDoBloco) / passo) * passo;
+        for (let t = primeiro; t + duracaoMinutos <= ate; t += passo) slots.push(paraHora(t));
       }
-    }
-    // Encaixe ANTES de uma aula fora da grade: um horário que termina bem quando ela
-    // começa (ex: aula às 16:30 → oferece 15:30, além do 15:00 da grade), para não
-    // sobrar meia hora perdida antes dela. Só dentro da disponibilidade e sem bater
-    // com outra aula.
-    ocupados.filter(([oi]) => !naGrade(oi)).forEach(([oi]) => {
-      const inicio = oi - intervalo - duracaoMinutos;
-      const fim = inicio + duracaoMinutos;
-      if (inicio < inicioDoBloco || fim > fimDoBloco) return;
-      if (ocupados.some(([o1, o2]) => inicio < o2 && o1 < fim)) return;
-      slots.push(paraHora(inicio));
     });
   });
   return [...new Set(slots)].sort();
@@ -827,7 +843,7 @@ function linkWhatsapp(numeroBruto, mensagem) {
 // Usa uma transação: o ID do documento é determinístico ("professor_data_hora"), então
 // duas tentativas simultâneas de marcar o MESMO horário disputam o mesmo documento — a
 // segunda falha com um erro claro, em vez de sobrescrever silenciosamente a primeira.
-async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, alunoId, alunoNome, reposicao, idioma, status, horarioSugerido) {
+async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, alunoId, alunoNome, reposicao, idioma, status, horarioSugerido, foraDaGrade) {
   const aulaId = `${professorId}_${data}_${horaInicio.replace(":", "")}`;
   const ref = db.collection("aulas").doc(aulaId);
 
@@ -844,6 +860,7 @@ async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, a
       idioma: idiomaValido(idioma),
       status: status === "pendente" ? "pendente" : "agendada",
       ...(horarioSugerido ? { horarioSugerido: true } : {}),
+      ...(foraDaGrade ? { foraDaGrade: true } : {}),
       criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     });
   });
