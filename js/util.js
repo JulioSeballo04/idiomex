@@ -463,6 +463,44 @@ function gerarSlotsDoDia(blocos, duracaoMinutos, intervaloMinutos) {
   return [...new Set(slots)].sort();
 }
 
+// Horários livres de um dia, ajustados às aulas que já existem: quando um horário
+// bate com uma aula marcada FORA da grade (ex: 17:30, um horário sugerido pelo
+// aluno), os próximos passam a contar a partir do fim dessa aula + o intervalo.
+// Uma aula num horário normal da grade só tira aquele horário, como sempre. Ex: aulas de 1h na grade
+// 16:00, 17:00, 18:00... e uma aula das 17:30 às 18:30: os horários viram 16:00,
+// 18:30, 19:30... — sem buraco perdido depois da aula fora da grade.
+function gerarSlotsLivres(blocos, duracaoMinutos, intervaloMinutos, aulasMarcadas) {
+  const intervalo = intervaloMinutos || 0;
+  const ocupados = (aulasMarcadas || []).map((a) => {
+    const inicio = minutosDoHorario(a.horaInicio);
+    return [inicio, a.horaFim ? minutosDoHorario(a.horaFim) : inicio + duracaoMinutos];
+  });
+  const paraHora = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+  const slots = [];
+  const passo = duracaoMinutos + intervalo;
+  (blocos || []).forEach((bloco) => {
+    const inicioDoBloco = minutosDoHorario(bloco.inicio);
+    const fimDoBloco = minutosDoHorario(bloco.fim);
+    // Aula "na grade": começa num dos horários normais deste período
+    const naGrade = (inicio) => inicio >= inicioDoBloco && (inicio - inicioDoBloco) % passo === 0;
+    let atual = inicioDoBloco;
+    while (atual + duracaoMinutos <= fimDoBloco) {
+      const fim = atual + duracaoMinutos;
+      const choques = ocupados.filter(([oi, of]) => atual < of && oi < fim);
+      if (!choques.length) {
+        slots.push(paraHora(atual));
+        atual = fim + intervalo;
+      } else if (choques.some(([oi]) => !naGrade(oi))) {
+        // Aula fora da grade no caminho: os próximos horários começam depois dela
+        atual = Math.max(atual + 1, Math.max(...choques.map(([, of]) => of)) + intervalo);
+      } else {
+        atual += passo; // aula num horário normal: só pula esse horário
+      }
+    }
+  });
+  return [...new Set(slots)].sort();
+}
+
 // Tira os horários que batem com alguma aula já marcada. Compara intervalos (e não
 // só o horário de início): se o professor mudou a duração das aulas, uma aula das
 // 09:00 às 09:50 ainda bloqueia um horário novo das 09:30.
@@ -692,14 +730,15 @@ function preencherMensagemWhatsapp(modelo, dados) {
 }
 
 // Dados de uma aula para os campos da mensagem
-function dadosDaMensagemWhatsapp({ aluno, data, hora, modalidade, idioma, mostrarIdioma, reposicao, pedido }) {
+function dadosDaMensagemWhatsapp({ aluno, data, hora, modalidade, idioma, mostrarIdioma, reposicao, pedido, horarioSugerido }) {
   return {
     aluno: aluno || "",
     data: data ? formatarDataBR(data) : "",
     horario: hora || "",
     modalidade: modalidade === "online" ? "Online" : modalidade === "presencial" ? "Presencial" : "",
     idioma: mostrarIdioma && idioma ? IDIOMAS[idiomaValido(idioma)].nome : "",
-    tipo: pedido ? "Pedido de reposição (aguardando sua aprovação)" : reposicao ? "Reposição" : ""
+    tipo: horarioSugerido ? `Pedido de horário fora da agenda${reposicao ? ", reposição" : ""} (aguardando sua aprovação)`
+      : pedido ? "Pedido de reposição (aguardando sua aprovação)" : reposicao ? "Reposição" : ""
   };
 }
 
@@ -775,7 +814,7 @@ function linkWhatsapp(numeroBruto, mensagem) {
 // Usa uma transação: o ID do documento é determinístico ("professor_data_hora"), então
 // duas tentativas simultâneas de marcar o MESMO horário disputam o mesmo documento — a
 // segunda falha com um erro claro, em vez de sobrescrever silenciosamente a primeira.
-async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, alunoId, alunoNome, reposicao, idioma, status) {
+async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, alunoId, alunoNome, reposicao, idioma, status, horarioSugerido) {
   const aulaId = `${professorId}_${data}_${horaInicio.replace(":", "")}`;
   const ref = db.collection("aulas").doc(aulaId);
 
@@ -791,6 +830,7 @@ async function agendarAula(professorId, data, horaInicio, horaFim, modalidade, a
       reposicao: !!reposicao,
       idioma: idiomaValido(idioma),
       status: status === "pendente" ? "pendente" : "agendada",
+      ...(horarioSugerido ? { horarioSugerido: true } : {}),
       criadoEm: firebase.firestore.FieldValue.serverTimestamp()
     });
   });

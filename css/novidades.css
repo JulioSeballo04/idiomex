@@ -1372,3 +1372,22 @@ html[data-tema="noturno"] .item-compromisso { background: #3A3016; border-color:
   .faixa-baixar-app .btn-fechar-faixa-app { position: absolute; top: 0.35rem; right: 0.4rem; }
   .texto-faixa-app { flex-basis: 100%; }
 }
+
+/* ---------- Horário sugerido pelo aluno (fora da agenda) ---------- */
+.badge-horario-sugerido { background: #E4EEFB; color: #2B5C9E; }
+html[data-tema="noturno"] .badge-horario-sugerido { background: rgba(110, 160, 230, 0.16); color: #8DB8F0; }
+.sugerir-horario { margin-top: 0.8rem; }
+.sugerir-horario .link-trocar { font-size: 0.88rem; }
+.sugerir-horario.aberto {
+  padding: 0.8rem 0.9rem;
+  border: 1px dashed var(--borda);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.sugerir-horario label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; }
+.linha-horario-sugerido { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.linha-horario-sugerido input[type=time] {
+  padding: 0.5em 0.6em; border-radius: 8px; border: 1px solid var(--borda); background: var(--bg-cartao); color: var(--ink); font: inherit;
+}
+.sugerir-horario .dica-plano { margin: 0.5rem 0 0; }
+.sugerir-horario .erro-agendamento:empty { display: none; }

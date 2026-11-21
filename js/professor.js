@@ -90,7 +90,7 @@ auth.onAuthStateChanged(async (user) => {
 // O sino mostra quantas ainda não foram lidas; abrir a lista marca todas como lidas.
 
 let notificacoesProfessorCache = [];
-const ICONES_NOTIFICACAO_PROFESSOR = { "aluno-marcou-aula": "calendar-plus", "aluno-pediu-reposicao": "ticket", "aluno-cancelou-aula": "circle-x" };
+const ICONES_NOTIFICACAO_PROFESSOR = { "aluno-marcou-aula": "calendar-plus", "aluno-pediu-reposicao": "ticket", "aluno-sugeriu-horario": "calendar-plus", "aluno-cancelou-aula": "circle-x" };
 
 function escutarNotificacoesProfessor(uid) {
   db.collection("usuarios").doc(uid).collection("notificacoes")
@@ -1539,14 +1539,16 @@ function renderizarHojeProfessor() {
       </div>` : ""}
     ${pedidos.length ? `
       <div class="cartao-pedidos-reposicao" id="pedidos-reposicao">
-        <h3>${icone("ticket")} ${pedidos.length === 1 ? "1 pedido de reposição" : `${pedidos.length} pedidos de reposição`} para aprovar</h3>
-        <p>O aluno marcou uma reposição sem ter crédito. O horário fica reservado até você decidir. Aprovar já conta como 1 crédito usado.</p>
+        <h3>${icone("ticket")} ${pedidos.length === 1 ? "1 pedido" : `${pedidos.length} pedidos`} para aprovar</h3>
+        <p>O horário fica reservado até você decidir.${pedidos.some((a) => a.horarioSugerido) ? " <strong>Horário sugerido</strong>: o aluno quer um horário fora da sua agenda." : ""}${pedidos.some((a) => a.reposicao && !a.horarioSugerido) ? " Reposição sem crédito: aprovar já conta como 1 crédito usado." : ""}</p>
         ${pedidos.map((a) => `
           <div class="cartao-aula">
             <div class="aula-info">
               <strong>${escapeHtml(a.alunoNome)}</strong>
               <span>${escapeHtml(rotuloDiaPainel(a.data, hojeIso, amanhaIso))} · ${escapeHtml(faixaHorario(a.horaInicio, a.horaFim))}</span>
               <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
+              ${a.horarioSugerido ? '<span class="badge-status badge-horario-sugerido">Horário sugerido</span>' : ""}
+              ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
               ${badgeIdiomaAula(a)}
               ${inicioDaAula(a) < agora ? '<span class="badge-status badge-status-recusada">Horário já passou</span>' : ""}
             </div>
@@ -1657,9 +1659,18 @@ async function aprovarPedidoReposicao(aulaId) {
   lote.update(db.collection("aulas").doc(aulaId), { status: "agendada" });
   if (aluno) {
     const idioma = idiomaValido(aula.idioma);
-    gravarReposicoesConcedidas(lote, aluno.id, idioma, creditosDoAluno(aluno.id, idioma).concedidas + duracaoDaAula(aula));
-    lote.set(db.collection("usuarios").doc(aluno.id).collection("notificacoes").doc(),
-      notificacaoParaAluno("reposicao-aprovada", `Seu pedido de reposição (${descricaoAula(aula)}) foi aprovado. A aula está confirmada.`, aula.idioma));
+    if (aula.reposicao && !aula.horarioSugerido) {
+      // Reposição sem crédito: aprovar concede o tempo da aula
+      gravarReposicoesConcedidas(lote, aluno.id, idioma, creditosDoAluno(aluno.id, idioma).concedidas + duracaoDaAula(aula));
+    } else if (aula.reposicao) {
+      // Horário sugerido que também é reposição: concede só o que faltar no saldo
+      const { concedidas, usadas } = creditosDoAluno(aluno.id, idioma);
+      const falta = usadas + duracaoDaAula(aula) - concedidas;
+      if (falta > 0) gravarReposicoesConcedidas(lote, aluno.id, idioma, concedidas + falta);
+    }
+    lote.set(db.collection("usuarios").doc(aluno.id).collection("notificacoes").doc(), aula.horarioSugerido
+      ? notificacaoParaAluno("horario-aprovado", `Seu pedido de horário (${descricaoAula(aula)}) foi aprovado. A aula está confirmada.`, aula.idioma)
+      : notificacaoParaAluno("reposicao-aprovada", `Seu pedido de reposição (${descricaoAula(aula)}) foi aprovado. A aula está confirmada.`, aula.idioma));
   }
   try {
     await lote.commit();
@@ -1672,12 +1683,14 @@ async function aprovarPedidoReposicao(aulaId) {
 async function recusarPedidoReposicao(aulaId) {
   const aula = aulasCache.find((a) => a.id === aulaId);
   if (!aula) return;
-  if (!(await confirmar(`Recusar o pedido de reposição de ${aula.alunoNome} (${descricaoAula(aula)})? O horário volta a ficar livre.`, { botao: "Recusar pedido", perigo: true }))) return;
+  const oPedido = aula.horarioSugerido ? "o pedido de horário" : "o pedido de reposição";
+  if (!(await confirmar(`Recusar ${oPedido} de ${aula.alunoNome} (${descricaoAula(aula)})? O horário volta a ficar livre.`, { botao: "Recusar pedido", perigo: true }))) return;
   const lote = db.batch();
   lote.update(db.collection("aulas").doc(aulaId), { status: "recusada" });
   if (alunosCache.some((a) => a.id === aula.alunoId)) {
-    lote.set(db.collection("usuarios").doc(aula.alunoId).collection("notificacoes").doc(),
-      notificacaoParaAluno("reposicao-recusada", `Seu pedido de reposição (${descricaoAula(aula)}) foi recusado pelo professor. O horário foi liberado.`, aula.idioma));
+    lote.set(db.collection("usuarios").doc(aula.alunoId).collection("notificacoes").doc(), aula.horarioSugerido
+      ? notificacaoParaAluno("horario-recusado", `Seu pedido de horário (${descricaoAula(aula)}) foi recusado pelo professor. Escolha outro horário na agenda.`, aula.idioma)
+      : notificacaoParaAluno("reposicao-recusada", `Seu pedido de reposição (${descricaoAula(aula)}) foi recusado pelo professor. O horário foi liberado.`, aula.idioma));
   }
   try {
     await lote.commit();
@@ -2848,6 +2861,7 @@ function montarListaAulasDia(dataIso) {
         <span>${escapeHtml(faixaHorario(a.horaInicio, a.horaFim))}</span>
         <span class="badge-modalidade badge-${a.modalidade}">${legendaModalidade(a.modalidade)}</span>
         ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
+        ${a.horarioSugerido && a.status === "pendente" ? '<span class="badge-status badge-horario-sugerido">Horário sugerido</span>' : ""}
         ${badgeIdiomaAula(a)}
         <span class="badge-status badge-status-${statusExibido(a)}">${legendaStatusAula(statusExibido(a))}</span>
       </div>
@@ -3354,7 +3368,8 @@ function horariosLivresDoDia(dataIso, idioma) {
     ? (override.fechado ? [] : override.blocos || [])
     : (config.disponibilidade || {})[chaveDiaSemana(dataIso)] || [];
   const duracao = config.duracaoAulaMinutos || DURACAO_PADRAO_MINUTOS;
-  return gerarSlotsDoDia(blocos, duracao, config.intervaloMinutos)
+  const doDia = aulasCache.filter((a) => a.data === dataIso && !a.remarcadaPara && STATUS_QUE_OCUPAM.includes(a.status));
+  return gerarSlotsLivres(blocos, duracao, config.intervaloMinutos, doDia)
     .filter((h) => slotsSemConflito([h], duracao, aulasQueOcupam(dataIso, h)).length > 0);
 }
 
