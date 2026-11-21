@@ -3539,7 +3539,9 @@ async function confirmarMarcarAula() {
   status.textContent = jaComecou ? "Registrando..." : "Marcando...";
   let aulaId;
   try {
-    aulaId = await agendarAula(professorIdAtual, data, hora, horaFim, modalidade, aluno.id, aluno.nome, reposicao, idioma, "agendada");
+    // "Outro horário" fora dos horários livres: os próximos horários do dia se ajustam a ela
+    const foraDaGrade = horarioManualMarcar && !horariosLivresDoDia(data, idiomaValido(idioma)).includes(hora);
+    aulaId = await agendarAula(professorIdAtual, data, hora, horaFim, modalidade, aluno.id, aluno.nome, reposicao, idioma, "agendada", false, foraDaGrade);
   } catch (e) {
     console.error(e);
     if (abaWhatsapp) abaWhatsapp.close();
