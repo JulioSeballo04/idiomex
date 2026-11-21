@@ -1594,11 +1594,13 @@ function dataDaqui(dias) {
     const r = await iris.evaluate(() => [
       gerarSlotsLivres([{ inicio: '14:00', fim: '21:00' }], 60, 0, []).join(' '),
       gerarSlotsLivres([{ inicio: '14:00', fim: '21:00' }], 60, 0, [{ horaInicio: '17:30', horaFim: '18:30' }]).join(' '),
-      gerarSlotsLivres([{ inicio: '08:00', fim: '12:00' }], 50, 10, [{ horaInicio: '09:00', horaFim: '09:50' }]).join(' ')
+      gerarSlotsLivres([{ inicio: '08:00', fim: '12:00' }], 50, 10, [{ horaInicio: '09:00', horaFim: '09:50' }]).join(' '),
+      gerarSlotsLivres([{ inicio: '10:00', fim: '17:00' }], 60, 0, [{ horaInicio: '16:30', horaFim: '17:30' }]).join(' ')
     ]);
     esperar(r[0] === '14:00 15:00 16:00 17:00 18:00 19:00 20:00', 'grade normal: ' + r[0]);
-    esperar(r[1] === '14:00 15:00 16:00 18:30 19:30', 'depois da aula das 17:30: ' + r[1]);
+    esperar(r[1] === '14:00 15:00 16:00 16:30 18:30 19:30', 'antes e depois da aula das 17:30: ' + r[1]);
     esperar(r[2] === '08:00 10:00 11:00', 'aula na grade continua igual: ' + r[2]);
+    esperar(r[3] === '10:00 11:00 12:00 13:00 14:00 15:00 15:30', 'encaixe antes da aula das 16:30: ' + r[3]);
   });
 
   await caso('aluno sugere um horário fora da agenda: vai como pedido e o professor aprova', async () => {

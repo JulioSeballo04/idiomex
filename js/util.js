@@ -466,7 +466,9 @@ function gerarSlotsDoDia(blocos, duracaoMinutos, intervaloMinutos) {
 // Horários livres de um dia, ajustados às aulas que já existem: quando um horário
 // bate com uma aula marcada FORA da grade (ex: 17:30, um horário sugerido pelo
 // aluno), os próximos passam a contar a partir do fim dessa aula + o intervalo.
-// Uma aula num horário normal da grade só tira aquele horário, como sempre. Ex: aulas de 1h na grade
+// Uma aula num horário normal da grade só tira aquele horário, como sempre.
+// Antes da aula fora da grade, também aparece um horário que termina quando ela
+// começa (encaixe), se couber na disponibilidade. Ex: aulas de 1h na grade
 // 16:00, 17:00, 18:00... e uma aula das 17:30 às 18:30: os horários viram 16:00,
 // 18:30, 19:30... — sem buraco perdido depois da aula fora da grade.
 function gerarSlotsLivres(blocos, duracaoMinutos, intervaloMinutos, aulasMarcadas) {
@@ -497,6 +499,17 @@ function gerarSlotsLivres(blocos, duracaoMinutos, intervaloMinutos, aulasMarcada
         atual += passo; // aula num horário normal: só pula esse horário
       }
     }
+    // Encaixe ANTES de uma aula fora da grade: um horário que termina bem quando ela
+    // começa (ex: aula às 16:30 → oferece 15:30, além do 15:00 da grade), para não
+    // sobrar meia hora perdida antes dela. Só dentro da disponibilidade e sem bater
+    // com outra aula.
+    ocupados.filter(([oi]) => !naGrade(oi)).forEach(([oi]) => {
+      const inicio = oi - intervalo - duracaoMinutos;
+      const fim = inicio + duracaoMinutos;
+      if (inicio < inicioDoBloco || fim > fimDoBloco) return;
+      if (ocupados.some(([o1, o2]) => inicio < o2 && o1 < fim)) return;
+      slots.push(paraHora(inicio));
+    });
   });
   return [...new Set(slots)].sort();
 }
