@@ -51,7 +51,7 @@ function escutarNotificacoes(uid) {
     }, (e) => console.warn("Não foi possível carregar as notificações:", e));
 }
 
-const ICONES_NOTIFICACAO = { "credito-reposicao": "ticket", "reposicao-aprovada": "circle-check", "reposicao-recusada": "circle-x",
+const ICONES_NOTIFICACAO = { "credito-reposicao": "ticket", "reposicao-aprovada": "circle-check", "reposicao-recusada": "circle-x", "horario-aprovado": "circle-check", "horario-recusado": "circle-x",
   "aula-nao-realizada": "ticket", "aula-marcada": "calendar-plus", "palavra-adicionada": "book-open", "documento-aula": "library" };
 
 // Cada notificação é de um idioma: o sino mostra só as do idioma que o aluno está
@@ -1399,7 +1399,7 @@ function mensagemCancelamentoPeloAluno(aula) {
 function cancelarMinhaAula(aulaId) {
   const aula = minhasAulasCache.find((a) => a.id === aulaId);
   if (!aula) return;
-  const oQue = aula.status === "pendente" ? "o pedido de reposição" : aula.reposicao ? "a reposição" : "a aula";
+  const oQue = aula.status === "pendente" ? (aula.horarioSugerido ? "o pedido de horário" : "o pedido de reposição") : aula.reposicao ? "a reposição" : "a aula";
   confirmarComWhatsapp({
     titulo: aula.status === "pendente" ? "Cancelar pedido" : "Cancelar aula",
     texto: `Cancelar ${oQue} de ${descricaoAulaParaProfessor(aula.data, aula.horaInicio, aula.idioma)}?`,
@@ -1673,10 +1673,10 @@ function situacaoDoPlano(dataIso) {
   return { limite, naSemana, semanaCheia: limite > 0 && naSemana >= limite, saldo, duracao: duracaoDoAgendamento() };
 }
 
-function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade, reposicao, idiomaAula, pedido) {
+function mensagemConfirmacaoAula(dataIso, horaInicio, modalidade, reposicao, idiomaAula, pedido, horarioSugerido) {
   return preencherMensagemWhatsapp(modeloMensagemWhatsapp(configAgendaProfessor, "confirmacao"), dadosDaMensagemWhatsapp({
     aluno: nomeDoAlunoAtual, data: dataIso, hora: horaInicio, modalidade,
-    idioma: idiomaAula, mostrarIdioma: idiomasParaAula().length > 1, reposicao, pedido
+    idioma: idiomaAula, mostrarIdioma: idiomasParaAula().length > 1, reposicao, pedido, horarioSugerido
   }));
 }
 
@@ -1708,7 +1708,7 @@ function renderizarAgendamento() {
     corpo.innerHTML = `
       <div class="agendamento-sucesso">
         <div class="selo-sucesso${c.pedido ? " selo-pedido" : ""}">${icone(c.pedido ? "hourglass" : "check")}</div>
-        <h3>${c.pedido ? "Pedido de reposição enviado" : c.registro ? "Aula registrada" : "Aula confirmada"}</h3>
+        <h3>${c.sugerido ? "Pedido de horário enviado" : c.pedido ? "Pedido de reposição enviado" : c.registro ? "Aula registrada" : "Aula confirmada"}</h3>
         ${c.pedido ? `<p class="dica-pedido-enviado">O horário está reservado. Você recebe uma notificação quando o professor aprovar ou recusar.</p>` : ""}
         ${c.registro && !c.pedido ? `<p class="dica-pedido-enviado">Seu professor foi avisado e vai confirmar que a aula aconteceu.</p>` : ""}
         <p>${escapeHtml(rotuloDiaCurto(c.data))} às ${escapeHtml(c.hora)} · ${escolheIdiomaNoAgendamento() ? `${IDIOMAS[c.idioma].nome} · ` : ""}${c.modalidade === "online" ? "Online" : "Presencial"}${c.reposicao ? " · Reposição" : ""}</p>
@@ -1745,7 +1745,7 @@ function renderizarAgendamento() {
   const cartaoDiaHorario = comIdioma && !agendamento.idioma ? `
     <div class="cartao-passo passo-bloqueado"><h4>Dia e horário</h4><p class="vazio">Escolha o idioma primeiro.</p></div>` : dataHoraEscolhidas ? `
     <div class="cartao-passo resumo-passo">
-      <div><strong>Dia e horário</strong><span>${escapeHtml(rotuloDiaCurto(agendamento.data))} às ${escapeHtml(agendamento.hora)}</span></div>
+      <div><strong>Dia e horário</strong><span>${escapeHtml(rotuloDiaCurto(agendamento.data))} às ${escapeHtml(agendamento.hora)}${agendamento.sugerido ? ' <span class="badge-status badge-horario-sugerido">horário sugerido</span>' : ""}</span></div>
       <button type="button" class="link-trocar" onclick="trocarDiaHorario()">trocar</button>
     </div>` : `
     <div class="cartao-passo">
@@ -1762,7 +1762,8 @@ function renderizarAgendamento() {
   // Com a semana cheia, a aula só pode ser reposição: com crédito, usa o crédito;
   // sem crédito, vira um pedido para o professor aprovar
   if (plano.semanaCheia) agendamento.reposicao = true;
-  const pedido = agendamento.reposicao && !reposicaoCabeNoSaldo(plano);
+  const pedidoReposicao = agendamento.reposicao && !reposicaoCabeNoSaldo(plano);
+  const pedido = pedidoReposicao || !!agendamento.sugerido;
   const linhasPlano = [];
   if (plano.limite > 0) {
     linhasPlano.push(agendamento.data
@@ -1785,11 +1786,12 @@ function renderizarAgendamento() {
       <div class="campo-agendamento campo-reposicao">
         <label class="rotulo-reposicao"><input type="checkbox" id="chk-reposicao" ${agendamento.reposicao ? "checked" : ""} ${plano.semanaCheia ? "disabled" : ""} onchange="agendamento.reposicao = this.checked; renderizarAgendamento()"> Esta aula é uma reposição</label>
         ${agendamento.reposicao && !pedido ? `<p class="dica-reposicao">${plano.semanaCheia ? "As aulas do seu plano nessa semana já estão marcadas — e" : "E"}sta aula vai usar ${formatarMinutos(plano.duracao)} da sua reposição e já fica confirmada.</p>` : ""}
-        ${pedido ? `<p class="dica-reposicao aviso-pedido">${plano.semanaCheia ? "As aulas do seu plano nessa semana já estão marcadas e v" : "V"}ocê ${!plano.saldo ? "não tem crédito de reposição" : creditosDeReposicao(plano.saldo) < 1 ? `ainda não tem um crédito completo (tem ${formatarMinutos(plano.saldo)}; faltam ${faltaParaProximoCredito(plano.saldo)} — a cada 60 min de reposição você ganha 1 crédito)` : `tem só ${formatarMinutos(plano.saldo)} de reposição (a aula tem ${formatarMinutos(plano.duracao)})`}: esta aula vai como <strong>pedido de reposição</strong>. O horário fica reservado e seu professor precisa aprovar.</p>` : ""}
+        ${pedidoReposicao ? `<p class="dica-reposicao aviso-pedido">${plano.semanaCheia ? "As aulas do seu plano nessa semana já estão marcadas e v" : "V"}ocê ${!plano.saldo ? "não tem crédito de reposição" : creditosDeReposicao(plano.saldo) < 1 ? `ainda não tem um crédito completo (tem ${formatarMinutos(plano.saldo)}; faltam ${faltaParaProximoCredito(plano.saldo)} — a cada 60 min de reposição você ganha 1 crédito)` : `tem só ${formatarMinutos(plano.saldo)} de reposição (a aula tem ${formatarMinutos(plano.duracao)})`}: esta aula vai como <strong>pedido de reposição</strong>. O horário fica reservado e seu professor precisa aprovar.</p>` : ""}
       </div>
+      ${agendamento.sugerido ? `<p class="dica-reposicao aviso-pedido">O horário das ${escapeHtml(agendamento.hora)} está fora da agenda do professor: esta aula vai como <strong>pedido</strong>. O horário fica reservado e o professor aprova ou recusa.</p>` : ""}
       ${agendamento.erro ? `<p class="erro-agendamento" role="alert">${escapeHtml(agendamento.erro)}</p>` : ""}
       <button type="button" class="btn btn-primario btn-confirmar-agendamento" id="btn-confirmar-agendamento" onclick="confirmarAgendamento()" ${dataHoraEscolhidas && !agendamento.salvando ? "" : "disabled"}>
-        ${agendamento.salvando ? "Enviando..." : (pedido ? "Pedir reposição ao professor" : "Confirmar agendamento")}
+        ${agendamento.salvando ? "Enviando..." : agendamento.sugerido ? "Pedir este horário ao professor" : (pedido ? "Pedir reposição ao professor" : "Confirmar agendamento")}
       </button>
       ${dataHoraEscolhidas ? "" : `<p class="dica-confirmar">Escolha o dia e o horário para confirmar.</p>`}
     </div>`;
@@ -1816,6 +1818,7 @@ function trocarIdiomaDaAula() {
 
 function trocarDiaHorario() {
   agendamento.hora = null;
+  agendamento.sugerido = false;
   agendamento.erro = "";
   renderizarAgendamento();
 }
@@ -1923,6 +1926,8 @@ function horarioDoAgendamentoPassou(dataIso, hora) {
 async function selecionarDataAgendamento(dataEscolhida) {
   agendamento.data = dataEscolhida;
   agendamento.hora = null;
+  agendamento.sugerido = false;
+  agendamento.mostrarSugestao = false;
   agendamento.horarios = null;
   agendamento.erroHorarios = false;
   agendamento.erro = "";
@@ -1951,7 +1956,9 @@ async function carregarHorariosLivres(dataEscolhida) {
 
   const config = configDoAgendamento();
   const duracao = config.duracaoAulaMinutos || 50;
-  let horarios = slotsSemConflito(gerarSlotsDoDia(blocos, duracao, config.intervaloMinutos), duracao, marcadas);
+  let horarios = gerarSlotsLivres(blocos, duracao, config.intervaloMinutos, marcadas);
+  // Só os horários das outras aulas (nunca quem marcou): para conferir um horário sugerido
+  agendamento.ocupados = marcadas.map((a) => ({ horaInicio: a.horaInicio, horaFim: a.horaFim }));
 
   // Horários que já passaram continuam na lista: servem para registrar uma aula
   // que aconteceu e o aluno esqueceu de marcar (o professor confirma depois)
@@ -1974,7 +1981,7 @@ function renderizarHorariosAgendamento() {
     return;
   }
   if (agendamento.horarios.length === 0) {
-    container.innerHTML = `<p class="vazio">Nenhum horário livre em ${escapeHtml(rotuloDiaCurto(agendamento.data))}. Tente outro dia.</p>`;
+    container.innerHTML = `<p class="vazio">Nenhum horário livre em ${escapeHtml(rotuloDiaCurto(agendamento.data))}. Tente outro dia${podeSugerirHorario() ? " ou sugira um horário ao professor" : ""}.</p>${montarSugestaoHorario()}`;
     return;
   }
   const algumPassou = agendamento.horarios.some((h) => horarioDoAgendamentoPassou(agendamento.data, h));
@@ -1997,6 +2004,59 @@ function renderizarHorariosAgendamento() {
     };
     grade.appendChild(botao);
   });
+  container.insertAdjacentHTML("beforeend", montarSugestaoHorario());
+}
+
+// -------------------- HORÁRIO SUGERIDO PELO ALUNO --------------------
+// O horário que o aluno quer não está na agenda do professor (ex: 17:30): ele sugere
+// e a aula vai como pedido. O professor aprova ou recusa; enquanto isso o horário
+// fica reservado, e os próximos horários do dia se ajustam a ele.
+
+function podeSugerirHorario() {
+  return !!agendamento.data && agendamento.data >= dataDeHojeISO();
+}
+
+function montarSugestaoHorario() {
+  if (!podeSugerirHorario()) return "";
+  if (!agendamento.mostrarSugestao) {
+    return `<div class="sugerir-horario"><button type="button" class="link-trocar" id="btn-sugerir-horario" onclick="agendamento.mostrarSugestao = true; renderizarAgendamento()">Não achou o horário que queria? Sugira outro ao professor</button></div>`;
+  }
+  return `
+    <div class="sugerir-horario aberto">
+      <label for="input-horario-sugerido">Que horário você quer?</label>
+      <div class="linha-horario-sugerido">
+        <input type="time" id="input-horario-sugerido" step="300" autofocus>
+        <button type="button" class="btn btn-secundario btn-mini" id="btn-usar-horario-sugerido" onclick="usarHorarioSugerido()">Pedir este horário</button>
+      </div>
+      <p class="dica-plano">A aula dura ${formatarMinutos(duracaoDoAgendamento())}. Fora da agenda, ela vai como <strong>pedido</strong>: o professor aprova ou recusa.</p>
+      <p class="erro-agendamento" id="erro-horario-sugerido" role="alert"></p>
+    </div>`;
+}
+
+function usarHorarioSugerido() {
+  const campo = document.getElementById("input-horario-sugerido");
+  const erro = document.getElementById("erro-horario-sugerido");
+  const hora = (campo.value || "").slice(0, 5);
+  if (!/^\d{2}:\d{2}$/.test(hora)) { erro.textContent = "Escolha o horário."; return; }
+  if (horarioDoAgendamentoPassou(agendamento.data, hora)) { erro.textContent = "Esse horário já passou. Escolha outro."; return; }
+  const duracao = duracaoDoAgendamento();
+  const inicio = minutosDoHorario(hora);
+  if (inicio + duracao > 24 * 60) { erro.textContent = "A aula passaria da meia-noite. Escolha um horário mais cedo."; return; }
+  const choque = (agendamento.ocupados || []).find((a) => {
+    const oi = minutosDoHorario(a.horaInicio);
+    const of = a.horaFim ? minutosDoHorario(a.horaFim) : oi + duracao;
+    return inicio < of && oi < inicio + duracao;
+  });
+  if (choque) {
+    erro.textContent = `Esse horário bate com outra aula já marcada (${faixaHorario(choque.horaInicio, choque.horaFim)}). Escolha outro.`;
+    return;
+  }
+  agendamento.hora = hora;
+  // Se o horário já estava livre na agenda, é uma marcação normal
+  agendamento.sugerido = !(agendamento.horarios || []).includes(hora);
+  agendamento.mostrarSugestao = false;
+  agendamento.erro = "";
+  renderizarAgendamento();
 }
 
 async function confirmarAgendamento() {
@@ -2019,7 +2079,8 @@ async function confirmarAgendamento() {
     return;
   }
   const plano = situacaoDoPlano(agendamento.data);
-  const pedido = agendamento.reposicao && !reposicaoCabeNoSaldo(plano); // sem crédito (ou tempo) suficiente: espera aprovação
+  const sugerido = !!agendamento.sugerido; // fora da agenda do professor: espera aprovação
+  const pedido = sugerido || (agendamento.reposicao && !reposicaoCabeNoSaldo(plano)); // sem crédito (ou tempo) suficiente: espera aprovação
   if (!agendamento.reposicao && plano.semanaCheia) {
     agendamento.erro = `Você já marcou as ${plano.limite} aula${plano.limite > 1 ? "s" : ""} do seu plano nessa semana.`;
     renderizarAgendamento();
@@ -2029,14 +2090,14 @@ async function confirmarAgendamento() {
   const { data, hora, modalidade, reposicao, idioma } = agendamento;
   const duracao = configDoAgendamento().duracaoAulaMinutos || 50;
   // Horário que já passou: o aluno está registrando uma aula que esqueceu de marcar
-  const registro = horarioDoAgendamentoPassou(data, hora);
+  const registro = !sugerido && horarioDoAgendamentoPassou(data, hora);
 
   // A aba do WhatsApp é aberta em branco JÁ AQUI, antes do "await" — celulares
   // (principalmente Safari/iOS) bloqueiam window.open() se ele só acontecer depois de uma
   // pausa assíncrona, porque nesse ponto deixa de contar como resposta direta a um toque
   // do usuário. Preenchendo o destino da aba só depois que a gravação terminar, o popup nunca é bloqueado.
   const linkConfirmacao = configAgendaProfessor.whatsapp && !registro
-    ? linkWhatsapp(configAgendaProfessor.whatsapp, mensagemConfirmacaoAula(data, hora, modalidade, reposicao, idioma, pedido))
+    ? linkWhatsapp(configAgendaProfessor.whatsapp, mensagemConfirmacaoAula(data, hora, modalidade, reposicao, idioma, pedido, sugerido))
     : null;
   const abaWhatsapp = linkConfirmacao ? window.open("", "_blank") : null;
 
@@ -2045,7 +2106,7 @@ async function confirmarAgendamento() {
   renderizarAgendamento();
   try {
     await agendarAula(professorIdDoAluno, data, hora, somarMinutos(hora, duracao), modalidade,
-      user.uid, nomeDoAlunoAtual, reposicao, idioma, pedido ? "pendente" : "agendada");
+      user.uid, nomeDoAlunoAtual, reposicao, idioma, pedido ? "pendente" : "agendada", sugerido);
   } catch (e) {
     if (abaWhatsapp) abaWhatsapp.close();
     agendamento.salvando = false;
@@ -2060,12 +2121,14 @@ async function confirmarAgendamento() {
   }
 
   if (abaWhatsapp) abaWhatsapp.location = linkConfirmacao;
-  avisarProfessor(pedido ? "aluno-pediu-reposicao" : "aluno-marcou-aula", pedido
+  avisarProfessor(sugerido ? "aluno-sugeriu-horario" : pedido ? "aluno-pediu-reposicao" : "aluno-marcou-aula", sugerido
+    ? `${nomeDoAlunoAtual} pediu ${reposicao ? "uma reposição" : "uma aula"} fora da sua agenda: ${descricaoAulaParaProfessor(data, hora, idioma)}. Aprove ou recuse na Agenda.`
+    : pedido
     ? `${nomeDoAlunoAtual} pediu uma reposição para ${descricaoAulaParaProfessor(data, hora, idioma)}. Aprove ou recuse na Agenda.`
     : registro
       ? `${nomeDoAlunoAtual} registrou ${reposicao ? "uma reposição" : "uma aula"} que já aconteceu: ${descricaoAulaParaProfessor(data, hora, idioma)}. Confirme na Agenda se ela foi realizada.`
       : `${nomeDoAlunoAtual} marcou ${reposicao ? "uma reposição" : "uma aula"} para ${descricaoAulaParaProfessor(data, hora, idioma)}.`, idioma);
   agendamento.salvando = false;
-  agendamento.confirmada = { data, hora, modalidade, reposicao, idioma, pedido, registro, linkWhatsapp: linkConfirmacao };
+  agendamento.confirmada = { data, hora, modalidade, reposicao, idioma, pedido, sugerido, registro, linkWhatsapp: linkConfirmacao };
   renderizarAgendamento();
 }

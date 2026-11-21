@@ -309,12 +309,13 @@ service cloud.firestore {
           (ehProfessorDoAluno(userId) &&
             request.resource.data.keys().hasOnly(["tipo", "texto", "criadoEm", "lida", "professorId", "idioma"]) &&
             request.resource.data.tipo in ["credito-reposicao", "reposicao-aprovada", "reposicao-recusada",
+              "horario-aprovado", "horario-recusado",
               "aula-nao-realizada", "aula-marcada", "palavra-adicionada", "documento-aula"] &&
             request.resource.data.professorId == request.auth.uid) ||
 
           (souAlunoDesteProfessor(userId) &&
             request.resource.data.keys().hasOnly(["tipo", "texto", "criadoEm", "lida", "alunoId", "idioma"]) &&
-            request.resource.data.tipo in ["aluno-marcou-aula", "aluno-cancelou-aula", "aluno-pediu-reposicao"] &&
+            request.resource.data.tipo in ["aluno-marcou-aula", "aluno-cancelou-aula", "aluno-pediu-reposicao", "aluno-sugeriu-horario"] &&
             request.resource.data.alunoId == request.auth.uid)
         );
       }
@@ -421,8 +422,11 @@ service cloud.firestore {
     // Status de uma aula ao ser marcada: "agendada" (normal, ou reposição com crédito)
     // ou "pendente" — pedido de reposição sem crédito, que espera o professor aprovar
     // (vira "agendada") ou recusar (vira "recusada"). O pedido já reserva o horário.
+    // Pedido também quando o aluno sugere um horário fora da agenda do professor
+    // ("horarioSugerido"): o professor aprova ou recusa.
     function statusNovoValido(d) {
-      return d.status == "agendada" || (d.status == "pendente" && d.reposicao == true);
+      return d.status == "agendada" ||
+        (d.status == "pendente" && (d.reposicao == true || d.get("horarioSugerido", false) == true));
     }
 
     // Aula marcada pelo próprio professor: pra um aluno vinculado a ele ou pra um

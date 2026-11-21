@@ -1590,6 +1590,60 @@ function dataDaqui(dias) {
     esperar(idioma === 'es', 'aula gravada com idioma ' + idioma);
   });
 
+  await caso('horários livres se ajustam a uma aula fora da grade (ex: 17:30)', async () => {
+    const r = await iris.evaluate(() => [
+      gerarSlotsLivres([{ inicio: '14:00', fim: '21:00' }], 60, 0, []).join(' '),
+      gerarSlotsLivres([{ inicio: '14:00', fim: '21:00' }], 60, 0, [{ horaInicio: '17:30', horaFim: '18:30' }]).join(' '),
+      gerarSlotsLivres([{ inicio: '08:00', fim: '12:00' }], 50, 10, [{ horaInicio: '09:00', horaFim: '09:50' }]).join(' ')
+    ]);
+    esperar(r[0] === '14:00 15:00 16:00 17:00 18:00 19:00 20:00', 'grade normal: ' + r[0]);
+    esperar(r[1] === '14:00 15:00 16:00 18:30 19:30', 'depois da aula das 17:30: ' + r[1]);
+    esperar(r[2] === '08:00 10:00 11:00', 'aula na grade continua igual: ' + r[2]);
+  });
+
+  await caso('aluno sugere um horário fora da agenda: vai como pedido e o professor aprova', async () => {
+    const p = iris;
+    const somar = (hhmm, min) => { const t = Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5)) + min; return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
+    await p.click('button:has-text("Marcar outra aula")');
+    await p.click('.opcao-idioma-aula:has-text("Espanhol")');
+    await p.waitForSelector('.resumo-passo:has-text("Espanhol")', { timeout: 3000 });
+    // o mesmo dia da aula marcada no teste anterior
+    const marcada = await p.evaluate(() => aulasFuturasDoAluno('es')[0]);
+    for (let i = 0; i < 3 && !(await p.$(`[data-calday="${marcada.data}"]`)); i++) await p.click('#btn-cal-mes-proximo');
+    await p.click(`[data-calday="${marcada.data}"]`);
+    await p.waitForSelector('#btn-sugerir-horario', { timeout: 8000 });
+    await p.click('#btn-sugerir-horario');
+    // bate com a aula já marcada
+    await p.fill('#input-horario-sugerido', somar(marcada.horaInicio, 15));
+    await p.click('#btn-usar-horario-sugerido');
+    await p.waitForSelector('#erro-horario-sugerido:has-text("bate com outra aula")', { timeout: 3000 });
+    // depois do último horário da agenda (e da aula marcada)
+    const fins = await p.$$eval('.btn-slot-horario', (bs) => bs.map((b) => b.textContent.split(' – ')[1]));
+    const base = [...fins, marcada.horaFim].sort().pop();
+    const sugerido = somar(base, 25);
+    await p.fill('#input-horario-sugerido', sugerido);
+    await p.click('#btn-usar-horario-sugerido');
+    await p.waitForSelector(`.resumo-passo:has-text("${sugerido}") .badge-horario-sugerido`, { timeout: 3000 });
+    esperar((await p.textContent('#btn-confirmar-agendamento')).includes('Pedir este horário ao professor'), 'botão sem "Pedir este horário"');
+    await p.click('#btn-confirmar-agendamento');
+    await p.waitForSelector('.agendamento-sucesso:has-text("Pedido de horário enviado")', { timeout: 8000 });
+    const aula = await p.evaluate((h) => minhasAulasCache.find((a) => a.horaInicio === h), sugerido);
+    esperar(aula && aula.status === 'pendente' && aula.horarioSugerido === true, 'aula gravada: ' + JSON.stringify(aula));
+    // O professor vê o pedido com "Horário sugerido" e aprova
+    await diego.click('#btn-aba-agenda');
+    const item = `#pedidos-reposicao .cartao-aula:has-text("Iris"):has(.badge-horario-sugerido):has-text("${sugerido}")`;
+    await diego.waitForSelector(item, { timeout: 10000 });
+    await diego.click(`${item} button:has-text("Aprovar")`);
+    await p.waitForFunction((h) => (minhasAulasCache.find((a) => a.horaInicio === h) || {}).status === 'agendada', sugerido, { timeout: 10000 });
+    const avisos = await p.evaluate(async () => {
+      const snap = await db.collection('usuarios').doc(auth.currentUser.uid).collection('notificacoes').where('tipo', '==', 'horario-aprovado').get();
+      await Promise.all(snap.docs.map((d) => d.ref.update({ lida: true }))); // não conta nos testes seguintes
+      return snap.size;
+    });
+    esperar(avisos === 1, 'o aluno não foi avisado da aprovação');
+    await p.click('button:has-text("Fechar")');
+  });
+
   await caso('plano, reposições e avisos são separados por idioma', async () => {
     const blocoIris = '.aluno-bloco:has(.item-aluno:has-text("Iris"))';
     await diego.reload(); // os idiomas do professor foram trocados direto no banco, no começo

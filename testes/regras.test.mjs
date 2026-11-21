@@ -91,6 +91,10 @@ await t("student cannot create profile with a plan", assertFails(setDoc(doc(db("
 const aula = (extra) => ({ professorId: "P1", alunoId: "S1", alunoNome: "s1", data: "2030-01-10", horaInicio: "10:00", horaFim: "10:50", modalidade: "online", reposicao: false, status: "agendada", ...extra });
 await t("student requests a reposição (pendente)", setDoc(doc(db("S1"), "aulas/P1_2030-01-10_1000"), aula({ reposicao: true, status: "pendente" })));
 await t("normal lesson cannot be created as pendente", assertFails(setDoc(doc(db("S1"), "aulas/P1_2030-01-10_1100"), aula({ horaInicio: "11:00", status: "pendente" }))));
+await t("student suggests a time outside the agenda (pendente)", setDoc(doc(db("S1"), "aulas/P1_2030-01-10_1730"), aula({ horaInicio: "17:30", horaFim: "18:20", horarioSugerido: true, status: "pendente" })));
+await t("student notifies professor about a suggested time", setDoc(doc(db("S1"), "usuarios/P1/notificacoes/sug1"), { tipo: "aluno-sugeriu-horario", texto: "s1 pediu uma aula fora da sua agenda.", criadoEm: new Date(), lida: false, alunoId: "S1" }));
+await t("professor approves the suggested time", updateDoc(doc(db("P1"), "aulas/P1_2030-01-10_1730"), { status: "agendada" }));
+await t("professor tells student the time was approved", setDoc(doc(db("P1"), "usuarios/S1/notificacoes/hor1"), { tipo: "horario-aprovado", texto: "Seu pedido de horário foi aprovado.", criadoEm: new Date(), lida: false, professorId: "P1" }));
 await t("student cannot approve own request", assertFails(updateDoc(doc(db("S1"), "aulas/P1_2030-01-10_1000"), { status: "agendada" })));
 await t("professor approves the request", updateDoc(doc(db("P1"), "aulas/P1_2030-01-10_1000"), { status: "agendada" }));
 await setDoc(doc(db("S1"), "aulas/P1_2030-01-10_1400"), aula({ horaInicio: "14:00", reposicao: true, status: "pendente" }));
