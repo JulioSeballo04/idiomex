@@ -1267,7 +1267,7 @@ function badgesDaAula(a) {
   return `
     <span class="badge-modalidade badge-${a.modalidade}">${a.modalidade === "online" ? "Online" : "Presencial"}</span>
     ${a.reposicao ? '<span class="badge-status badge-reposicao">Reposição</span>' : ""}
-    ${a.status === "pendente" ? '<span class="badge-status badge-status-pendente">Aguardando aprovação</span>' : ""}
+    ${a.status === "pendente" ? `<span class="badge-status badge-status-pendente">${a.horarioSugerido ? "Horário sugerido · confirmação pendente" : "Aguardando aprovação"}</span>` : ""}
     ${aulaDoAlunoEmAndamento(a) ? '<span class="badge-status badge-status-em-andamento">Em andamento</span>' : ""}
     ${idiomasParaAula().length > 1 ? `<span class="badge-idioma" style="background:${IDIOMAS[idiomaValido(a.idioma)].cor}">${IDIOMAS[idiomaValido(a.idioma)].nome}</span>` : ""}`;
 }
@@ -1709,6 +1709,7 @@ function renderizarAgendamento() {
       <div class="agendamento-sucesso">
         <div class="selo-sucesso${c.pedido ? " selo-pedido" : ""}">${icone(c.pedido ? "hourglass" : "check")}</div>
         <h3>${c.sugerido ? "Pedido de horário enviado" : c.pedido ? "Pedido de reposição enviado" : c.registro ? "Aula registrada" : "Aula confirmada"}</h3>
+        ${c.sugerido ? balaoConfirmacaoPendente() : ""}
         ${c.pedido ? `<p class="dica-pedido-enviado">O horário está reservado. Você recebe uma notificação quando o professor aprovar ou recusar.</p>` : ""}
         ${c.registro && !c.pedido ? `<p class="dica-pedido-enviado">Seu professor foi avisado e vai confirmar que a aula aconteceu.</p>` : ""}
         <p>${escapeHtml(rotuloDiaCurto(c.data))} às ${escapeHtml(c.hora)} · ${escolheIdiomaNoAgendamento() ? `${IDIOMAS[c.idioma].nome} · ` : ""}${c.modalidade === "online" ? "Online" : "Presencial"}${c.reposicao ? " · Reposição" : ""}</p>
@@ -1745,7 +1746,7 @@ function renderizarAgendamento() {
   const cartaoDiaHorario = comIdioma && !agendamento.idioma ? `
     <div class="cartao-passo passo-bloqueado"><h4>Dia e horário</h4><p class="vazio">Escolha o idioma primeiro.</p></div>` : dataHoraEscolhidas ? `
     <div class="cartao-passo resumo-passo">
-      <div><strong>Dia e horário</strong><span>${escapeHtml(rotuloDiaCurto(agendamento.data))} às ${escapeHtml(agendamento.hora)}${agendamento.sugerido ? ' <span class="badge-status badge-horario-sugerido">horário sugerido</span>' : ""}</span></div>
+      <div><strong>Dia e horário</strong><span>${escapeHtml(rotuloDiaCurto(agendamento.data))} às ${escapeHtml(agendamento.hora)}${agendamento.sugerido ? ' <span class="badge-status badge-horario-sugerido">horário sugerido</span>' : ""}</span>${agendamento.sugerido ? balaoConfirmacaoPendente() : ""}</div>
       <button type="button" class="link-trocar" onclick="trocarDiaHorario()">trocar</button>
     </div>` : `
     <div class="cartao-passo">
@@ -2011,6 +2012,11 @@ function renderizarHorariosAgendamento() {
 // O horário que o aluno quer não está na agenda do professor (ex: 17:30): ele sugere
 // e a aula vai como pedido. O professor aprova ou recusa; enquanto isso o horário
 // fica reservado, e os próximos horários do dia se ajustam a ele.
+
+// Balão que lembra o aluno: horário sugerido só vale depois que o professor confirmar
+function balaoConfirmacaoPendente() {
+  return `<div class="balao-confirmacao-pendente" role="status">${icone("hourglass")}<span><strong>Confirmação pendente</strong> — este horário é uma sugestão e só vale depois que o professor confirmar.</span></div>`;
+}
 
 function podeSugerirHorario() {
   return !!agendamento.data && agendamento.data >= dataDeHojeISO();
