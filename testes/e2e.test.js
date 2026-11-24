@@ -2024,6 +2024,58 @@ function dataDaqui(dias) {
       esperar(total === 0, 'o aparelho continuou gravado');
       esperar((await pl.textContent('#btn-lembretes-aulas')).includes('Lembretes antes das aulas'), 'o botão não voltou');
     });
+
+    // Lia não tem aula nenhuma: todo dia de atendimento passado é "dia sem aula"
+    const diasSemAulaEsperados = () => pl.evaluate(async () => {
+      const todos = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+      configAgendaAtual = { ...configAgendaAtual, disponibilidade: Object.fromEntries(todos.map((d) => [d, [{ inicio: '08:00', fim: '12:00' }]])) };
+      const hojeIso = dataDeHojeISO();
+      const ate = new Date().getHours() >= HORA_AVISO_SEM_AULA ? hojeIso : somarDiasISO(hojeIso, -1);
+      configAgendaAtual.avisoSemAulaVerificadoAte = somarDiasISO(hojeIso, -3);
+      const dias = [];
+      for (let d = somarDiasISO(hojeIso, -2); d <= ate; d = somarDiasISO(d, 1)) dias.push(d);
+      return { dias, ate };
+    });
+    const avisosSemAula = () => pl.evaluate(async () => (await db.collection('usuarios').doc(professorIdAtual).collection('notificacoes').get()).docs
+      .map((d) => d.data()).filter((n) => n.tipo === 'dia-sem-aula').map((n) => n.data).sort());
+
+    await caso('dia de atendimento sem aula: o sino pergunta "Tem certeza que não teve aula hoje?"', async () => {
+      const { dias, ate } = await diasSemAulaEsperados();
+      await pl.evaluate(() => verificarDiasSemAula());
+      esperar(JSON.stringify(await avisosSemAula()) === JSON.stringify(dias), 'avisos: ' + JSON.stringify(await avisosSemAula()) + ' esperados: ' + JSON.stringify(dias));
+      const conferido = await pl.evaluate(async () => (await db.collection('usuarios').doc(professorIdAtual).collection('configuracaoAgenda').doc('dados').get()).data().avisoSemAulaVerificadoAte);
+      esperar(conferido === ate, 'não guardou o último dia conferido: ' + conferido);
+      await pl.evaluate(() => abrirNotificacoesProfessor());
+      await pl.waitForSelector('#lista-notificacoes .item-notificacao:has-text("Tem certeza que não teve aula")', { timeout: 5000 });
+      await pl.click('#lista-notificacoes .btn-registrar-aula-esquecida');
+      await pl.waitForSelector('#modal-marcar-aula:not(.modal-oculto)', { timeout: 3000 });
+      esperar(dias.includes(await pl.inputValue('#marcar-data')), 'o "Registrar" não abriu no dia do aviso');
+      await pl.evaluate(() => fecharMarcarAula());
+      // Conferir de novo não repete a pergunta
+      await pl.evaluate(() => verificarDiasSemAula());
+      esperar((await avisosSemAula()).length === dias.length, 'perguntou de novo');
+    });
+
+    await caso('professor desliga e religa o aviso "não teve aula hoje?" em Configurações', async () => {
+      await pl.click('#btn-aba-config');
+      esperar(await pl.isChecked('#chk-aviso-dia-sem-aula'), 'o aviso não começa ligado');
+      await pl.uncheck('#chk-aviso-dia-sem-aula');
+      await pl.waitForFunction(async () => (await db.collection('usuarios').doc(professorIdAtual).collection('configuracaoAgenda').doc('dados').get()).data().avisoDiaSemAula === false, null, { timeout: 5000, polling: 300 });
+      await pl.evaluate(async () => {
+        const snap = await db.collection('usuarios').doc(professorIdAtual).collection('notificacoes').get();
+        await Promise.all(snap.docs.map((d) => d.ref.delete()));
+      });
+      await diasSemAulaEsperados();
+      await pl.evaluate(() => verificarDiasSemAula());
+      esperar((await avisosSemAula()).length === 0, 'perguntou com o aviso desligado');
+      await pl.check('#chk-aviso-dia-sem-aula');
+      await pl.waitForSelector('#status-aviso-dia-sem-aula:has-text("ligado")', { timeout: 5000 });
+      const salvo = await pl.evaluate(async () => (await db.collection('usuarios').doc(professorIdAtual).collection('configuracaoAgenda').doc('dados').get()).data());
+      esperar(salvo.avisoDiaSemAula === true, 'não religou');
+      await pl.reload();
+      await pl.waitForFunction(() => typeof professorIdAtual !== 'undefined' && professorIdAtual && configAgendaAtual, null, { timeout: 10000 });
+      esperar(await pl.isChecked('#chk-aviso-dia-sem-aula'), 'depois de recarregar, a opção não voltou ligada');
+    });
     esperar(pl.erros.length === 0, 'erros: ' + pl.erros.join('; '));
     await ctxL.close();
   }

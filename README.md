@@ -148,6 +148,12 @@ configurado, o app avisa sozinho, mas só com o painel aberto. Para conferir a c
 do agendador, abra `https://idiomex.vercel.app/api/lembretes` no navegador: deve
 mostrar `{"pronto":true}`.
 
+**"Tem certeza que não teve aula hoje?"** — a partir das 20h, num dia de atendimento
+(pela grade da agenda e pelos ajustes do dia; sem grade, de segunda a sexta) em que
+não houve nenhuma aula, o professor recebe essa pergunta no sino do app e, com os
+lembretes ligados, no celular — para registrar uma aula que esqueceu de marcar. Cada
+dia é perguntado uma vez só. Liga/desliga em **Configurações** (vem ligado).
+
 ## Testes automáticos
 
 A pasta `testes/` tem testes das regras do Firestore, do servidor da IA e do

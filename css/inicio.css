@@ -511,6 +511,7 @@ html[data-tema="noturno"] .btn-destaque { color: #223247; }
 .pagina-professor #painel-aba-config > .codigo-professor,
 .pagina-professor #painel-aba-config > .idioma-professor,
 .pagina-professor #painel-aba-config > .secao-whatsapp-professor,
+.pagina-professor #painel-aba-config > .secao-aviso-dia-sem-aula,
 .pagina-professor #painel-aba-config > .secao-mensagens-whatsapp,
 .pagina-professor #painel-aba-config > .secao-conta {
   background: var(--bg-cartao);

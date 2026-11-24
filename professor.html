@@ -202,6 +202,15 @@
         <p class="status-msg" id="status-whatsapp-professor"></p>
       </form>
 
+      <div class="secao-aviso-dia-sem-aula">
+        <label class="rotulo-aviso-dia-sem-aula" for="chk-aviso-dia-sem-aula">
+          <input type="checkbox" id="chk-aviso-dia-sem-aula" checked onchange="salvarAvisoDiaSemAula(this.checked)">
+          Perguntar "Tem certeza que não teve aula hoje?"
+        </label>
+        <p class="dica-whatsapp-professor">No fim de um dia de atendimento (a partir das 20h) sem nenhuma aula na agenda, aparece esse aviso no sino — e no celular, se os lembretes estiverem ligados — para você registrar uma aula que esqueceu de marcar.</p>
+        <p class="status-msg" id="status-aviso-dia-sem-aula"></p>
+      </div>
+
       <details class="secao-mensagens-whatsapp">
         <summary>Mensagens do WhatsApp</summary>
         <p class="dica-whatsapp-professor">Os textos que abrem prontos no WhatsApp. Use os campos entre chaves:

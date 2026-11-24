@@ -316,7 +316,13 @@ service cloud.firestore {
           (souAlunoDesteProfessor(userId) &&
             request.resource.data.keys().hasOnly(["tipo", "texto", "criadoEm", "lida", "alunoId", "idioma"]) &&
             request.resource.data.tipo in ["aluno-marcou-aula", "aluno-cancelou-aula", "aluno-pediu-reposicao", "aluno-sugeriu-horario"] &&
-            request.resource.data.alunoId == request.auth.uid)
+            request.resource.data.alunoId == request.auth.uid) ||
+
+          // O próprio professor: "Tem certeza que não teve aula hoje?" (dia de trabalho sem aula)
+          (request.auth.uid == userId &&
+            request.resource.data.keys().hasOnly(["tipo", "texto", "criadoEm", "lida", "data"]) &&
+            request.resource.data.tipo == "dia-sem-aula" &&
+            request.resource.data.data is string && request.resource.data.data.size() == 10)
         );
       }
 

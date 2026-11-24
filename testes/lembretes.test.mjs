@@ -31,7 +31,7 @@ const fcm = http.createServer((req, res) => {
 await new Promise((r) => fcm.listen(8799, r));
 process.env.FCM_URL_TESTE = "http://127.0.0.1:8799/send";
 
-const { default: handler, processarLembretes, minutosAte, agoraNoFuso, textoDoLembrete } = await import("../api/lembretes.js");
+const { default: handler, processarLembretes, minutosAte, agoraNoFuso, textoDoLembrete, ehDiaDeTrabalho } = await import("../api/lembretes.js");
 
 const RAIZ = `http://${FIRESTORE}/v1/projects/${PROJETO}/databases/(default)/documents`;
 const valor = (v) => (typeof v === "number" ? { integerValue: String(v) } : typeof v === "boolean" ? { booleanValue: v } : { stringValue: v });
@@ -113,6 +113,39 @@ await t("perto da meia-noite, avisa a aula do dia seguinte", async () => {
   await aula("A7", { data: "2026-11-17", horaInicio: "00:15", alunoNome: "Carla" });
   await processarLembretes(new Date("2026-11-17T02:30:00Z")); // 23:30 em São Paulo
   assert.deepEqual(envios.map((m) => m.data.titulo), ["Aula às 00:15 com Carla"]);
+});
+
+await t('dia de atendimento sem aula: às 20h pergunta "não teve aula hoje?" uma vez só', async () => {
+  envios.length = 0;
+  await processarLembretes(new Date("2026-11-18T22:00:00Z")); // quarta, 19:00 em São Paulo: ainda não
+  assert.deepEqual(envios, []);
+  await processarLembretes(new Date("2026-11-18T23:30:00Z")); // 20:30
+  assert.deepEqual(envios.map((m) => `${m.token}: ${m.data.titulo}`), ["tok-1: Não teve aula hoje?"]);
+  assert.equal(await existe("usuarios/P1/notificacoes/dia-sem-aula-2026-11-18"), true);
+  envios.length = 0;
+  await processarLembretes(new Date("2026-11-18T23:50:00Z"));
+  assert.deepEqual(envios, []);
+});
+
+await t("não pergunta em dia com aula, fora do atendimento ou com o aviso desligado", async () => {
+  envios.length = 0;
+  await processarLembretes(new Date("2026-11-17T23:30:00Z")); // terça: teve a aula das 00:15
+  await processarLembretes(new Date("2026-11-21T23:30:00Z")); // sábado (sem grade: só de segunda a sexta)
+  await gravar("usuarios/P1/agendaOverrides/2026-11-19", { fechado: true });
+  await processarLembretes(new Date("2026-11-19T23:30:00Z")); // dia fechado
+  await gravar("usuarios/P1/configuracaoAgenda/dados", { avisoDiaSemAula: false });
+  await processarLembretes(new Date("2026-11-20T23:30:00Z")); // aviso desligado
+  assert.deepEqual(envios, []);
+  assert.equal(await existe("usuarios/P1/notificacoes/dia-sem-aula-2026-11-20"), false);
+});
+
+await t("dia de trabalho pela grade semanal (padrão ou de um idioma) e pelo ajuste do dia", async () => {
+  const grade = { disponibilidade: { sab: [{ inicio: "08:00", fim: "12:00" }] } };
+  assert.equal(ehDiaDeTrabalho(grade, null, "2026-11-21"), true);  // sábado
+  assert.equal(ehDiaDeTrabalho(grade, null, "2026-11-23"), false); // segunda
+  assert.equal(ehDiaDeTrabalho({ porIdioma: { en: grade } }, null, "2026-11-21"), true);
+  assert.equal(ehDiaDeTrabalho(grade, { blocos: [{ inicio: "14:00", fim: "16:00" }] }, "2026-11-23"), true);
+  assert.equal(ehDiaDeTrabalho({}, null, "2026-11-23"), true);
 });
 
 // O endereço público: sem a chave só diz se está pronto
