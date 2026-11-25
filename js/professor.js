@@ -1778,6 +1778,13 @@ async function aprovarPedidoReposicao(aulaId) {
   const aula = aulasCache.find((a) => a.id === aulaId);
   if (!aula) return;
   const aluno = alunosCache.find((a) => a.id === aula.alunoId);
+  // Confirmação pelo WhatsApp do aluno: a aba abre antes do "await" (senão o celular
+  // bloqueia o popup) e só recebe o endereço depois de a aprovação ser gravada
+  const telefone = telefoneDoAluno(aula.alunoId);
+  const linkConfirmacao = telefone
+    ? linkWhatsapp(telefone, mensagemConfirmacaoPeloProfessor(aula.alunoNome || (aluno && aluno.nome) || "", aula.data, aula.horaInicio, aula.modalidade, aula.idioma, aula.reposicao))
+    : null;
+  const abaWhatsapp = linkConfirmacao ? window.open("", "_blank") : null;
   const lote = db.batch();
   lote.update(db.collection("aulas").doc(aulaId), { status: "agendada" });
   if (aluno) {
@@ -1797,8 +1804,10 @@ async function aprovarPedidoReposicao(aulaId) {
   }
   try {
     await lote.commit();
+    if (abaWhatsapp) abaWhatsapp.location = linkConfirmacao;
   } catch (e) {
     console.error(e);
+    if (abaWhatsapp) abaWhatsapp.close();
     alert("Não foi possível aprovar o pedido agora. Tente novamente.");
   }
 }

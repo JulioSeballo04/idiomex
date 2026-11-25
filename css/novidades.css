@@ -1409,6 +1409,11 @@ html[data-tema="noturno"] .badge-horario-sugerido { background: rgba(110, 160, 2
 }
 .balao-confirmacao-pendente svg { flex: none; width: 1.05em; height: 1.05em; margin-top: 0.1em; }
 .resumo-passo .balao-confirmacao-pendente span { color: inherit; font-size: inherit; }
+.cartao-aula .balao-confirmacao-pendente { flex-basis: 100%; }
+.seguintes-aulas .balao-confirmacao-pendente { margin-top: 0.45rem; font-size: 0.8rem; }
+.destaque-aula.destaque-pendente { outline: 2px dashed rgba(255, 255, 255, 0.55); outline-offset: -7px; }
+.destaque-aula .balao-confirmacao-pendente,
+html[data-tema="noturno"] .destaque-aula .balao-confirmacao-pendente { background: rgba(255, 255, 255, 0.94); border-color: transparent; color: #7a4f0e; }
 .agendamento-sucesso .balao-confirmacao-pendente { max-width: 360px; margin: 0.4rem auto 0.6rem; }
 html[data-tema="noturno"] .balao-confirmacao-pendente { color: #E0B24C; background: rgba(201, 138, 44, 0.16); }
 .sugerir-horario { margin-top: 0.8rem; }

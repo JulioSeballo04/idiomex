@@ -1634,11 +1634,26 @@ function dataDaqui(dias) {
     await p.waitForSelector('.agendamento-sucesso:has-text("Pedido de horário enviado")', { timeout: 8000 });
     const aula = await p.evaluate((h) => minhasAulasCache.find((a) => a.horaInicio === h), sugerido);
     esperar(aula && aula.status === 'pendente' && aula.horarioSugerido === true, 'aula gravada: ' + JSON.stringify(aula));
-    // O professor vê o pedido com "Horário sugerido" e aprova
+    // Na tela do aluno, a aula aparece como pedido pendente
+    await p.click('button:has-text("Fechar")');
+    const pendente = `#painel-minhas-aulas .cartao-aula:has-text("${sugerido}")`;
+    await p.waitForSelector(`${pendente} .balao-confirmacao-pendente:has-text("professor confirmar")`, { timeout: 5000 });
+    await p.waitForSelector(`${pendente} .badge-status-pendente:has-text("confirmação pendente")`, { timeout: 3000 });
+    // O professor vê o pedido com "Horário sugerido" e aprova: o WhatsApp do aluno abre com a confirmação
     await diego.click('#btn-aba-agenda');
     const item = `#pedidos-reposicao .cartao-aula:has-text("Iris"):has(.badge-horario-sugerido):has-text("${sugerido}")`;
     await diego.waitForSelector(item, { timeout: 10000 });
-    await diego.click(`${item} button:has-text("Aprovar")`);
+    await diego.evaluate(() => { alunosCache.find((a) => a.nome === 'Iris').telefone = '11 97777-6666'; });
+    const [abaZap] = await Promise.all([
+      ctxDiego.waitForEvent('page', { timeout: 5000 }),
+      diego.click(`${item} button:has-text("Aprovar")`)
+    ]);
+    await abaZap.waitForURL(/wa\.me/, { timeout: 5000 });
+    const urlZap = decodeURIComponent(abaZap.url());
+    esperar(urlZap.includes('wa.me/5511977776666') && urlZap.includes(sugerido) && urlZap.includes('Iris'), 'WhatsApp da aprovação errado: ' + urlZap);
+    await abaZap.close();
+    await p.waitForFunction((h) => (minhasAulasCache.find((a) => a.horaInicio === h) || {}).status === 'agendada', sugerido, { timeout: 10000 });
+    await p.waitForFunction((h) => !document.querySelector('#painel-minhas-aulas .balao-confirmacao-pendente') || ![...document.querySelectorAll('#painel-minhas-aulas .cartao-aula')].some((c) => c.textContent.includes(h) && c.querySelector('.balao-confirmacao-pendente')), sugerido, { timeout: 5000 });
     await p.waitForFunction((h) => (minhasAulasCache.find((a) => a.horaInicio === h) || {}).status === 'agendada', sugerido, { timeout: 10000 });
     const avisos = await p.evaluate(async () => {
       const snap = await db.collection('usuarios').doc(auth.currentUser.uid).collection('notificacoes').where('tipo', '==', 'horario-aprovado').get();
@@ -1646,7 +1661,6 @@ function dataDaqui(dias) {
       return snap.size;
     });
     esperar(avisos === 1, 'o aluno não foi avisado da aprovação');
-    await p.click('button:has-text("Fechar")');
   });
 
   await caso('plano, reposições e avisos são separados por idioma', async () => {

@@ -1326,9 +1326,9 @@ function renderizarMinhasAulas() {
   const link = linkAulaCache && linkAulaCache.professorId === professorIdDoAluno ? linkAulaCache.url : "";
   const podeEntrar = link && proxima.modalidade === "online" && proxima.status === "agendada";
   lista.innerHTML = `
-    <div class="cartao-aula destaque-aula">
+    <div class="cartao-aula destaque-aula${proxima.status === "pendente" ? " destaque-pendente" : ""}">
       <div class="topo-destaque">
-        <span class="rotulo-destaque">Próxima aula${deQualIdioma}</span>
+        <span class="rotulo-destaque">${proxima.status === "pendente" ? "Pedido de aula pendente" : "Próxima aula"}${deQualIdioma}</span>
         <span class="contagem-aula">${contagemParaAula(proxima)}</span>
       </div>
       <div class="quando-destaque">
@@ -1336,6 +1336,7 @@ function renderizarMinhasAulas() {
         <span class="hora-destaque">${escapeHtml(faixaHorario(proxima.horaInicio, proxima.horaFim))}</span>
       </div>
       <div class="aula-info">${badgesDaAula(proxima)}</div>
+      ${proxima.status === "pendente" ? balaoDaAulaPendente(proxima) : ""}
       <div class="acoes-destaque">
         ${podeEntrar ? `<a class="btn btn-destaque" href="${escapeHtml(link)}" target="_blank" rel="noopener">Entrar na aula</a>` : ""}
         <button class="btn-cancelar-destaque" onclick="cancelarMinhaAula('${proxima.id}')">${rotuloCancelarAula(proxima)}</button>
@@ -1349,6 +1350,7 @@ function renderizarMinhasAulas() {
             <div class="aula-info">
               <span>${escapeHtml(rotuloDiaDaAula(a.data))} · ${escapeHtml(faixaHorario(a.horaInicio, a.horaFim))}</span>
               ${badgesDaAula(a)}
+              ${a.status === "pendente" ? balaoDaAulaPendente(a) : ""}
             </div>
             <button class="excluir" onclick="cancelarMinhaAula('${a.id}')">${rotuloCancelarAula(a)}</button>
           </div>`).join("")}
@@ -2014,8 +2016,15 @@ function renderizarHorariosAgendamento() {
 // fica reservado, e os próximos horários do dia se ajustam a ele.
 
 // Balão que lembra o aluno: horário sugerido só vale depois que o professor confirmar
-function balaoConfirmacaoPendente() {
-  return `<div class="balao-confirmacao-pendente" role="status">${icone("hourglass")}<span><strong>Confirmação pendente</strong> — este horário é uma sugestão e só vale depois que o professor confirmar.</span></div>`;
+function balaoConfirmacaoPendente(texto = "este horário é uma sugestão e só vale depois que o professor confirmar.") {
+  return `<div class="balao-confirmacao-pendente" role="status">${icone("hourglass")}<span><strong>Confirmação pendente</strong> — ${texto}</span></div>`;
+}
+
+// Aula ainda esperando o professor aprovar (horário sugerido ou reposição sem crédito)
+function balaoDaAulaPendente(a) {
+  return balaoConfirmacaoPendente(a.horarioSugerido
+    ? "você pediu este horário. A aula só está marcada depois que o professor confirmar."
+    : "você pediu esta reposição. A aula só está marcada depois que o professor aprovar.");
 }
 
 function podeSugerirHorario() {
