@@ -84,6 +84,9 @@ function dataDaqui(dias) {
     esperar(!(await prof.$('#btn-baixar-app')), 'apareceu no computador');
   });
   await caso('no computador (Chrome/Edge), "Instalar o app no computador" aparece quando o navegador oferece', async () => {
+    await prof.goto(`${SITE}/index.html`);
+    await prof.waitForFunction(() => document.readyState === 'complete' && typeof baixarApp === 'function', null, { timeout: 10000 });
+    await dormir(500);
     await prof.evaluate(() => {
       const e = new Event('beforeinstallprompt');
       e.prompt = () => { window.__pediuInstalar = true; };
@@ -91,7 +94,7 @@ function dataDaqui(dias) {
       window.dispatchEvent(e);
     });
     await prof.waitForSelector('#btn-baixar-app:has-text("Instalar o app no computador")', { timeout: 3000 });
-    await prof.$eval('#btn-baixar-app', (b) => b.click()); // o aviso do emulador cobre o rodapé
+    await prof.evaluate(() => document.getElementById('btn-baixar-app').click()); // o aviso do emulador cobre o rodapé
     await prof.waitForFunction(() => window.__pediuInstalar === true, null, { timeout: 3000 });
   });
   {
@@ -1956,6 +1959,104 @@ function dataDaqui(dias) {
     });
   }
 
+  console.log('\nConversa, checklist, vários arquivos e horário diferente');
+  await prof.goto(`${SITE}/professor.html`);
+  await prof.waitForFunction(() => typeof alunosCache !== 'undefined' && alunosCache.some((a) => a.nome === 'Bia'), null, { timeout: 15000 });
+  await aluno.goto(`${SITE}/dicionario.html`);
+  await aluno.waitForSelector('#input-palavra-en', { timeout: 10000 });
+
+  await caso('aluno manda mensagem; o professor vê o contador, abre a conversa e responde', async () => {
+    await aluno.waitForSelector('#btn-conversa:not([hidden])', { timeout: 8000 });
+    await aluno.click('#btn-conversa');
+    await aluno.fill('#input-conversa', 'Professor, posso trocar a aula de quinta?');
+    await aluno.click('#btn-enviar-conversa');
+    await aluno.waitForSelector('.bolha-conversa.minha:has-text("posso trocar a aula")', { timeout: 5000 });
+    await aluno.click('#modal-conversa .btn-fechar-modal');
+    await prof.waitForSelector('#contador-conversa:not([hidden]):text-is("1")', { timeout: 8000 });
+    await prof.click('#btn-conversa');
+    await prof.waitForSelector('.item-conversa.tem-novas:has-text("Bia"):has-text("posso trocar a aula")', { timeout: 5000 });
+    await prof.click('.item-conversa:has-text("Bia")');
+    await prof.waitForSelector('.bolha-conversa.dele:has-text("posso trocar a aula")', { timeout: 5000 });
+    await prof.waitForSelector('#contador-conversa[hidden]', { state: 'attached', timeout: 5000 });
+    await prof.fill('#input-conversa', 'Pode sim! Marque sexta às 10h.');
+    await prof.press('#input-conversa', 'Enter');
+    await prof.waitForSelector('.bolha-conversa.minha:has-text("Marque sexta")', { timeout: 5000 });
+    await prof.click('#modal-conversa .btn-fechar-modal');
+    await aluno.waitForSelector('#contador-conversa:not([hidden]):text-is("1")', { timeout: 8000 });
+    await aluno.click('#btn-conversa');
+    await aluno.waitForSelector('.bolha-conversa.dele:has-text("Marque sexta")', { timeout: 5000 });
+    await aluno.waitForSelector('#contador-conversa[hidden]', { state: 'attached', timeout: 5000 });
+    await aluno.click('#modal-conversa .btn-fechar-modal');
+  });
+
+  await caso('checklist: o professor cria os tópicos, escolhe os alunos e marca o que cada um já viu', async () => {
+    await prof.click('#btn-aba-config');
+    await prof.fill('#input-topico-checklist', 'Verbo to be');
+    await prof.click('#secao-checklist button:has-text("Adicionar tópico")');
+    await prof.waitForSelector('.item-topico-checklist:has-text("Verbo to be"):has-text("Todos os alunos")', { timeout: 5000 });
+    // Um tópico só para a Gabi
+    await prof.fill('#input-topico-checklist', 'Phrasal verbs');
+    await prof.click('#quem-usa-novo-topico label:has-text("Só alguns alunos")');
+    await prof.click('#quem-usa-novo-topico .alunos-quem-ve label:has-text("Gabi")');
+    await prof.click('#secao-checklist button:has-text("Adicionar tópico")');
+    await prof.waitForSelector('.item-topico-checklist:has-text("Phrasal verbs"):has-text("Gabi")', { timeout: 5000 });
+    // A Bia vê só o tópico que vale para ela
+    await aluno.waitForSelector('#painel-checklist:not(.oculto) .item-checklist:has-text("Verbo to be")', { timeout: 8000 });
+    esperar(!(await aluno.$('#painel-checklist .item-checklist:has-text("Phrasal verbs")')), 'a Bia viu o tópico da Gabi');
+    esperar((await aluno.textContent('#painel-checklist .progresso-checklist')).includes('0 de 1'), 'progresso errado');
+    // O professor marca na aba Checklist da Bia
+    await prof.click('#btn-aba-alunos');
+    const blocoBia = '.aluno-bloco:has(.item-aluno:has-text("Bia"))';
+    if (!(await prof.$(`${blocoBia} .abas-detalhe`))) await prof.click(`${blocoBia} .item-aluno`);
+    await prof.click(`${blocoBia} .aba-detalhe:has-text("Checklist")`);
+    await prof.waitForSelector(`${blocoBia} .checklist-aluno .item-checklist:has-text("Verbo to be")`, { timeout: 5000 });
+    esperar(!(await prof.$(`${blocoBia} .checklist-aluno .item-checklist:has-text("Phrasal verbs")`)), 'tópico da Gabi apareceu na Bia');
+    await prof.click(`${blocoBia} .checklist-aluno .item-checklist:has-text("Verbo to be") input`);
+    await aluno.waitForSelector('#painel-checklist .item-checklist.feito:has-text("Verbo to be")', { timeout: 8000 });
+    esperar((await aluno.textContent('#painel-checklist .progresso-checklist')).includes('1 de 1'), 'progresso não subiu');
+    esperar(!(await aluno.$('#painel-checklist input')), 'o aluno consegue marcar');
+  });
+
+  await caso('professor envia vários arquivos de uma vez (cada um com o nome do arquivo como título)', async () => {
+    await prof.click('#btn-aba-sala');
+    await prof.evaluate(() => mostrarJanelaSala('documentos'));
+    await prof.waitForSelector('#form-biblioteca', { state: 'visible', timeout: 5000 });
+    await prof.setInputFiles('#arquivo-biblioteca', [
+      { name: 'Unit 4 - Reading.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.1\n%%EOF') },
+      { name: 'Unit 4 - Listening.mp3', mimeType: 'audio/mpeg', buffer: Buffer.alloc(1024, 3) },
+      { name: 'Unit 4 - Notas.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: Buffer.alloc(100) }
+    ]);
+    esperar((await prof.$$('#nome-arquivo-biblioteca .arquivo-da-lista')).length === 2, 'não listou os 2 arquivos aceitos');
+    esperar(/Notas\.docx/.test(await prof.textContent('#status-biblioteca')), 'não avisou do Word recusado');
+    esperar(await prof.isHidden('#titulo-biblioteca'), 'campo de título continuou com vários arquivos');
+    esperar((await prof.textContent('#btn-enviar-biblioteca')).includes('Enviar 2 arquivos'), 'botão sem a quantidade');
+    await prof.click('#btn-enviar-biblioteca');
+    await prof.waitForSelector('#status-biblioteca:has-text("2 documentos enviados")', { timeout: 15000 });
+    const titulos = await prof.evaluate(() => bibliotecaCache.map((d) => d.titulo));
+    esperar(titulos.includes('Unit 4 - Reading') && titulos.includes('Unit 4 - Listening'), 'documentos: ' + titulos.join(', '));
+    esperar(await prof.isHidden('#nome-arquivo-biblioteca'), 'a lista de arquivos não limpou');
+    esperar(await prof.isVisible('#titulo-biblioteca'), 'o campo de título não voltou');
+    await aluno.waitForFunction(() => notificacoesCache.some((n) => /2 novos documentos de aula/.test(n.texto)), null, { timeout: 8000 });
+  });
+
+  await caso('professor renomeia um documento', async () => {
+    prof.respostaPrompt = 'Unit 4 - Leitura';
+    await prof.click('.item-biblioteca:has-text("Unit 4 - Reading") button:has-text("Renomear")');
+    await prof.waitForSelector('.item-biblioteca:has-text("Unit 4 - Leitura")', { timeout: 5000 });
+    prof.respostaPrompt = undefined;
+  });
+
+  await caso('"Marcar aula" do professor: "Não achou o horário? Marque um horário diferente"', async () => {
+    await prof.click('#btn-aba-agenda');
+    await prof.evaluate(() => abrirMarcarAula());
+    await prof.waitForSelector('#btn-outro-horario:has-text("Marque um horário diferente")', { timeout: 3000 });
+    await prof.click('#btn-outro-horario');
+    esperar(await prof.isVisible('#marcar-hora') && await prof.isVisible('#dica-horario-manual'), 'não mostrou o campo de horário');
+    await prof.click('#btn-outro-horario');
+    esperar(await prof.isHidden('#marcar-hora'), 'não voltou para a grade');
+    await prof.evaluate(() => fecharMarcarAula());
+  });
+
   console.log('\nAgenda do professor: compromissos e lembretes');
   {
     const ctxL = await h.novoContexto(browser);
@@ -2037,6 +2138,8 @@ function dataDaqui(dias) {
       const total = await pl.evaluate(async () => (await db.collection('usuarios').doc(professorIdAtual).collection('dispositivos').get()).size);
       esperar(total === 0, 'o aparelho continuou gravado');
       esperar((await pl.textContent('#btn-lembretes-aulas')).includes('Lembretes antes das aulas'), 'o botão não voltou');
+      esperar(await pl.evaluate(() => getComputedStyle(document.getElementById('modal-lembretes')).position) === 'fixed', 'a janela dos lembretes não abre por cima da página');
+      await pl.click('#modal-lembretes .btn-fechar-modal');
     });
 
     // Lia não tem aula nenhuma: todo dia de atendimento passado é "dia sem aula"

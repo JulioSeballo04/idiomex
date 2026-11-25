@@ -1,6 +1,6 @@
 import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
 import { readFileSync } from "fs";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, collection, getDocs, query, where, deleteField, Bytes } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch, collection, getDocs, query, where, deleteField, Bytes, serverTimestamp } from "firebase/firestore";
 
 const env = await initializeTestEnvironment({ projectId: "demo-idiomex",
   firestore: { rules: readFileSync(new URL("../firestore.rules", import.meta.url), "utf8"), host: "127.0.0.1", port: 8089 } });
@@ -225,6 +225,33 @@ await t("student still cannot write messages", assertFails(setDoc(doc(db("S1"), 
 // Professor deletes own code entry
 await t("other cannot delete code", assertFails(deleteDoc(doc(db("P0"), "codigosProfessor/PROF-BBBB"))));
 await t("owner deletes code", deleteDoc(doc(db("P1"), "codigosProfessor/PROF-BBBB")));
+// Conversa (chat) entre professor e aluno
+const msg = (autor, prof, extra) => ({ autorId: autor, professorId: prof, texto: "Oi!", criadoEm: serverTimestamp(), ...extra });
+await t("student writes to own professor", setDoc(doc(db("S1"), "usuarios/S1/conversa/c1"), msg("S1", "P1")));
+await t("professor writes to own student", setDoc(doc(db("P1"), "usuarios/S1/conversa/c2"), msg("P1", "P1")));
+await t("both read the conversation", Promise.all([getDocs(collection(db("S1"), "usuarios/S1/conversa")), getDocs(collection(db("P1"), "usuarios/S1/conversa"))]));
+await t("other professor cannot read the conversation", assertFails(getDocs(collection(db("P0"), "usuarios/S1/conversa"))));
+await t("other professor cannot write", assertFails(setDoc(doc(db("P0"), "usuarios/S1/conversa/c3"), msg("P0", "P0"))));
+await t("student cannot write as someone else", assertFails(setDoc(doc(db("S1"), "usuarios/S1/conversa/c4"), msg("P1", "P1"))));
+await t("student cannot point the message to another professor", assertFails(setDoc(doc(db("S1"), "usuarios/S1/conversa/c5"), msg("S1", "P0"))));
+await t("stranger cannot write in a student's conversation", assertFails(setDoc(doc(db("S9"), "usuarios/S1/conversa/c6"), msg("S9", "P1"))));
+await t("empty message rejected", assertFails(setDoc(doc(db("S1"), "usuarios/S1/conversa/c7"), msg("S1", "P1", { texto: "" }))));
+await t("messages cannot be edited", assertFails(updateDoc(doc(db("P1"), "usuarios/S1/conversa/c2"), { texto: "mudou" })));
+await t("author deletes own message", deleteDoc(doc(db("P1"), "usuarios/S1/conversa/c2")));
+await t("user marks conversation as read", setDoc(doc(db("P1"), "usuarios/P1/conversasLidas/S1"), { em: serverTimestamp() }));
+await t("cannot mark someone else's reading", assertFails(setDoc(doc(db("S1"), "usuarios/P1/conversasLidas/S1"), { em: serverTimestamp() })));
+// Checklist de tópicos
+await t("professor creates a topic for everyone", setDoc(doc(db("P1"), "usuarios/P1/checklist/t1"), { texto: "Past simple", paraTodos: true, alunos: [], criadoEm: serverTimestamp() }));
+await t("professor creates a topic for some students", setDoc(doc(db("P1"), "usuarios/P1/checklist/t2"), { texto: "Phrasal verbs", paraTodos: false, alunos: ["S2"], criadoEm: serverTimestamp() }));
+await t("linked student reads a topic for everyone", getDoc(doc(db("S1"), "usuarios/P1/checklist/t1")));
+await t("student cannot read a topic for other students", assertFails(getDoc(doc(db("S1"), "usuarios/P1/checklist/t2"))));
+await t("student lists the topics for everyone", getDocs(query(collection(db("S1"), "usuarios/P1/checklist"), where("paraTodos", "==", true))));
+await t("student cannot create topics", assertFails(setDoc(doc(db("S1"), "usuarios/P1/checklist/t3"), { texto: "x", paraTodos: true, alunos: [] })));
+await t("professor marks a topic as seen for the student", setDoc(doc(db("P1"), "usuarios/S1/checklistFeito/t1"), { professorId: "P1", em: serverTimestamp() }));
+await t("student reads own checklist", getDocs(collection(db("S1"), "usuarios/S1/checklistFeito")));
+await t("student cannot mark own topics", assertFails(setDoc(doc(db("S1"), "usuarios/S1/checklistFeito/t9"), { professorId: "P1", em: serverTimestamp() })));
+await t("other professor cannot mark", assertFails(setDoc(doc(db("P0"), "usuarios/S1/checklistFeito/t9"), { professorId: "P0", em: serverTimestamp() })));
+await t("professor unmarks a topic", deleteDoc(doc(db("P1"), "usuarios/S1/checklistFeito/t1")));
 // Aparelhos que recebem os lembretes antes das aulas
 const aparelho = { token: "tok-abc", antecedencia: 60, fuso: "America/Sao_Paulo" };
 await t("professor registers own device for reminders", setDoc(doc(db("P0"), "usuarios/P0/dispositivos/d1"), aparelho));

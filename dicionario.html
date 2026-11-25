@@ -55,6 +55,7 @@
       <div class="acoes-topo">
         <span id="bandeira-idioma" class="bandeira-idioma"></span>
         <select id="seletor-idioma" class="seletor-idioma-aluno" title="Idioma que você está estudando" onchange="trocarIdiomaAtivo(this.value)" hidden></select>
+        <button class="btn btn-secundario btn-icone btn-notificacoes btn-conversa" id="btn-conversa" aria-label="Conversa" title="Conversa com o professor" onclick="abrirConversas()" hidden><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-message-circle"></use></svg><span class="contador-notificacoes" id="contador-conversa" hidden>0</span></button>
         <button class="btn btn-secundario btn-icone btn-notificacoes" id="btn-notificacoes" aria-label="Notificações" title="Notificações" onclick="abrirNotificacoes()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-bell"></use></svg><span class="contador-notificacoes" id="contador-notificacoes" hidden>0</span></button>
         <div class="seletor-tema" id="seletor-tema">
           <button class="btn-tema" type="button" title="Mudar cores do app" onclick="alternarMenuTema()">
@@ -207,6 +208,11 @@
           <div id="lista-mensagens"></div>
         </section>
 
+        <section id="painel-checklist" class="cartao-secao oculto">
+          <h2 class="titulo-secao">Checklist das aulas</h2>
+          <div id="lista-checklist-aluno"></div>
+        </section>
+
         <section id="painel-anotacoes" class="cartao-secao">
           <h2 class="titulo-secao">Minhas anotações</h2>
           <div class="caixa-mensagem">
@@ -233,9 +239,11 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="js/firebase-config.js"></script>
 <script src="js/util.js"></script>
+<script src="js/conversa.js"></script>
 <script src="js/documentos.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/tema.js"></script>
 <script src="js/dicionario.js"></script>
+<script src="js/checklist.js"></script>
 </body>
 </html>

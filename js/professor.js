@@ -83,6 +83,7 @@ auth.onAuthStateChanged(async (user) => {
   escutarAnotacoesAgenda(user.uid);
   escutarNotificacoesProfessor(user.uid);
   escutarBiblioteca(user.uid);
+  escutarChecklistProfessor(user.uid);
   montarCalendarioProfessor();
 });
 
@@ -416,6 +417,7 @@ function carregarAlunos(professorId) {
       if (snapshot.empty) {
         alunosCache = [];
         limparEstadosDeAlunosRemovidos([]);
+        sincronizarConversas();
         document.getElementById("lista-alunos").innerHTML =
           `<p class="vazio">Nenhum aluno vinculado ainda. Compartilhe seu código acima.</p>`;
         return;
@@ -423,6 +425,7 @@ function carregarAlunos(professorId) {
 
       alunosCache = ordenarPorNome(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
       limparEstadosDeAlunosRemovidos(alunosCache.map((a) => a.id));
+      sincronizarConversas();
 
       for (const aluno of alunosCache) {
         const estado = garantirEstado(aluno.id);
@@ -721,6 +724,7 @@ function desativarListenersDetalheAluno(alunoId) {
   if (estado.unsubRelatorios) { estado.unsubRelatorios(); estado.unsubRelatorios = null; }
   if (estado.unsubLinkAula) { estado.unsubLinkAula(); estado.unsubLinkAula = null; }
   if (estado.unsubDocumentosAula) { estado.unsubDocumentosAula(); estado.unsubDocumentosAula = null; }
+  if (estado.unsubChecklist) { estado.unsubChecklist(); estado.unsubChecklist = null; estado.checklistFeito = null; }
 }
 
 // -------------------- DETALHE DO ALUNO (ABAS) --------------------
@@ -738,6 +742,9 @@ function montarHtmlDetalheAluno(alunoId) {
         onclick="mudarAbaAluno('${alunoId}','relatorio')">Relatório de aulas</button>
       <button class="aba-detalhe ${estado.abaAtiva === "aulas" ? "ativa" : ""}"
         onclick="mudarAbaAluno('${alunoId}','aulas')">Aulas marcadas</button>
+      <button class="aba-detalhe ${estado.abaAtiva === "checklist" ? "ativa" : ""}"
+        onclick="mudarAbaAluno('${alunoId}','checklist')">Checklist</button>
+      <button class="aba-detalhe aba-conversa" onclick="abrirConversa('${alunoId}')">${icone("message-circle")} Conversa${naoLidasDaConversa(alunoId) ? ` <span class="contador-pedidos">${naoLidasDaConversa(alunoId)}</span>` : ""}</button>
       <button class="aba-detalhe ${estado.abaAtiva === "vocabulario" ? "ativa" : ""}"
         onclick="mudarAbaAluno('${alunoId}','vocabulario')">Vocabulário</button>
     </div>
@@ -748,6 +755,7 @@ function montarHtmlDetalheAluno(alunoId) {
   else if (estado.abaAtiva === "relatorio") conteudo = montarAbaRelatorio(alunoId);
   else if (estado.abaAtiva === "aulas") conteudo = montarAbaAulas(alunoId);
   else if (estado.abaAtiva === "sala") conteudo = montarAbaSalaDeAula(alunoId);
+  else if (estado.abaAtiva === "checklist") conteudo = montarAbaChecklist(alunoId);
   else conteudo = montarAbaVocabulario(alunoId);
 
   return montarContatoAluno(alunoId) + montarPlanoAluno(alunoId) + montarRelatorioMensal(alunoId) + abas + conteudo;
@@ -3564,7 +3572,8 @@ function definirHorarioManual(ligado) {
   campo.hidden = !ligado;
   if (!ligado) campo.value = "";
   document.getElementById("btn-outro-horario").textContent = ligado
-    ? "Usar os horários da minha disponibilidade" : "Outro horário (fora da sua disponibilidade)";
+    ? "Voltar para os horários da minha disponibilidade" : "Não achou o horário? Marque um horário diferente";
+  document.getElementById("dica-horario-manual").hidden = !ligado;
 }
 
 function alternarHorarioManual() {

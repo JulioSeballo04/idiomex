@@ -405,6 +405,56 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
 
+      // Conversa (chat) entre o aluno {userId} e o professor dele. Os dois leem e
+      // escrevem; cada mensagem diz quem escreveu e com qual professor é a conversa.
+      // Não dá para editar; quem escreveu apaga a própria mensagem (e o aluno, ao
+      // excluir a conta, apaga a conversa toda).
+      match /conversa/{mensagemId} {
+        allow read: if request.auth != null && (request.auth.uid == userId || ehProfessorDoAluno(userId));
+        allow create: if request.auth != null &&
+          request.resource.data.keys().hasOnly(["autorId", "professorId", "texto", "criadoEm"]) &&
+          request.resource.data.autorId == request.auth.uid &&
+          request.resource.data.texto is string &&
+          request.resource.data.texto.size() > 0 && request.resource.data.texto.size() <= 2000 &&
+          request.resource.data.criadoEm == request.time && (
+          (request.auth.uid == userId && souAlunoDesteProfessor(request.resource.data.professorId)) ||
+          (ehProfessorDoAluno(userId) && request.resource.data.professorId == request.auth.uid));
+        allow delete: if request.auth != null &&
+          (resource.data.autorId == request.auth.uid || request.auth.uid == userId);
+      }
+
+      // Até quando cada um já leu a conversa com o outro ({outroId}): só o próprio.
+      match /conversasLidas/{outroId} {
+        allow read, delete: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null && request.auth.uid == userId &&
+          request.resource.data.keys().hasOnly(["em"]) && request.resource.data.em == request.time;
+      }
+
+      // Checklist de tópicos do professor {userId} (ex: "Present simple"): a lista
+      // geral; cada tópico vale para todos os alunos ou só para os escolhidos. O aluno
+      // lê os tópicos que valem para ele.
+      match /checklist/{topicoId} {
+        allow read: if request.auth != null && (request.auth.uid == userId ||
+          (souAlunoDesteProfessor(userId) &&
+            (resource.data.paraTodos == true || request.auth.uid in resource.data.alunos)));
+        allow create, update: if request.auth != null && request.auth.uid == userId &&
+          request.resource.data.keys().hasOnly(["texto", "paraTodos", "alunos", "ordem", "criadoEm"]) &&
+          request.resource.data.texto is string &&
+          request.resource.data.texto.size() > 0 && request.resource.data.texto.size() <= 300 &&
+          quemVeValido(request.resource.data);
+        allow delete: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Tópicos do checklist que o aluno {userId} já viu: o professor dele marca e
+      // desmarca; o aluno só lê.
+      match /checklistFeito/{topicoId} {
+        allow read: if request.auth != null && (request.auth.uid == userId || ehProfessorDoAluno(userId));
+        allow create, update: if request.auth != null && ehProfessorDoAluno(userId) &&
+          request.resource.data.keys().hasOnly(["professorId", "em"]) &&
+          request.resource.data.professorId == request.auth.uid;
+        allow delete: if request.auth != null && (ehProfessorDoAluno(userId) || request.auth.uid == userId);
+      }
+
       // Aparelhos do professor que recebem lembretes antes das aulas (notificação no
       // celular). Só o dono lê e grava; o servidor (api/lembretes.js) lê com a conta
       // de serviço. O "token" é o endereço de notificação do aparelho.
