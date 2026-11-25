@@ -73,6 +73,7 @@ auth.onAuthStateChanged(async (user) => {
   mesCalendarioProfessor = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   await carregarConfigAgenda();
   preencherWhatsappConfiguracoes();
+  preencherAvisoDiaSemAula();
   montarMensagensWhatsapp(); // só aqui: redesenhar apagaria um texto ainda não salvo
 
   carregarAlunos(user.uid);
@@ -90,7 +91,7 @@ auth.onAuthStateChanged(async (user) => {
 // O sino mostra quantas ainda não foram lidas; abrir a lista marca todas como lidas.
 
 let notificacoesProfessorCache = [];
-const ICONES_NOTIFICACAO_PROFESSOR = { "aluno-marcou-aula": "calendar-plus", "aluno-pediu-reposicao": "ticket", "aluno-sugeriu-horario": "calendar-plus", "aluno-cancelou-aula": "circle-x" };
+const ICONES_NOTIFICACAO_PROFESSOR = { "aluno-marcou-aula": "calendar-plus", "aluno-pediu-reposicao": "ticket", "aluno-sugeriu-horario": "calendar-plus", "aluno-cancelou-aula": "circle-x", "dia-sem-aula": "calendar" };
 
 function escutarNotificacoesProfessor(uid) {
   db.collection("usuarios").doc(uid).collection("notificacoes")
@@ -112,6 +113,7 @@ function renderizarNotificacoesProfessor() {
       <span class="icone-notificacao">${icone(ICONES_NOTIFICACAO_PROFESSOR[n.tipo] || "bell")}</span>
       <div>
         <div>${escapeHtml(n.texto)}</div>
+        ${n.tipo === "dia-sem-aula" && /^\d{4}-\d{2}-\d{2}$/.test(n.data || "") ? `<button type="button" class="link-trocar btn-registrar-aula-esquecida" onclick="registrarAulaDoDiaSemAula('${n.data}')">Registrar uma aula nesse dia</button>` : ""}
         <span class="data-msg">${n.criadoEm ? escapeHtml(n.criadoEm.toDate().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })) : ""}</span>
       </div>
       <button type="button" class="btn-visto" title="Visto — tirar da lista" aria-label="Visto: tirar a notificação da lista" onclick="dispensarNotificacaoProfessor('${n.id}')">${icone("check")}</button>
@@ -141,6 +143,124 @@ async function dispensarNotificacaoProfessor(id) {
 
 function fecharNotificacoesProfessor() {
   document.getElementById("modal-notificacoes").classList.add("modal-oculto");
+}
+
+// -------------------- "TEM CERTEZA QUE NÃO TEVE AULA HOJE?" --------------------
+// No fim de um dia de trabalho sem nenhuma aula na agenda, o sino pergunta se não
+// teve aula mesmo — para o professor registrar uma aula que esqueceu de marcar.
+// Liga/desliga em Configurações (configuracaoAgenda.avisoDiaSemAula; padrão: ligado).
+// "avisoSemAulaVerificadoAte" guarda o último dia já conferido (em qualquer aparelho,
+// e também pelo servidor, que manda o mesmo aviso no celular): cada dia é perguntado
+// uma vez só, mesmo que o professor tire a notificação da lista.
+
+const HORA_AVISO_SEM_AULA = 20; // a pergunta do dia aparece a partir das 20h
+const DIAS_RETROATIVOS_AVISO_SEM_AULA = 3; // ficou dias sem abrir o app: confere até 3 dias para trás
+let verificandoDiasSemAula = false;
+// Só confere com as aulas e os ajustes de dia já carregados do servidor
+let aulasProfessorCarregadas = false;
+let overridesAgendaCarregados = false;
+
+function avisoDiaSemAulaLigado() {
+  return !configAgendaAtual || configAgendaAtual.avisoDiaSemAula !== false;
+}
+
+function somarDiasISO(dataIso, dias) {
+  const d = new Date(`${dataIso}T12:00:00`);
+  d.setDate(d.getDate() + dias);
+  return chaveDataISO(d);
+}
+
+// Dia em que o professor atende: pela exceção daquele dia, se houver; senão pela
+// grade semanal (de qualquer idioma). Sem grade nenhuma configurada: de segunda a sexta.
+function ehDiaDeTrabalho(dataIso) {
+  const override = overridesAgendaCache[dataIso];
+  if (override) return !override.fechado && (override.blocos || []).length > 0;
+  const dia = chaveDiaSemana(dataIso);
+  const grades = [configAgendaAtual && configAgendaAtual.disponibilidade,
+    ...Object.values((configAgendaAtual && configAgendaAtual.porIdioma) || {}).map((c) => c && c.disponibilidade)].filter(Boolean);
+  const algumaGrade = grades.some((g) => Object.values(g).some((blocos) => (blocos || []).length));
+  if (!algumaGrade) return !["sab", "dom"].includes(dia);
+  return grades.some((g) => (g[dia] || []).length > 0);
+}
+
+// Teve aula: qualquer aula do dia que não foi cancelada nem recusada
+function teveAulaNoDia(dataIso) {
+  return aulasCache.some((a) => a.data === dataIso && a.status !== "cancelada" && a.status !== "recusada");
+}
+
+function textoAvisoDiaSemAula(dataIso, hojeIso) {
+  return dataIso === hojeIso
+    ? "Tem certeza que não teve aula hoje? Nenhuma aula foi registrada. Se esqueceu de marcar, registre na Agenda."
+    : `Tem certeza que não teve aula em ${rotuloDiaSemAula(dataIso)}? Nenhuma aula foi registrada. Se esqueceu de marcar, registre na Agenda.`;
+}
+
+function rotuloDiaSemAula(dataIso) {
+  const nomes = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+  return `${nomes[new Date(`${dataIso}T12:00:00`).getDay()]}, ${formatarDataBR(dataIso).slice(0, 5)}`;
+}
+
+async function verificarDiasSemAula() {
+  if (verificandoDiasSemAula || !aulasProfessorCarregadas || !overridesAgendaCarregados || !professorIdAtual || !configAgendaAtual || !avisoDiaSemAulaLigado()) return;
+  const agora = new Date();
+  const hojeIso = dataDeHojeISO();
+  const ate = agora.getHours() >= HORA_AVISO_SEM_AULA ? hojeIso : somarDiasISO(hojeIso, -1);
+  const ultimo = configAgendaAtual.avisoSemAulaVerificadoAte;
+  // Primeira vez: começa por ontem (não pergunta de dias antigos de uma vez)
+  let de = ultimo ? somarDiasISO(ultimo, 1) : somarDiasISO(hojeIso, -1);
+  const limite = somarDiasISO(hojeIso, -DIAS_RETROATIVOS_AVISO_SEM_AULA);
+  if (de < limite) de = limite;
+  if (de > ate) return;
+
+  verificandoDiasSemAula = true;
+  try {
+    const usuario = db.collection("usuarios").doc(professorIdAtual);
+    for (let dia = de; dia <= ate; dia = somarDiasISO(dia, 1)) {
+      if (!ehDiaDeTrabalho(dia) || teveAulaNoDia(dia)) continue;
+      // id fixo: se o servidor já criou o aviso desse dia, este não duplica (e é recusado)
+      await usuario.collection("notificacoes").doc(`dia-sem-aula-${dia}`).set({
+        tipo: "dia-sem-aula",
+        texto: textoAvisoDiaSemAula(dia, hojeIso),
+        data: dia,
+        lida: false,
+        criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+      }).catch(() => {});
+    }
+    await usuario.collection("configuracaoAgenda").doc("dados").set({ avisoSemAulaVerificadoAte: ate }, { merge: true });
+    configAgendaAtual = { ...configAgendaAtual, avisoSemAulaVerificadoAte: ate };
+  } catch (e) {
+    console.warn("Não foi possível conferir os dias sem aula:", e);
+  } finally {
+    verificandoDiasSemAula = false;
+  }
+}
+
+function registrarAulaDoDiaSemAula(dataIso) {
+  fecharNotificacoesProfessor();
+  abrirMarcarAula(null, dataIso);
+}
+
+function preencherAvisoDiaSemAula() {
+  const chk = document.getElementById("chk-aviso-dia-sem-aula");
+  if (chk) chk.checked = avisoDiaSemAulaLigado();
+}
+
+async function salvarAvisoDiaSemAula(ligado) {
+  const status = document.getElementById("status-aviso-dia-sem-aula");
+  try {
+    const dados = { avisoDiaSemAula: ligado };
+    // Ao religar, não pergunta dos dias em que o aviso estava desligado
+    if (ligado) dados.avisoSemAulaVerificadoAte = somarDiasISO(dataDeHojeISO(), -1);
+    await db.collection("usuarios").doc(professorIdAtual)
+      .collection("configuracaoAgenda").doc("dados").set(dados, { merge: true });
+    configAgendaAtual = { ...configAgendaAtual, ...dados };
+    status.textContent = ligado ? "Aviso ligado." : "Aviso desligado.";
+    setTimeout(() => (status.textContent = ""), 1500);
+    if (ligado) verificarDiasSemAula();
+  } catch (e) {
+    console.error(e);
+    preencherAvisoDiaSemAula();
+    status.textContent = "Não foi possível salvar agora. Tente novamente.";
+  }
 }
 
 // Contas criadas antes do índice "codigosProfessor" ainda não têm o código lá — e,
@@ -232,6 +352,7 @@ function escutarOverridesAgenda(uid) {
       (snap) => {
         overridesAgendaCache = {};
         snap.docs.forEach((d) => { overridesAgendaCache[d.id] = d.data(); });
+        if (!snap.metadata.fromCache) { overridesAgendaCarregados = true; verificarDiasSemAula(); }
         montarCalendarioProfessor();
       },
       (erro) => console.warn("Não foi possível carregar as exceções de disponibilidade:", erro)
@@ -1356,6 +1477,7 @@ function escutarAulasDoProfessor(uid) {
   db.collection("aulas").where("professorId", "==", uid)
     .onSnapshot((snap) => {
       aulasCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (!snap.metadata.fromCache) { aulasProfessorCarregadas = true; verificarDiasSemAula(); }
       renderizarListaAlunos();
       renderizarHojeProfessor();
       renderizarAlunosSemApp();
@@ -1363,6 +1485,7 @@ function escutarAulasDoProfessor(uid) {
     });
   // "em 25 min" e as aulas que já passaram mudam com o relógio, mesmo sem dado novo
   setInterval(renderizarHojeProfessor, 60 * 1000);
+  setInterval(verificarDiasSemAula, 5 * 60 * 1000); // painel aberto quando dão 20h
 }
 
 // -------------------- AGENDA: HOJE E PRÓXIMAS AULAS --------------------
@@ -1655,6 +1778,13 @@ async function aprovarPedidoReposicao(aulaId) {
   const aula = aulasCache.find((a) => a.id === aulaId);
   if (!aula) return;
   const aluno = alunosCache.find((a) => a.id === aula.alunoId);
+  // Confirmação pelo WhatsApp do aluno: a aba abre antes do "await" (senão o celular
+  // bloqueia o popup) e só recebe o endereço depois de a aprovação ser gravada
+  const telefone = telefoneDoAluno(aula.alunoId);
+  const linkConfirmacao = telefone
+    ? linkWhatsapp(telefone, mensagemConfirmacaoPeloProfessor(aula.alunoNome || (aluno && aluno.nome) || "", aula.data, aula.horaInicio, aula.modalidade, aula.idioma, aula.reposicao))
+    : null;
+  const abaWhatsapp = linkConfirmacao ? window.open("", "_blank") : null;
   const lote = db.batch();
   lote.update(db.collection("aulas").doc(aulaId), { status: "agendada" });
   if (aluno) {
@@ -1674,8 +1804,10 @@ async function aprovarPedidoReposicao(aulaId) {
   }
   try {
     await lote.commit();
+    if (abaWhatsapp) abaWhatsapp.location = linkConfirmacao;
   } catch (e) {
     console.error(e);
+    if (abaWhatsapp) abaWhatsapp.close();
     alert("Não foi possível aprovar o pedido agora. Tente novamente.");
   }
 }

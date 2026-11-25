@@ -107,6 +107,11 @@ await t("linked professor notifies student", setDoc(doc(db("P1"), "usuarios/S1/n
 await t("unlinked professor cannot notify", assertFails(setDoc(doc(db("P0"), "usuarios/S1/notificacoes/n2"), notif({ professorId: "P0" }))));
 await t("student cannot create own notification", assertFails(setDoc(doc(db("S1"), "usuarios/S1/notificacoes/n3"), notif())));
 await t("invalid notification type rejected", assertFails(setDoc(doc(db("P1"), "usuarios/S1/notificacoes/n4"), notif({ tipo: "qualquer" }))));
+const semAula = (extra) => ({ tipo: "dia-sem-aula", texto: "Tem certeza que não teve aula hoje?", data: "2026-11-23", criadoEm: new Date(), lida: false, ...extra });
+await t('professor creates own "no lesson today?" notice', setDoc(doc(db("P1"), "usuarios/P1/notificacoes/dia-sem-aula-2026-11-23"), semAula()));
+await t("professor cannot recreate the same notice", assertFails(setDoc(doc(db("P1"), "usuarios/P1/notificacoes/dia-sem-aula-2026-11-23"), semAula({ texto: "outro" }))));
+await t("professor cannot self-create another type", assertFails(setDoc(doc(db("P1"), "usuarios/P1/notificacoes/x1"), semAula({ tipo: "aluno-marcou-aula" }))));
+await t('student cannot create "no lesson" notice for professor', assertFails(setDoc(doc(db("S1"), "usuarios/P1/notificacoes/x2"), semAula({ alunoId: "S1" }))));
 await t("student reads own notifications", getDocs(collection(db("S1"), "usuarios/S1/notificacoes")));
 await t("other user cannot read notifications", assertFails(getDocs(collection(db("S9"), "usuarios/S1/notificacoes"))));
 await t("student marks notification as read", updateDoc(doc(db("S1"), "usuarios/S1/notificacoes/n1"), { lida: true }));

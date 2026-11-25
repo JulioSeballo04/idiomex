@@ -18,6 +18,10 @@
 // 3. cron-job.org → novo job a cada 5 minutos para
 //      https://idiomex.vercel.app/api/lembretes?chave=<CRON_SECRET>
 //
+// No mesmo disparo, a partir das 20h: se o dia era de atendimento e não teve
+// nenhuma aula, pergunta "Tem certeza que não teve aula hoje?" (no sino do app e no
+// celular). O professor liga/desliga em Configurações (avisoDiaSemAula).
+//
 // Também atende o botão "Mandar um teste" do app (POST com o login do professor).
 // Sem dependências: fala direto com as APIs REST do Google.
 // ============================================================
@@ -173,6 +177,13 @@ async function apagar(nome) {
   await pedirFirestore(caminho, { method: "DELETE" });
 }
 
+async function lerDocumento(caminho) {
+  const { ok, status, dados } = await pedirFirestore(caminho);
+  if (status === 404) return null;
+  if (!ok) throw new Error(`Leitura de ${caminho} falhou (HTTP ${status})`);
+  return lerCampos(dados.fields || {});
+}
+
 // -------------------- HORÁRIOS --------------------
 
 // Data ("AAAA-MM-DD") e minutos do dia agora, no fuso do professor
@@ -225,6 +236,64 @@ export function textoDoLembrete(evento, minutos) {
 
 const chaveDoLembrete = (uid, dispositivoId, evento) =>
   crypto.createHash("sha1").update([uid, dispositivoId, evento.tipo, evento.id, evento.data, evento.horaInicio].join("|")).digest("hex");
+
+// -------------------- DIA DE TRABALHO SEM AULA --------------------
+
+export const HORA_AVISO_SEM_AULA = 20;
+const DIAS_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
+export const TEXTO_DIA_SEM_AULA = "Tem certeza que não teve aula hoje? Nenhuma aula foi registrada. Se esqueceu de marcar, registre na Agenda.";
+
+// Mesma regra do app (js/professor.js → ehDiaDeTrabalho): a exceção do dia, se houver;
+// senão a grade semanal de qualquer idioma; sem grade nenhuma, de segunda a sexta.
+export function ehDiaDeTrabalho(config, override, dataIso) {
+  if (override) return !override.fechado && (override.blocos || []).length > 0;
+  const dia = DIAS_SEMANA[new Date(`${dataIso}T12:00:00Z`).getUTCDay()];
+  const grades = [config && config.disponibilidade,
+    ...Object.values((config && config.porIdioma) || {}).map((c) => c && c.disponibilidade)].filter(Boolean);
+  const algumaGrade = grades.some((g) => Object.values(g).some((blocos) => (blocos || []).length));
+  if (!algumaGrade) return !["sab", "dom"].includes(dia);
+  return grades.some((g) => (g[dia] || []).length > 0);
+}
+
+// A partir das 20h, pergunta se o dia de atendimento sem aula não teve aula mesmo
+async function avisarDiaSemAula(uid, aparelhos, agoraLocal, resumo) {
+  if (agoraLocal.minutos < HORA_AVISO_SEM_AULA * 60) return;
+  const hoje = agoraLocal.data;
+  const config = (await lerDocumento(`/usuarios/${uid}/configuracaoAgenda/dados`)) || {};
+  if (config.avisoDiaSemAula === false) return;
+  if (config.avisoSemAulaVerificadoAte && config.avisoSemAulaVerificadoAte >= hoje) return; // o app já conferiu hoje
+
+  const override = await lerDocumento(`/usuarios/${uid}/agendaOverrides/${hoje}`);
+  const aulas = await consultar("", {
+    from: [{ collectionId: "aulas" }],
+    where: { compositeFilter: { op: "AND", filters: [igual("professorId", uid), igual("data", hoje)] } }
+  });
+  const teveAula = aulas.some((a) => a.status !== "cancelada" && a.status !== "recusada");
+
+  if (ehDiaDeTrabalho(config, override, hoje) && !teveAula) {
+    const chave = crypto.createHash("sha1").update([uid, "dia-sem-aula", hoje].join("|")).digest("hex");
+    if (await marcarEnviado(chave, { professorId: uid, evento: "dia-sem-aula", data: hoje, horaInicio: "" })) {
+      // O aviso no sino (id fixo: se o app já criou, não duplica)
+      await pedirFirestore(`/usuarios/${uid}/notificacoes?documentId=dia-sem-aula-${hoje}`, {
+        method: "POST",
+        body: JSON.stringify({ fields: {
+          tipo: texto("dia-sem-aula"), texto: texto(TEXTO_DIA_SEM_AULA), data: texto(hoje),
+          lida: { booleanValue: false }, criadoEm: { timestampValue: new Date().toISOString() }
+        } })
+      });
+      for (const aparelho of aparelhos) {
+        const r = await enviarNotificacao(aparelho.token, { titulo: "Não teve aula hoje?", corpo: TEXTO_DIA_SEM_AULA, tag: `dia-sem-aula-${hoje}` });
+        if (r.ok) resumo.enviados++;
+        else { resumo.erros++; if (r.tokenMorto) await apagar(aparelho.nome).catch(() => {}); }
+      }
+    }
+  }
+  // Dia conferido: o app não pergunta de novo
+  await pedirFirestore(`/usuarios/${uid}/configuracaoAgenda/dados?updateMask.fieldPaths=avisoSemAulaVerificadoAte`, {
+    method: "PATCH",
+    body: JSON.stringify({ fields: { avisoSemAulaVerificadoAte: texto(hoje) } })
+  });
+}
 
 // -------------------- ENVIO (FCM) --------------------
 
@@ -279,6 +348,7 @@ export async function processarLembretes(agora = new Date()) {
           await apagar(`${raizDocumentos()}/lembretesEnviados/${chave}`).catch(() => {}); // tenta de novo no próximo disparo
         }
       }
+      await avisarDiaSemAula(uid, aparelhos, agoraLocal, resumo);
     } catch (e) {
       console.error("Lembretes de", uid, e);
       resumo.erros++;

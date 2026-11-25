@@ -895,6 +895,10 @@ html[data-tema="noturno"] .aviso-pedido { color: #E0B24C; }
 /* WhatsApp do professor na aba Configurações */
 .secao-whatsapp-professor { margin: 1.4rem 0 1.6rem; }
 .secao-whatsapp-professor .campo-whatsapp-professor { margin-top: 0; }
+.secao-aviso-dia-sem-aula { margin: 0 0 1.6rem; }
+.rotulo-aviso-dia-sem-aula { display: flex; align-items: center; gap: 0.5em; font-weight: 600; cursor: pointer; }
+.rotulo-aviso-dia-sem-aula input { width: 1.1em; height: 1.1em; accent-color: var(--acento, currentColor); }
+.btn-registrar-aula-esquecida { display: inline-block; margin: 0.25rem 0; font-size: 0.85rem; }
 
 /* Tema noturno: caixas e etiquetas que tinham fundo claro fixo (feitas para o
    tema claro) ficam com fundo translúcido e texto claro */
@@ -1376,6 +1380,42 @@ html[data-tema="noturno"] .item-compromisso { background: #3A3016; border-color:
 /* ---------- Horário sugerido pelo aluno (fora da agenda) ---------- */
 .badge-horario-sugerido { background: #E4EEFB; color: #2B5C9E; }
 html[data-tema="noturno"] .badge-horario-sugerido { background: rgba(110, 160, 230, 0.16); color: #8DB8F0; }
+.balao-confirmacao-pendente {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(201, 138, 44, 0.14);
+  border: 1px solid rgba(201, 138, 44, 0.35);
+  color: #8a5a12;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  text-align: left;
+}
+.balao-confirmacao-pendente::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: 1.2rem;
+  width: 12px;
+  height: 12px;
+  background: inherit;
+  border-left: inherit;
+  border-top: inherit;
+  transform: rotate(45deg);
+}
+.balao-confirmacao-pendente svg { flex: none; width: 1.05em; height: 1.05em; margin-top: 0.1em; }
+.resumo-passo .balao-confirmacao-pendente span { color: inherit; font-size: inherit; }
+.cartao-aula .balao-confirmacao-pendente { flex-basis: 100%; }
+.seguintes-aulas .balao-confirmacao-pendente { margin-top: 0.45rem; font-size: 0.8rem; }
+.destaque-aula.destaque-pendente { outline: 2px dashed rgba(255, 255, 255, 0.55); outline-offset: -7px; }
+.destaque-aula .balao-confirmacao-pendente,
+html[data-tema="noturno"] .destaque-aula .balao-confirmacao-pendente { background: rgba(255, 255, 255, 0.94); border-color: transparent; color: #7a4f0e; }
+.agendamento-sucesso .balao-confirmacao-pendente { max-width: 360px; margin: 0.4rem auto 0.6rem; }
+html[data-tema="noturno"] .balao-confirmacao-pendente { color: #E0B24C; background: rgba(201, 138, 44, 0.16); }
 .sugerir-horario { margin-top: 0.8rem; }
 .sugerir-horario .link-trocar { font-size: 0.88rem; }
 .sugerir-horario.aberto {
