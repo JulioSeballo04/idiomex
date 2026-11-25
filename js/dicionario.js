@@ -26,6 +26,8 @@ auth.onAuthStateChanged(async (user) => {
   perfilAlunoAtual = perfil.data();
   nomeDoAlunoAtual = perfilAlunoAtual.nome;
   professorIdDoAluno = perfilAlunoAtual.professorId;
+  sincronizarConversas();
+  escutarChecklistAluno(user.uid, professorIdDoAluno);
   await carregarIdiomaDoProfessor();
   carregarWhatsappDoProfessor();
   carregarMensagensDoProfessor(user.uid);

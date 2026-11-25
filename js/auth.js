@@ -441,7 +441,7 @@ async function excluirMinhaConta() {
     // Os arquivos dos Documentos de aula ficam em pedaços dentro de cada documento
     const biblioteca = await perfilRef.collection("biblioteca").get();
     for (const documento of biblioteca.docs) await apagarPartesDoDocumento(documento.ref);
-    for (const sub of ["anotacoesAgenda", "dispositivos", "agendaOverrides", "configuracaoAgenda", "visualizacoes", "alunosSemApp", "notificacoes", "biblioteca"]) {
+    for (const sub of ["anotacoesAgenda", "dispositivos", "conversasLidas", "checklist", "agendaOverrides", "configuracaoAgenda", "visualizacoes", "alunosSemApp", "notificacoes", "biblioteca"]) {
       await apagarSubcolecao(perfilRef.collection(sub));
     }
     if (perfil.codigoProfessor) {
@@ -460,7 +460,7 @@ async function excluirMinhaConta() {
     // Os arquivos da sala de aula ficam em pedaços dentro de cada documento
     const documentos = await perfilRef.collection("documentosAula").get();
     for (const documento of documentos.docs) await apagarPartesDoDocumento(documento.ref);
-    for (const sub of ["palavras", "anotacoes", "mensagens", "notificacoes", "documentosAula", "salaDeAula"]) {
+    for (const sub of ["palavras", "anotacoes", "mensagens", "notificacoes", "documentosAula", "salaDeAula", "conversa", "conversasLidas", "checklistFeito"]) {
       await apagarSubcolecao(perfilRef.collection(sub));
     }
   }

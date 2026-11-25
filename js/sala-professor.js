@@ -16,7 +16,7 @@ let bibliotecaCache = [];
 let filtroTipoBiblioteca = "";
 let buscaBiblioteca = "";
 let paginaBiblioteca = 1;
-let arquivoBiblioteca = null;      // escolhido e ainda não enviado
+let arquivosBiblioteca = [];       // escolhidos e ainda não enviados (pode ser mais de um)
 let enviandoBiblioteca = false;
 // "Quem vê": o do formulário de envio e o do arquivo em edição
 const quemVeEnvio = { paraTodos: true, alunos: new Set() };
@@ -88,69 +88,116 @@ function alunosQueVeem(d) {
 
 // -------------------- DOCUMENTOS DE AULA (biblioteca) --------------------
 
-function escolherArquivoBiblioteca(arquivo) {
+// Escolher arquivos: dá para escolher vários de uma vez (e escolher de novo para
+// juntar mais). Com um arquivo só, o título vem do campo; com vários, cada um usa
+// o nome do próprio arquivo.
+function escolherArquivoBiblioteca(arquivos) {
   const status = document.getElementById("status-biblioteca");
-  const nome = document.getElementById("nome-arquivo-biblioteca");
   status.textContent = "";
-  arquivoBiblioteca = null;
-  if (arquivo && !arquivoVisualizavel(arquivo.type, arquivo.name)) {
-    status.textContent = "Esse tipo de arquivo não abre dentro do app, e os alunos não podem baixar. Envie PDF, imagem, vídeo, áudio ou texto (um Word ou PowerPoint pode ser salvo como PDF).";
-  } else if (arquivo && arquivo.size > TAMANHO_MAXIMO_BIBLIOTECA) {
-    status.textContent = `Esse arquivo tem ${formatarTamanhoArquivo(arquivo.size)}. O limite é 25 MB — para vídeos maiores, use um link (ex: YouTube não listado) na sala do aluno.`;
-  } else if (arquivo) {
-    arquivoBiblioteca = arquivo;
-    const titulo = document.getElementById("titulo-biblioteca");
-    if (!titulo.value.trim()) titulo.value = arquivo.name.replace(/\.[^.]+$/, "").slice(0, 200);
+  const novos = !arquivos ? [] : arquivos.length !== undefined ? [...arquivos] : [arquivos];
+  if (!arquivos) arquivosBiblioteca = [];
+  const recusados = [];
+  novos.forEach((arquivo) => {
+    if (!arquivoVisualizavel(arquivo.type, arquivo.name)) recusados.push(`${arquivo.name} (esse tipo não abre no app)`);
+    else if (arquivo.size > TAMANHO_MAXIMO_BIBLIOTECA) recusados.push(`${arquivo.name} (${formatarTamanhoArquivo(arquivo.size)}; o limite é 25 MB)`);
+    else if (!arquivosBiblioteca.some((a) => a.name === arquivo.name && a.size === arquivo.size)) arquivosBiblioteca.push(arquivo);
+  });
+  if (recusados.length) {
+    status.textContent = `Não dá para enviar: ${recusados.join("; ")}. Envie PDF, imagem, vídeo, áudio ou texto (um Word ou PowerPoint pode ser salvo como PDF; vídeo grande, use um link).`;
   }
-  nome.hidden = !arquivoBiblioteca;
-  nome.innerHTML = arquivoBiblioteca
-    ? `${icone(CATEGORIAS_ARQUIVO[categoriaDoArquivo(arquivoBiblioteca.type, arquivoBiblioteca.name)].icone)} ${escapeHtml(arquivoBiblioteca.name)} (${formatarTamanhoArquivo(arquivoBiblioteca.size)})` : "";
-  if (!arquivoBiblioteca) document.getElementById("arquivo-biblioteca").value = "";
+  const titulo = document.getElementById("titulo-biblioteca");
+  if (arquivosBiblioteca.length === 1 && !titulo.value.trim()) titulo.value = arquivosBiblioteca[0].name.replace(/\.[^.]+$/, "").slice(0, 200);
+  document.getElementById("arquivo-biblioteca").value = ""; // permite escolher os mesmos de novo
+  mostrarArquivosEscolhidosBiblioteca();
+}
+
+function tirarArquivoBiblioteca(indice) {
+  arquivosBiblioteca.splice(indice, 1);
+  mostrarArquivosEscolhidosBiblioteca();
+}
+
+function mostrarArquivosEscolhidosBiblioteca() {
+  const nome = document.getElementById("nome-arquivo-biblioteca");
+  const varios = arquivosBiblioteca.length > 1;
+  nome.hidden = !arquivosBiblioteca.length;
+  nome.innerHTML = arquivosBiblioteca.map((a, i) => `
+    <span class="arquivo-da-lista">${icone(CATEGORIAS_ARQUIVO[categoriaDoArquivo(a.type, a.name)].icone)} ${escapeHtml(a.name)} (${formatarTamanhoArquivo(a.size)})
+      <button type="button" class="btn-tirar-arquivo" title="Tirar este arquivo" aria-label="Tirar ${escapeHtml(a.name)}" onclick="tirarArquivoBiblioteca(${i})">${icone("x")}</button></span>`).join("");
+  // Com vários arquivos, cada um usa o próprio nome como título
+  const linhaTitulo = document.getElementById("titulo-biblioteca").closest(".linha-sala");
+  linhaTitulo.hidden = varios;
+  document.getElementById("dica-varios-arquivos").hidden = !varios;
+  document.getElementById("rotulo-escolher-arquivo").firstChild.textContent = arquivosBiblioteca.length ? "Escolher mais arquivos" : "Escolher arquivos";
+  document.getElementById("btn-enviar-biblioteca").textContent = varios
+    ? `Enviar ${arquivosBiblioteca.length} arquivos para Documentos de aula` : "Enviar para Documentos de aula";
 }
 
 async function enviarParaBiblioteca() {
   if (enviandoBiblioteca) return;
   const status = document.getElementById("status-biblioteca");
   const botao = document.getElementById("btn-enviar-biblioteca");
-  const arquivo = arquivoBiblioteca;
-  const titulo = document.getElementById("titulo-biblioteca").value.trim().slice(0, 200);
-  if (!arquivo) { status.textContent = "Escolha o arquivo."; return; }
-  if (!titulo) { status.textContent = "Dê um título ao documento."; return; }
+  const arquivos = [...arquivosBiblioteca];
+  const tituloDigitado = document.getElementById("titulo-biblioteca").value.trim().slice(0, 200);
+  if (!arquivos.length) { status.textContent = "Escolha o arquivo."; return; }
+  if (arquivos.length === 1 && !tituloDigitado) { status.textContent = "Dê um título ao documento."; return; }
   const paraTodos = quemVeEnvio.paraTodos;
   const alunos = paraTodos ? [] : [...quemVeEnvio.alunos].filter((id) => alunosCache.some((a) => a.id === id));
   if (!paraTodos && !alunos.length) { status.textContent = "Escolha pelo menos um aluno, ou marque \"Todos os meus alunos\"."; return; }
 
   enviandoBiblioteca = true;
   botao.disabled = true;
-  const docRef = db.collection("usuarios").doc(professorIdAtual).collection("biblioteca").doc();
-  try {
-    // Os pedaços primeiro: o aluno nunca vê um documento com o arquivo pela metade
-    const partes = await enviarPartesDoArquivo(docRef, arquivo, (pct) => { status.textContent = `Enviando ${pct}%...`; });
-    await docRef.set({
-      titulo, nomeArquivo: arquivo.name.slice(0, 200), tipoArquivo: (arquivo.type || "").slice(0, 200),
-      tamanho: arquivo.size, partes, paraTodos, alunos, criadoEm: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  } catch (e) {
-    console.error(e);
-    apagarPartesDoDocumento(docRef).catch(() => {}); // não deixa pedaços soltos
-    status.textContent = mensagemErroGravacao(e, "Não foi possível enviar o arquivo.").replace(/\n+/g, " ");
-    enviandoBiblioteca = false;
-    botao.disabled = false;
-    return;
+  const enviados = [];
+  const falhas = [];
+  for (let i = 0; i < arquivos.length; i++) {
+    const arquivo = arquivos[i];
+    const titulo = arquivos.length === 1 ? tituloDigitado : arquivo.name.replace(/\.[^.]+$/, "").slice(0, 200) || arquivo.name.slice(0, 200);
+    const prefixo = arquivos.length > 1 ? `Enviando ${i + 1} de ${arquivos.length} (${arquivo.name}): ` : "Enviando ";
+    const docRef = db.collection("usuarios").doc(professorIdAtual).collection("biblioteca").doc();
+    try {
+      // Os pedaços primeiro: o aluno nunca vê um documento com o arquivo pela metade
+      const partes = await enviarPartesDoArquivo(docRef, arquivo, (pct) => { status.textContent = `${prefixo}${pct}%...`; });
+      await docRef.set({
+        titulo, nomeArquivo: arquivo.name.slice(0, 200), tipoArquivo: (arquivo.type || "").slice(0, 200),
+        tamanho: arquivo.size, partes, paraTodos, alunos, criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      enviados.push(titulo);
+      arquivosBiblioteca = arquivosBiblioteca.filter((a) => a !== arquivo);
+    } catch (e) {
+      console.error(e);
+      apagarPartesDoDocumento(docRef).catch(() => {}); // não deixa pedaços soltos
+      falhas.push({ nome: arquivo.name, erro: mensagemErroGravacao(e, "Não foi possível enviar o arquivo.").replace(/\n+/g, " ") });
+    }
   }
-  avisarAlunosDoDocumento({ titulo, paraTodos, alunos });
+  if (enviados.length) avisarAlunosDoDocumento({ titulo: enviados[0], titulos: enviados, paraTodos, alunos });
   enviandoBiblioteca = false;
   botao.disabled = false;
-  // Limpa o formulário só se o professor não escolheu outro arquivo durante o envio
-  if (arquivoBiblioteca === arquivo) {
+  if (enviados.length) {
     const campoTitulo = document.getElementById("titulo-biblioteca");
-    if (campoTitulo.value.trim().slice(0, 200) === titulo) campoTitulo.value = "";
-    escolherArquivoBiblioteca(null);
-    quemVeEnvio.paraTodos = true;
-    quemVeEnvio.alunos.clear();
-    renderizarSalaProfessor();
+    if (campoTitulo.value.trim().slice(0, 200) === tituloDigitado) campoTitulo.value = "";
+    if (!falhas.length) {
+      quemVeEnvio.paraTodos = true;
+      quemVeEnvio.alunos.clear();
+      renderizarSalaProfessor();
+    }
   }
-  status.textContent = `"${titulo}" enviado.`;
+  mostrarArquivosEscolhidosBiblioteca();
+  status.textContent = falhas.length
+    ? `${enviados.length ? `${enviados.length} enviado${enviados.length > 1 ? "s" : ""}. ` : ""}Não foi possível enviar: ${falhas.map((f) => f.nome).join(", ")}. ${falhas[0].erro} Os que faltaram continuam escolhidos: tente de novo.`
+    : enviados.length === 1 ? `"${enviados[0]}" enviado.` : `${enviados.length} documentos enviados.`;
+}
+
+async function renomearDaBiblioteca(id) {
+  const d = bibliotecaCache.find((x) => x.id === id);
+  if (!d) return;
+  const novo = await perguntar("Novo título do documento:", d.titulo);
+  const titulo = (novo || "").trim().slice(0, 200);
+  if (!titulo || titulo === d.titulo) return;
+  try {
+    await db.collection("usuarios").doc(professorIdAtual).collection("biblioteca").doc(id).update({ titulo });
+  } catch (e) {
+    console.error(e);
+    avisar("Não foi possível renomear agora. Tente de novo.");
+  }
 }
 
 // Notificação no sino de cada aluno que passa a ver o documento
@@ -158,8 +205,13 @@ function avisarAlunosDoDocumento(d, soEstes) {
   const alunos = (soEstes || alunosQueVeem(d)).slice(0, 400);
   if (!alunos.length) return;
   const lote = db.batch();
+  const titulos = d.titulos || [d.titulo];
+  const texto = titulos.length === 1
+    ? `Novo documento de aula: "${titulos[0]}". Veja em Sala de aula.`
+    : `${titulos.length} novos documentos de aula: ${titulos.map((t) => `"${t}"`).join(", ")}. Veja em Sala de aula.`;
+  const textoCurto = texto.length <= 300 ? texto : `${titulos.length} novos documentos de aula. Veja em Sala de aula.`;
   alunos.forEach((a) => lote.set(db.collection("usuarios").doc(a.id).collection("notificacoes").doc(),
-    notificacaoParaAluno("documento-aula", `Novo documento de aula: "${d.titulo}". Veja em Sala de aula.`.slice(0, 300), idiomasAtuaisProfessor[0])));
+    notificacaoParaAluno("documento-aula", textoCurto, idiomasAtuaisProfessor[0])));
   lote.commit().catch((e) => console.warn("Não foi possível avisar os alunos do documento:", e));
 }
 
@@ -209,6 +261,7 @@ function renderizarBiblioteca() {
               <span class="data-msg quem-ve-resumo">${icone("eye")} ${escapeHtml(textoQuemVe(d))}</span>
             </div>
             <div class="aula-acoes">
+              <button class="btn btn-secundario btn-mini" onclick="renomearDaBiblioteca('${d.id}')">Renomear</button>
               <button class="btn btn-secundario btn-mini" onclick="editarQuemVe('${d.id}')">Quem vê</button>
               <button class="excluir" onclick="excluirDaBiblioteca('${d.id}')">Excluir</button>
             </div>

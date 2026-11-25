@@ -38,6 +38,7 @@
         <span class="slogan-app">Sua Conexão com o Mundo</span>
       </div>
       <div class="acoes-topo">
+        <button class="btn btn-secundario btn-icone btn-notificacoes btn-conversa" id="btn-conversa" aria-label="Conversa" title="Conversas com os alunos" onclick="abrirConversas()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-message-circle"></use></svg><span class="contador-notificacoes" id="contador-conversa" hidden>0</span></button>
         <button class="btn btn-secundario btn-icone btn-notificacoes" id="btn-notificacoes" aria-label="Notificações" title="Notificações" onclick="abrirNotificacoesProfessor()"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-bell"></use></svg><span class="contador-notificacoes" id="contador-notificacoes" hidden>0</span></button>
         <div class="seletor-tema" id="seletor-tema">
           <button class="btn-tema" type="button" title="Mudar cores do app" onclick="alternarMenuTema()">
@@ -101,16 +102,17 @@
       <div id="janela-documentos">
         <form class="sala-secao envio-biblioteca" id="form-biblioteca" onsubmit="event.preventDefault(); enviarParaBiblioteca();">
           <h4>Enviar arquivo</h4>
-          <p class="dica-plano">PDF, imagem, vídeo, áudio ou texto, até 25 MB. Os alunos veem o arquivo dentro do app, sem botão de baixar.</p>
+          <p class="dica-plano">PDF, imagem, vídeo, áudio ou texto, até 25 MB cada. Dá para escolher vários arquivos de uma vez. Os alunos veem o arquivo dentro do app, sem botão de baixar.</p>
           <div class="linha-sala">
             <input type="text" id="titulo-biblioteca" maxlength="200" placeholder="Título (ex: Lesson 3 — Past simple)">
           </div>
           <div class="linha-sala">
-            <label class="btn btn-secundario btn-escolher-arquivo">Escolher arquivo
-              <input type="file" id="arquivo-biblioteca" hidden accept="application/pdf,image/*,video/*,audio/*,text/plain,.pdf,.txt,.mp3,.m4a,.mp4,.webm,.mov,.wav,.ogg" onchange="escolherArquivoBiblioteca(this.files[0])">
+            <label class="btn btn-secundario btn-escolher-arquivo" id="rotulo-escolher-arquivo">Escolher arquivos
+              <input type="file" id="arquivo-biblioteca" hidden multiple accept="application/pdf,image/*,video/*,audio/*,text/plain,.pdf,.txt,.mp3,.m4a,.mp4,.webm,.mov,.wav,.ogg" onchange="escolherArquivoBiblioteca(this.files)">
             </label>
-            <span class="arquivo-escolhido" id="nome-arquivo-biblioteca" hidden></span>
           </div>
+          <div class="arquivos-escolhidos" id="nome-arquivo-biblioteca" hidden></div>
+          <p class="dica-plano" id="dica-varios-arquivos" hidden>Com vários arquivos, cada documento usa o nome do próprio arquivo como título (dá para mudar depois).</p>
           <div class="quem-ve" id="quem-ve-envio"></div>
           <button type="submit" class="btn btn-primario" id="btn-enviar-biblioteca">Enviar para Documentos de aula</button>
           <p class="status-msg" id="status-biblioteca"></p>
@@ -191,6 +193,18 @@
       </div>
       <p class="dica-idioma-professor">Seus alunos escolhem, entre esses idiomas, qual estudar — cada idioma tem o próprio vocabulário. Desmarcar um idioma não apaga palavras já cadastradas.</p>
 
+      <section class="secao-checklist" id="secao-checklist">
+        <h3><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-list-checks"></use></svg> Checklist de tópicos</h3>
+        <p class="dica-whatsapp-professor">Monte a lista geral de tópicos (ex: Present simple, Verbo to be, Números). Em cada tópico, escolha para quais alunos ele vale. Depois, em <strong>Meus alunos → aba Checklist</strong>, marque o que cada aluno já viu — o aluno acompanha a lista dele no painel.</p>
+        <form class="linha-sala" onsubmit="event.preventDefault(); adicionarTopicoChecklist();">
+          <input type="text" id="input-topico-checklist" maxlength="300" placeholder="Novo tópico (ex: Past simple)">
+          <button type="submit" class="btn btn-primario">Adicionar tópico</button>
+        </form>
+        <div class="quem-ve" id="quem-usa-novo-topico"></div>
+        <p class="status-msg" id="status-checklist"></p>
+        <div id="lista-checklist"></div>
+      </section>
+
       <form class="secao-whatsapp-professor" onsubmit="event.preventDefault(); salvarWhatsappProfessor();">
         <label class="campo-whatsapp-professor" for="input-whatsapp-professor">Seu WhatsApp (com DDD)</label>
         <div class="linha-sala">
@@ -247,8 +261,9 @@
           <label>Horário</label>
           <div id="marcar-slots"></div>
           <div class="horario-manual">
-            <button type="button" class="link-trocar" id="btn-outro-horario" onclick="alternarHorarioManual()">Outro horário (fora da sua disponibilidade)</button>
-            <input type="time" id="marcar-hora" hidden>
+            <button type="button" class="link-trocar" id="btn-outro-horario" onclick="alternarHorarioManual()">Não achou o horário? Marque um horário diferente</button>
+            <input type="time" id="marcar-hora" hidden step="300">
+            <p class="dica-plano" id="dica-horario-manual" hidden>Qualquer horário, mesmo fora da sua disponibilidade (ex: 16:30). A aula fica confirmada direto, e os outros horários livres do dia se ajustam a ela.</p>
           </div>
         </div>
         <div class="linha-marcar-aula">
@@ -359,12 +374,14 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
 <script src="js/firebase-config.js"></script>
 <script src="js/util.js"></script>
+<script src="js/conversa.js"></script>
 <script src="js/documentos.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/tema.js"></script>
 <script src="js/professor.js"></script>
 <script src="js/sala-professor.js"></script>
 <script src="js/lembretes.js"></script>
+<script src="js/checklist.js"></script>
 <script>
 function mostrarAbaProfessor(aba) {
   ["sala", "agenda", "alunos", "config"].forEach(function (nome) {
