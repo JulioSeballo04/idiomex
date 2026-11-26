@@ -1502,3 +1502,65 @@ html[data-tema="noturno"] .balao-confirmacao-pendente { color: #E0B24C; backgrou
 .item-checklist.feito .marca-checklist { background: var(--acento); border-color: var(--acento); color: #fff; }
 .marca-checklist .icone { width: 0.85em; height: 0.85em; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- Tela dividida (duas telas do painel lado a lado) ---------- */
+.btn-dividir-tela { display: inline-flex; align-items: center; gap: 0.4em; }
+.btn-dividir-tela[hidden] { display: none; }
+.abas-professor .btn-dividir-tela { margin-left: auto; color: var(--ink-soft); }
+.abas-professor .btn-dividir-tela.ativa-divisao { color: var(--acento-forte); }
+.abas-professor .aba-tipo.aba-no-lado { box-shadow: inset 0 0 0 2px var(--acento); color: var(--acento-forte); }
+.cabecalho-sala .btn-dividir-tela { margin-top: 0.5rem; }
+.divisoria-tela, .lado-dividido { display: none; }
+body.tela-dividida .divisoria-tela {
+  display: block;
+  flex-shrink: 0;
+  width: 10px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  cursor: col-resize;
+  touch-action: none;
+  background: linear-gradient(to right, transparent 4px, var(--borda) 4px, var(--borda) 6px, transparent 6px);
+}
+body.tela-dividida .divisoria-tela:hover, body.arrastando-divisoria .divisoria-tela {
+  background: linear-gradient(to right, transparent 3px, var(--acento) 3px, var(--acento) 7px, transparent 7px);
+}
+body.tela-dividida .lado-dividido {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 48%;
+  min-width: 320px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  background: var(--bg);
+}
+.barra-lado-dividido {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--borda);
+  background: var(--bg-cartao);
+}
+.barra-lado-dividido .btn-fechar-divisao { margin-left: auto; display: inline-flex; align-items: center; gap: 0.3rem; }
+.seletor-lado { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.88rem; color: var(--ink-soft); }
+.seletor-lado select { padding: 0.35em 0.5em; border-radius: 8px; border: 1px solid var(--borda); background: var(--bg); color: var(--ink); font: inherit; font-weight: 600; }
+.titulo-lado { display: inline-flex; align-items: center; gap: 0.4rem; }
+.conteudo-lado-dividido { flex: 1; overflow-y: auto; padding: 1.2rem 1.4rem 3rem; min-width: 0; }
+body.tela-dividida .conteudo { min-width: 0; flex: 1; }
+body.arrastando-divisoria { user-select: none; cursor: col-resize; }
+/* Cada lado é mais estreito que a tela: os layouts de duas colunas viram uma */
+body.tela-dividida #calendario-professor { display: block; }
+body.tela-dividida #calendario-professor .coluna-lateral-agenda { margin-top: 1rem; }
+body.tela-dividida .layout-inicio { grid-template-columns: minmax(0, 1fr) !important; }
+body.tela-dividida .lado-dividido .btn-voltar-sala,
+body.tela-dividida .lado-dividido .cabecalho-sala .btn-dividir-tela { display: none; }
+body.tela-dividida .lado-dividido #tela-sala-aula { margin: 0; }
+@media (max-width: 999px) {
+  body.tela-dividida .divisoria-tela, body.tela-dividida .lado-dividido { display: none; }
+}
+body.tela-dividida .abas-professor { flex-wrap: wrap; border-radius: 18px; }
+body.tela-dividida .abas-professor .aba-tipo { padding: 0.55em 0.75em; font-size: 0.88rem; white-space: nowrap; }
+.abas-professor .btn-dividir-tela { white-space: nowrap; }

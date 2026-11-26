@@ -89,6 +89,7 @@
       <button class="aba-tipo" id="btn-aba-alunos" onclick="mostrarAbaProfessor('alunos')"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-users"></use></svg>Meus Alunos</button>
       <button class="aba-tipo" id="btn-aba-sala" onclick="mostrarAbaProfessor('sala')"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-folder-open"></use></svg>Documentos</button>
       <button class="aba-tipo" id="btn-aba-config" onclick="mostrarAbaProfessor('config')"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-settings"></use></svg>Configurações</button>
+      <button type="button" class="aba-tipo btn-dividir-tela" id="btn-dividir-tela" onclick="alternarTelaDividida()" hidden title="Ver duas telas lado a lado"><svg class="icone" aria-hidden="true" focusable="false"><use href="assets/icones.svg#i-columns-2"></use></svg><span class="rotulo-dividir">Dividir tela</span></button>
     </nav>
 
     <!-- AGENDA -->
@@ -382,12 +383,18 @@
 <script src="js/sala-professor.js"></script>
 <script src="js/lembretes.js"></script>
 <script src="js/checklist.js"></script>
+<script src="js/tela-dividida.js"></script>
 <script>
 function mostrarAbaProfessor(aba) {
+  // Tela dividida: clicar na aba que está no lado troca os dois lados
+  var anterior = abaAtivaDoProfessor();
+  if (telaDividida.ladoProfessor === aba && anterior !== aba) colocarAbaNoLado(anterior, true);
   ["sala", "agenda", "alunos", "config"].forEach(function (nome) {
-    document.getElementById("painel-aba-" + nome).classList.toggle("oculto", nome !== aba);
+    var noLado = telaDividida.ladoProfessor === nome;
+    document.getElementById("painel-aba-" + nome).classList.toggle("oculto", nome !== aba && !noLado);
     document.getElementById("btn-aba-" + nome).classList.toggle("ativa", nome === aba);
   });
+  atualizarBotoesTelaDividida();
 }
 </script>
 </body>

@@ -1077,6 +1077,12 @@ function salaDeAulaAberta() {
 
 function abrirSalaDeAula() {
   document.getElementById("eyebrow-sala").textContent = `Sua sala · ${IDIOMAS[idiomaDoAluno].nome}`;
+  // Com a tela dividida, a Sala de aula já está aberta ao lado
+  if (typeof telaDivididaAtiva === "function" && telaDivididaAtiva()) {
+    renderizarSalaDeAula();
+    document.getElementById("conteudo-lado-dividido").scrollTop = 0;
+    return;
+  }
   if (!salaDeAulaAberta() && !(history.state && history.state.tela === "sala")) {
     try { history.pushState({ tela: "sala" }, "", "#sala-de-aula"); } catch (e) {}
   }
