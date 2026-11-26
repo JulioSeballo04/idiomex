@@ -8,7 +8,7 @@
 // a cada atualização — só se mudar a lista ARQUIVOS_BASE.
 // ============================================================
 
-const VERSAO = "idiomex-v7";
+const VERSAO = "idiomex-v8";
 
 const ARQUIVOS_BASE = [
   "./",
@@ -29,6 +29,7 @@ const ARQUIVOS_BASE = [
   "js/lembretes.js",
   "js/conversa.js",
   "js/checklist.js",
+  "js/tela-dividida.js",
   "js/sala-professor.js",
   "assets/icones.svg",
   "assets/logo.png",

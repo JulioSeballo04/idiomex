@@ -2046,6 +2046,36 @@ function dataDaqui(dias) {
     prof.respostaPrompt = undefined;
   });
 
+  await caso('tela dividida: duas abas do professor lado a lado; clicar na aba do lado troca; fechar volta a uma', async () => {
+    await prof.setViewportSize({ width: 1100, height: 900 }); // os testes de celular deixaram a tela estreita
+    await prof.click('#btn-aba-agenda');
+    await prof.click('#btn-dividir-tela');
+    await prof.waitForSelector('#lado-dividido #painel-aba-alunos', { timeout: 3000 });
+    esperar(await prof.isVisible('#painel-aba-agenda') && await prof.isVisible('#painel-aba-alunos'), 'as duas abas não estão visíveis');
+    await prof.selectOption('#select-lado-dividido', 'config');
+    await prof.waitForSelector('#lado-dividido #painel-aba-config', { timeout: 3000 });
+    esperar(await prof.isHidden('#painel-aba-alunos'), 'a aba que saiu do lado continuou aparecendo');
+    await prof.click('#btn-aba-config'); // estava no lado: troca com a principal
+    esperar(await prof.evaluate(() => abaAtivaDoProfessor()) === 'config' && await prof.evaluate(() => telaDividida.ladoProfessor) === 'agenda', 'não trocou os lados');
+    await prof.click('#lado-dividido .btn-fechar-divisao');
+    esperar(await prof.isHidden('#painel-aba-agenda') && await prof.isVisible('#painel-aba-config'), 'não voltou para uma tela só');
+    esperar(!(await prof.$('#lado-dividido #painel-aba-agenda')), 'o painel não voltou para o lugar');
+    // Em tela estreita (celular) o botão não aparece
+    await prof.setViewportSize({ width: 800, height: 900 });
+    await prof.waitForSelector('#btn-dividir-tela', { state: 'hidden', timeout: 3000 }).catch(() => { throw new Error('botão aparece em tela estreita'); });
+    await prof.setViewportSize({ width: 1100, height: 900 });
+  });
+
+  await caso('tela dividida do aluno: Sala de aula de um lado e o painel do outro', async () => {
+    await aluno.setViewportSize({ width: 1100, height: 900 });
+    await aluno.evaluate(() => abrirSalaDeAula());
+    await aluno.click('#btn-dividir-tela-sala');
+    await aluno.waitForSelector('#lado-dividido #tela-sala-aula #corpo-sala-aula', { timeout: 3000 });
+    esperar(await aluno.isVisible('#input-palavra-en'), 'o painel não aparece ao lado da Sala de aula');
+    await aluno.click('#lado-dividido .btn-fechar-divisao');
+    esperar(await aluno.isHidden('#tela-sala-aula'), 'a Sala de aula continuou aberta');
+  });
+
   await caso('"Marcar aula" do professor: "Não achou o horário? Marque um horário diferente"', async () => {
     await prof.click('#btn-aba-agenda');
     await prof.evaluate(() => abrirMarcarAula());
